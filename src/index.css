@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Nunito", ui-rounded, system-ui, sans-serif;
+  --color-parchment: #fbf3df;
+  --color-parchment-dark: #efe0bd;
+  --color-wood: #8a5a34;
+  --color-wood-dark: #5e3b1f;
+  --color-leaf: #4f8a35;
+  --color-coin: #e9b93a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #141c33;
+  user-select: none;
+}
