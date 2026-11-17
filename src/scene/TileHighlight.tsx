@@ -26,6 +26,7 @@ export function TileHighlight() {
   const inventory = useGameStore((s) => s.game.inventory);
   const unlockedPlots = useGameStore((s) => s.game.unlockedPlots);
   const tasks = useGameStore((s) => s.game.tasks);
+  const building = useGameStore((s) => s.buildMode !== null);
 
   const highlight = useMemo<Highlight | null>(() => {
     if (hovered === null) return null;
@@ -48,7 +49,7 @@ export function TileHighlight() {
     return { x, z, size: 1, color: valid ? PALETTE.hoverValid : PALETTE.hoverInvalid };
   }, [hovered, tool, crop, tiles, inventory, unlockedPlots, tasks]);
 
-  if (!highlight) return null;
+  if (!highlight || building) return null;
   return (
     <mesh position={[highlight.x, 0.03, highlight.z]} rotation={[-Math.PI / 2, 0, 0]} raycast={noRaycast}>
       <planeGeometry args={[highlight.size * 0.98, highlight.size * 0.98]} />

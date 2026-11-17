@@ -1,5 +1,6 @@
 import { IcosahedronGeometry, type BufferGeometry } from 'three';
 import type { AnimalId } from '../../data/animals';
+import { ANIMAL_MIN_HITBOX, ANIMAL_SIZES, meters } from '../../data/scale';
 import { box, merge, part } from './geometry';
 
 /**
@@ -223,13 +224,45 @@ const duck = (): AnimalModel => {
 
 const BUILDERS: Record<AnimalId, () => AnimalModel> = { cow, ox, horse, pig, sheep, goat, chicken, duck };
 
-const cache = new Map<AnimalId, AnimalModel>();
+/** A model plus the transform that fits it to the species' real size (ANIMAL_SIZES). */
+export interface FittedAnimalModel extends AnimalModel {
+  /** Scale [x, y, z] applied to the whole figure: y from the real height, z from the real length. */
+  fit: Vec3;
+  /** Real standing height in world units. */
+  worldHeight: number;
+  /** Clickable box size [x, y, z] in model units (never smaller than ANIMAL_MIN_HITBOX). */
+  hitbox: Vec3;
+  /** Center of the hitbox in model units. */
+  hitboxCenter: Vec3;
+}
+
+const fitModel = (kind: AnimalId, model: AnimalModel): FittedAnimalModel => {
+  model.body.computeBoundingBox();
+  const box3 = model.body.boundingBox;
+  const top = box3 ? box3.max.y : model.height;
+  const length = box3 ? box3.max.z - box3.min.z : 1;
+  const width = box3 ? box3.max.x - box3.min.x : 1;
+  const size = ANIMAL_SIZES[kind];
+  const sy = meters(size.height) / top;
+  const sz = meters(size.length) / length;
+  const fit: Vec3 = [sy, sy, sz];
+  const minBox = meters(ANIMAL_MIN_HITBOX);
+  const hitbox: Vec3 = [
+    Math.max(width, minBox / fit[0]),
+    Math.max(top, minBox / fit[1]),
+    Math.max(length, minBox / fit[2]),
+  ];
+  const centerZ = box3 ? (box3.max.z + box3.min.z) / 2 : 0;
+  return { ...model, fit, worldHeight: meters(size.height), hitbox, hitboxCenter: [0, hitbox[1] / 2, centerZ] };
+};
+
+const cache = new Map<AnimalId, FittedAnimalModel>();
 
 /** Shared model per kind (built once, reused by every animal of that kind). */
-export const animalModel = (kind: AnimalId): AnimalModel => {
+export const animalModel = (kind: AnimalId): FittedAnimalModel => {
   let model = cache.get(kind);
   if (!model) {
-    model = BUILDERS[kind]();
+    model = fitModel(kind, BUILDERS[kind]());
     cache.set(kind, model);
   }
   return model;

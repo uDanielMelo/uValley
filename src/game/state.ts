@@ -1,8 +1,10 @@
 import { STARTING_MONEY, STARTING_SEEDS } from '../data/economy';
-import { START_STRUCTURES, STRUCTURES } from '../data/structures';
+import { START_STRUCTURES } from '../data/structures';
 import { START_HOUR, START_PLOTS } from '../data/world';
-import { TILE_COUNT, plotIndex, tileIndex, tilesInPlot } from './grid';
-import type { GameState, Tile } from './types';
+import { TILE_COUNT, plotIndex, tilesInPlot } from './grid';
+import { withAccessRoad } from './roads';
+import { stampStructures } from './structures';
+import type { GameState, StructureInstance, Tile } from './types';
 import { createFamily } from './workers';
 
 export const createInitialState = (): GameState => {
@@ -11,27 +13,28 @@ export const createInitialState = (): GameState => {
   for (const plot of unlockedPlots) {
     for (const index of tilesInPlot(plot)) tiles[index] = { state: 'grass' };
   }
-  for (const placement of START_STRUCTURES) {
-    const def = STRUCTURES[placement.id];
-    for (let dy = 0; dy < def.depth; dy++) {
-      for (let dx = 0; dx < def.width; dx++) {
-        const index = tileIndex(placement.x + dx, placement.y + dy);
-        const tile = tiles[index];
-        if (tile) tiles[index] = { ...tile, structure: placement.id };
-      }
-    }
-  }
   const family = createFamily(1);
+  const structures: StructureInstance[] = [];
+  for (const placement of START_STRUCTURES) {
+    structures.push({
+      id: family.length + 1 + structures.length,
+      type: placement.id,
+      x: placement.x,
+      y: placement.y,
+      rotation: 0,
+    });
+  }
   return {
     gameMinutes: START_HOUR * 60,
     money: STARTING_MONEY,
-    tiles,
+    tiles: withAccessRoad(stampStructures(tiles, structures)),
     unlockedPlots,
     plotsPurchased: 0,
     inventory: { seeds: { ...STARTING_SEEDS }, produce: {}, products: {} },
     workers: family,
     tasks: [],
     animals: [],
-    nextId: family.length + 1,
+    structures,
+    nextId: family.length + 1 + structures.length,
   };
 };

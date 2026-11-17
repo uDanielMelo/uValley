@@ -1,4 +1,5 @@
 import { useGameStore } from '../store/gameStore';
+import { BuildBanner, BuildPanel } from './BuildPanel';
 import { DevPanel } from './DevPanel';
 import { DEV_ENABLED } from './devTools';
 import { useAutosave } from './hooks/useAutosave';
@@ -26,7 +27,7 @@ function ControlsHint() {
         <b>Botão do meio</b> (ou <b>Shift</b> + direito) + arrastar: girar · <b>Z/X</b>: girar
       </p>
       <p>
-        <b>Roda</b>: zoom · <b>Espaço</b>: pausar · <b>T</b>: equipe
+        <b>Roda</b>: zoom · <b>Espaço</b>: pausar · <b>T</b>: equipe · <b>B</b>: construir
       </p>
     </Card>
   );
@@ -47,12 +48,16 @@ export function Hud() {
         {panel === 'shop' && <ShopPanel />}
         {panel === 'inventory' && <InventoryPanel />}
         {panel === 'workers' && <WorkersPanel />}
+        {panel === 'build' && <BuildPanel />}
       </div>
       <div className="flex items-end justify-between gap-3 p-3">
         <div className="w-64">
           <HoverInfo />
         </div>
-        <Toolbar />
+        <div className="flex flex-col items-center gap-2">
+          <BuildBanner />
+          <Toolbar />
+        </div>
         <div className="flex w-64 justify-end">
           <ControlsHint />
         </div>

@@ -18,11 +18,11 @@ import { segmentClear } from './path';
 import { hash01 } from './random';
 import { fail, ok, type ActionResult, type Animal, type AnimalActivity, type GameState, type GridPoint, type Tile } from './types';
 
-/** Animals graze on unlocked grass without structures; tilled land is off limits. */
+/** Animals graze on unlocked grass without structures or roads; tilled land is off limits. */
 export const isPasture = (tiles: readonly Tile[], x: number, y: number): boolean => {
   if (!inBounds(x, y)) return false;
   const tile = tiles[tileIndex(x, y)];
-  return !!tile && tile.state === 'grass' && !tile.structure;
+  return !!tile && tile.state === 'grass' && !tile.structure && !tile.road;
 };
 
 export const isAwake = (gameMinutes: number): boolean => {

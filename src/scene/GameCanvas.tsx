@@ -1,7 +1,9 @@
 import { Canvas } from '@react-three/fiber';
 import { PCFShadowMap } from 'three';
 import { Animals } from './Animals';
+import { BuildGhost } from './BuildGhost';
 import { CameraRig } from './CameraRig';
+import { Car } from './Car';
 import { CropLayer } from './CropLayer';
 import { DayNightLight } from './DayNightLight';
 import { Environment } from './Environment';
@@ -9,6 +11,7 @@ import { Fences } from './Fences';
 import { GameLoop } from './GameLoop';
 import { GrassLayer } from './GrassLayer';
 import { PostFx } from './PostFx';
+import { RoadLayer } from './RoadLayer';
 import { Sky } from './Sky';
 import { SoilLayer } from './SoilLayer';
 import { Structures } from './Structures';
@@ -34,15 +37,18 @@ export function GameCanvas() {
       <DayNightLight />
       <Environment />
       <TileLayer />
+      <RoadLayer />
       <SoilLayer />
       <GrassLayer />
       <TileHighlight />
+      <BuildGhost />
       <TaskMarkers />
       <Fences />
       <CropLayer />
       <Structures />
       <Workers />
       <Animals />
+      <Car />
       <PostFx />
     </Canvas>
   );

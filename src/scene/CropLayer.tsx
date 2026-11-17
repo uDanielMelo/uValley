@@ -5,7 +5,7 @@ import { cropStage } from '../game/crops';
 import { TILE_COUNT } from '../game/grid';
 import { useGameStore } from '../store/gameStore';
 import { hash01, indexToWorld } from './coords';
-import { CROP_MODELS } from './models/cropModels';
+import { CROP_MODELS, cropHeightScale } from './models/cropModels';
 import { applyWind } from './wind';
 
 const noRaycast = () => null;
@@ -36,13 +36,14 @@ function CropInstances({ cropId, stage }: CropInstancesProps) {
     const e = new Euler();
     const pos = new Vector3();
     const scale = new Vector3();
+    const heightScale = cropHeightScale(cropId);
     let count = 0;
     tiles.forEach((tile, i) => {
       if (!tile.crop || tile.crop.cropId !== cropId || cropStage(tile.crop) !== stage) return;
       const [x, z] = indexToWorld(i);
       const s = 0.9 + hash01(i) * 0.2;
       q.setFromEuler(e.set(0, hash01(i + 999) * Math.PI * 2, 0));
-      m.compose(pos.set(x, 0, z), q, scale.set(s, s, s));
+      m.compose(pos.set(x, 0, z), q, scale.set(s, s * heightScale, s));
       mesh.setMatrixAt(count++, m);
     });
     mesh.count = count;

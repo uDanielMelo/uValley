@@ -75,14 +75,32 @@ export function TileLayer() {
     mesh.computeBoundingSphere();
   }, [tiles]);
 
+  // Road mode paints: press places the first tile (with error feedback), dragging adds more silently.
+  const painting = useRef(false);
+  const roadMode = () => useGameStore.getState().buildMode === 'road';
+
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    if (e.instanceId !== undefined) useGameStore.getState().setHoveredTile(e.instanceId);
+    if (e.instanceId === undefined) return;
+    const store = useGameStore.getState();
+    const changed = store.hoveredTile !== e.instanceId;
+    store.setHoveredTile(e.instanceId);
+    if (painting.current && changed && (e.buttons & 1) === 1 && roadMode()) store.paintRoadAt(e.instanceId);
   };
   const onLeave = () => useGameStore.getState().setHoveredTile(null);
+  const onDown = (e: ThreeEvent<PointerEvent>) => {
+    if (e.button !== 0 || e.instanceId === undefined || !roadMode()) return;
+    e.stopPropagation();
+    painting.current = true;
+    useGameStore.getState().interactAt(e.instanceId);
+  };
+  const onUp = () => {
+    painting.current = false;
+  };
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     if (e.button !== 0 || e.delta > CLICK_TOLERANCE || e.instanceId === undefined) return;
+    if (roadMode()) return; // already handled on pointer down
     useGameStore.getState().interactAt(e.instanceId);
   };
 
@@ -93,6 +111,8 @@ export function TileLayer() {
       receiveShadow
       onPointerMove={onMove}
       onPointerLeave={onLeave}
+      onPointerDown={onDown}
+      onPointerUp={onUp}
       onClick={onClick}
     >
       <meshStandardMaterial roughness={1} />

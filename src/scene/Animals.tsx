@@ -1,7 +1,7 @@
 import { Html } from '@react-three/drei';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useRef } from 'react';
-import { MathUtils, MeshStandardMaterial, type Group } from 'three';
+import { MathUtils, MeshBasicMaterial, MeshStandardMaterial, type Group } from 'three';
 import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCTS, type AnimalId } from '../data/animals';
 import { GRID_SIZE } from '../data/world';
 import { animalActivity } from '../game/animals';
@@ -13,6 +13,10 @@ const HALF = GRID_SIZE / 2;
 /** Max pointer travel (px) for a click to count as a click and not a camera drag. */
 const CLICK_TOLERANCE = 5;
 const MATERIAL = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+/** Invisible material for the click box (keeps small animals easy to click). */
+const HITBOX_MATERIAL = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+/** Leg swing per world unit walked, relative to the hip height. */
+const STRIDE = 4.5;
 
 const angleDelta = (a: number, b: number): number => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
@@ -44,7 +48,8 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
     const moved = Math.hypot(x - a.x, z - a.z);
     if (moved > 1e-4) {
       a.heading = Math.atan2(x - a.x, z - a.z);
-      a.phase += moved * (kind === 'chicken' || kind === 'duck' ? 40 : 16);
+      // Shorter legs take more steps for the same distance.
+      a.phase += (moved * STRIDE) / Math.max(0.01, (model.legs[0]?.[1] ?? 0.2) * model.fit[1]);
     }
     a.x = x;
     a.z = z;
@@ -95,6 +100,10 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
 
   return (
     <group ref={root} onClick={onClick} onPointerOver={onOver} onPointerOut={onOut}>
+      <group scale={model.fit}>
+      <mesh position={model.hitboxCenter} material={HITBOX_MATERIAL}>
+        <boxGeometry args={model.hitbox} />
+      </mesh>
       <group ref={body}>
         <mesh geometry={model.body} material={MATERIAL} castShadow receiveShadow />
         {model.legs.map((position, i) => (
@@ -109,8 +118,9 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
           </group>
         ))}
       </group>
+      </group>
       {product && (
-        <Html position={[0, model.height + 0.25, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+        <Html position={[0, model.worldHeight + 0.12, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
           <div
             ref={icon}
             style={{ display: 'none' }}

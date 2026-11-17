@@ -25,7 +25,8 @@ const unwrap = (result: ActionResult | QueueResult): GameState => {
 };
 
 const TILE = tileIndex(13, 13);
-const OTHER = tileIndex(18, 13);
+// Column 18 north of the bin is the access road, so the second tile sits just past it.
+const OTHER = tileIndex(19, 13);
 
 /** Runs the simulation in small steps, like the render loop does. */
 const run = (state: GameState, minutes: number, step = 1): GameState => {
@@ -112,7 +113,7 @@ describe('workers', () => {
   });
 
   it('finish a batch sooner when there are more of them', () => {
-    const tiles = [12, 13, 14, 17, 18, 19].map((x) => tileIndex(x, 12));
+    const tiles = [12, 13, 14, 16, 17, 19].map((x) => tileIndex(x, 12));
     const queue = (base: GameState) => tiles.reduce((s, t) => unwrap(toggleTask(s, 'hoe', t, 'wheat')), base);
     const minutesToFinish = (start: GameState): number => {
       let s = start;

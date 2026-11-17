@@ -16,7 +16,8 @@ export const CAMERA = {
   keyRotateSpeedDeg: 90,
   /** Distance from the camera to its target (zoom). */
   initialDistance: 24,
-  minDistance: 8,
+  /** Close enough to see people (≈0.5 tile tall) and chickens. */
+  minDistance: 3.5,
   maxDistance: 70,
   zoomSensitivity: 0.0015,
   /** Smoothing rate for camera motion (higher = snappier). */

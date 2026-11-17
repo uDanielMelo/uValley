@@ -1,5 +1,6 @@
 import type { RefObject } from 'react';
 import type { Group } from 'three';
+import { meters } from '../../data/scale';
 import type { ToolId } from '../../game/types';
 
 export interface PersonLook {
@@ -47,6 +48,11 @@ function Cyl({ args, position, color, rotation }: { args: [number, number, numbe
 
 /** Hip height: legs hang from here and the upper body pivots here. */
 const HIP = 0.34;
+/** Top of the head in model units (the model is fitted to the person's real height). */
+const MODEL_HEIGHT = HIP + 0.49;
+
+/** Uniform scale that turns the model into a person `height` meters tall. */
+export const personScale = (height: number): number => meters(height) / MODEL_HEIGHT;
 const WOOD = '#8a6239';
 const METAL = '#9aa3a8';
 const CAN = '#6f9fb0';
@@ -76,12 +82,13 @@ function Tools({ tools }: { tools: PersonRig['tools'] }) {
 }
 
 /**
- * Low-poly farmer about 0.75 units tall. Origin at the feet; faces +z.
+ * Low-poly farmer, scaled to `height` meters. Origin at the feet; faces +z.
  * Legs and arms hang from pivot groups so they can swing.
  */
-export function Person({ look, rig }: { look: PersonLook; rig: PersonRig }) {
+export function Person({ look, rig, height }: { look: PersonLook; rig: PersonRig; height: number }) {
   return (
     <group ref={rig.root}>
+      <group scale={personScale(height)}>
       {/* Legs */}
       <group ref={rig.legL} position={[-0.06, HIP, 0]}>
         <Box size={[0.09, 0.32, 0.1]} position={[0, -0.16, 0]} color={look.pants} />
@@ -116,6 +123,7 @@ export function Person({ look, rig }: { look: PersonLook; rig: PersonRig }) {
             <Cyl args={[0.092, 0.092, 0.02, 8]} position={[0, 0.02, 0]} color="#8a3b2b" />
           </group>
         )}
+      </group>
       </group>
     </group>
   );

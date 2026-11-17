@@ -1,5 +1,6 @@
 import type { BufferGeometry } from 'three';
-import type { CropId } from '../../data/crops';
+import { CROP_STAGE_COUNT, type CropId } from '../../data/crops';
+import { CROP_HEIGHTS, meters } from '../../data/scale';
 import { hash01 } from '../coords';
 import { box, cone, cylinder, merge, sphere } from './geometry';
 
@@ -67,7 +68,7 @@ const wheat = (stage: number): BufferGeometry => {
   );
 };
 
-const corn = (stage: number): BufferGeometry => {
+const cornPlant = (stage: number): BufferGeometry => {
   if (stage === 0) {
     return merge([
       cone(0.06, 0.22, 4, GREEN_LIGHT, { position: [-0.05, 0.11, 0], rotation: [0, 0, 0.3] }),
@@ -91,7 +92,7 @@ const corn = (stage: number): BufferGeometry => {
   return merge(parts);
 };
 
-const tomato = (stage: number): BufferGeometry => {
+const tomatoPlant = (stage: number): BufferGeometry => {
   if (stage === 0) {
     return merge([
       sphere(0.1, GREEN_LIGHT, { position: [0, 0.08, 0], scale: [1, 0.8, 1] }),
@@ -118,4 +119,54 @@ const tomato = (stage: number): BufferGeometry => {
   return merge(parts);
 };
 
+/** Several copies of one plant on a tile: [x, z, scale] per spot, each turned differently. */
+const cluster = (make: () => BufferGeometry, spots: ReadonlyArray<readonly [number, number, number]>): BufferGeometry =>
+  merge(
+    spots.map(([x, z, s], i) => {
+      const g = make();
+      g.scale(s, s, s);
+      g.rotateY(i * 1.7);
+      g.translate(x, 0, z);
+      return g;
+    }),
+  );
+
+/** A tile of corn: a few stalks, like a small patch of a field. */
+const CORN_SPOTS = [
+  [-0.25, -0.24, 0.55],
+  [0.24, -0.26, 0.5],
+  [0, 0.02, 0.58],
+  [-0.24, 0.26, 0.52],
+  [0.26, 0.24, 0.56],
+] as const;
+const corn = (stage: number) => cluster(() => cornPlant(stage), CORN_SPOTS);
+
+/** A tile of tomatoes: four staked plants. */
+const TOMATO_SPOTS = [
+  [-0.22, -0.22, 0.5],
+  [0.22, -0.22, 0.48],
+  [-0.22, 0.22, 0.48],
+  [0.22, 0.22, 0.5],
+] as const;
+const tomato = (stage: number) => cluster(() => tomatoPlant(stage), TOMATO_SPOTS);
+
 export const CROP_MODELS: Record<CropId, (stage: number) => BufferGeometry> = { wheat, corn, tomato };
+
+const heightScales = new Map<CropId, number>();
+
+/**
+ * Vertical scale that makes the mature stage CROP_HEIGHTS tall; earlier stages use the same
+ * factor so they keep their proportion. Width is untouched so the crop still fills the tile.
+ */
+export const cropHeightScale = (cropId: CropId): number => {
+  let scale = heightScales.get(cropId);
+  if (scale === undefined) {
+    const mature = CROP_MODELS[cropId](CROP_STAGE_COUNT - 1);
+    mature.computeBoundingBox();
+    const top = mature.boundingBox?.max.y ?? 1;
+    mature.dispose();
+    scale = meters(CROP_HEIGHTS[cropId]) / top;
+    heightScales.set(cropId, scale);
+  }
+  return scale;
+};

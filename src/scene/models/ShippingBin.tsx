@@ -1,11 +1,16 @@
+import { PROP_SIZES, meters } from '../../data/scale';
+
 const WOOD = '#9c6b3c';
+/** Top of the lid in model units; the model is fitted to PROP_SIZES.shippingBinHeight. */
+const MODEL_HEIGHT = 0.6;
+const SCALE = meters(PROP_SIZES.shippingBinHeight) / MODEL_HEIGHT;
 const WOOD_DARK = '#7a5230';
 const SIGN = '#f2d84b';
 
 /** Wooden shipping bin (1x1). Origin = tile center, y = 0 on the ground. */
 export function ShippingBin() {
   return (
-    <group>
+    <group scale={SCALE}>
       <mesh position={[0, 0.27, 0]} castShadow receiveShadow>
         <boxGeometry args={[0.8, 0.5, 0.62]} />
         <meshStandardMaterial color={WOOD} flatShading />

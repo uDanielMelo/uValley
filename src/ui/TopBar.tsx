@@ -162,6 +162,9 @@ export function TopBar() {
       </div>
       <div className="pointer-events-auto flex gap-2">
         <WorkersButton />
+        <Button variant="ghost" onClick={() => openPanel('build')} title="Construir (B)">
+          🔨 Construir
+        </Button>
         <Button variant="leaf" onClick={() => openPanel('shop')} title="Loja (L)">
           🛒 Loja
         </Button>

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { BoxGeometry, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
+import { PROP_SIZES, meters } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
 import { inBounds, tileIndex } from '../game/grid';
 import type { Tile } from '../game/types';
@@ -16,10 +17,18 @@ interface Segment {
 
 const MAX_SEGMENTS = GRID_SIZE * GRID_SIZE * 2;
 const MAX_POSTS = (GRID_SIZE + 1) * (GRID_SIZE + 1);
-const RAIL_HEIGHTS = [0.18, 0.36];
+const RAIL_HEIGHTS = PROP_SIZES.fenceRails.map(meters);
+const POST_HEIGHT = meters(PROP_SIZES.fenceHeight);
 
 const isOpen = (tiles: readonly Tile[], x: number, y: number): boolean =>
   inBounds(x, y) && tiles[tileIndex(x, y)]?.state !== 'locked';
+
+/** Roads keep a gate open where they cross the fence (or leave the map). */
+const isRoad = (tiles: readonly Tile[], x: number, y: number): boolean =>
+  !!tiles[tileIndex(x, y)]?.road && inBounds(x, y);
+
+const gate = (tiles: readonly Tile[], x: number, y: number, nx: number, ny: number): boolean =>
+  isRoad(tiles, x, y) && (isRoad(tiles, nx, ny) || !inBounds(nx, ny));
 
 /** Fence segments on every edge between unlocked land and locked land / map border. */
 const computeSegments = (tiles: readonly Tile[]): Segment[] => {
@@ -27,10 +36,11 @@ const computeSegments = (tiles: readonly Tile[]): Segment[] => {
   for (let y = 0; y < GRID_SIZE; y++) {
     for (let x = 0; x < GRID_SIZE; x++) {
       if (!isOpen(tiles, x, y)) continue;
-      if (!isOpen(tiles, x, y - 1)) segments.push({ cx: x, cy: y, axis: 'x' });
-      if (!isOpen(tiles, x, y + 1)) segments.push({ cx: x, cy: y + 1, axis: 'x' });
-      if (!isOpen(tiles, x - 1, y)) segments.push({ cx: x, cy: y, axis: 'z' });
-      if (!isOpen(tiles, x + 1, y)) segments.push({ cx: x + 1, cy: y, axis: 'z' });
+      const fence = (nx: number, ny: number) => !isOpen(tiles, nx, ny) && !gate(tiles, x, y, nx, ny);
+      if (fence(x, y - 1)) segments.push({ cx: x, cy: y, axis: 'x' });
+      if (fence(x, y + 1)) segments.push({ cx: x, cy: y + 1, axis: 'x' });
+      if (fence(x - 1, y)) segments.push({ cx: x, cy: y, axis: 'z' });
+      if (fence(x + 1, y)) segments.push({ cx: x + 1, cy: y, axis: 'z' });
     }
   }
   return segments;
@@ -39,16 +49,24 @@ const computeSegments = (tiles: readonly Tile[]): Segment[] => {
 /** Wooden fence around the owned land, rebuilt whenever plots are bought. */
 export function Fences() {
   const unlockedPlots = useGameStore((s) => s.game.unlockedPlots);
+  // Tiles only change on real game events (growth steps, finished tasks, roads), so this is cheap.
+  const tiles = useGameStore((s) => s.game.tiles);
   const railRef = useRef<InstancedMesh>(null);
   const postRef = useRef<InstancedMesh>(null);
-  const railGeometry = useMemo(() => new BoxGeometry(1, 0.06, 0.05), []);
-  const postGeometry = useMemo(() => new BoxGeometry(0.1, 0.5, 0.1), []);
+  const railGeometry = useMemo(
+    () => new BoxGeometry(1, meters(PROP_SIZES.fenceRail), meters(PROP_SIZES.fenceRail) * 0.6),
+    [],
+  );
+  const postGeometry = useMemo(
+    () => new BoxGeometry(meters(PROP_SIZES.fencePost), POST_HEIGHT, meters(PROP_SIZES.fencePost)),
+    [],
+  );
 
   useLayoutEffect(() => {
     const rails = railRef.current;
     const posts = postRef.current;
     if (!rails || !posts) return;
-    const segments = computeSegments(useGameStore.getState().game.tiles);
+    const segments = computeSegments(tiles);
     const m = new Matrix4();
     const q = new Quaternion();
     const qz = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2);
@@ -71,7 +89,7 @@ export function Fences() {
     for (const key of corners) {
       const [cx = 0, cy = 0] = key.split(',').map(Number);
       const [wx, wz] = cornerToWorld(cx, cy);
-      m.makeTranslation(wx, 0.25, wz);
+      m.makeTranslation(wx, POST_HEIGHT / 2, wz);
       posts.setMatrixAt(p++, m);
     }
     rails.count = r;
@@ -80,7 +98,7 @@ export function Fences() {
     posts.instanceMatrix.needsUpdate = true;
     rails.computeBoundingSphere();
     posts.computeBoundingSphere();
-  }, [unlockedPlots]);
+  }, [unlockedPlots, tiles]);
 
   return (
     <group>

@@ -3,7 +3,10 @@ import { CROP_IDS } from '../../data/crops';
 import { useGameStore } from '../../store/gameStore';
 import { TOOLS } from '../tools';
 
-/** Global keyboard shortcuts: 1–4 tools, Q/E cycle seeds, Space pause, L shop, I inventory, T workers, Esc close. */
+/**
+ * Global keyboard shortcuts: 1–4 tools, Q/E cycle seeds, Space pause, L shop, I inventory, T workers,
+ * B build menu, R rotate the structure being placed, Esc leave build mode / close.
+ */
 export function useHotkeys(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -30,6 +33,12 @@ export function useHotkeys(): void {
         case 't':
           store.openPanel('workers');
           break;
+        case 'b':
+          store.openPanel('build');
+          break;
+        case 'r':
+          if (store.buildMode && store.buildMode !== 'demolish' && store.buildMode !== 'road') store.rotateBuild();
+          break;
         case 'q':
         case 'e': {
           const step = e.key.toLowerCase() === 'e' ? 1 : -1;
@@ -40,6 +49,7 @@ export function useHotkeys(): void {
         }
         case 'escape':
           if (store.pendingPlot !== null) store.requestPlot(null);
+          else if (store.buildMode) store.setBuildMode(null);
           else store.closePanel();
           break;
       }

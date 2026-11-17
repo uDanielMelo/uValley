@@ -2,10 +2,11 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type { AnimalId, AnimalProductId } from '../data/animals';
 import type { CropId } from '../data/crops';
+import { STRUCTURES, type StructureId } from '../data/structures';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
 import { buyAnimal, collectProduct, sellAnimal } from '../game/animals';
 import { buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
-import { plotOfTile } from '../game/grid';
+import { plotOfTile, tileCoords } from '../game/grid';
 import {
   DEFAULT_SETTINGS,
   clearStorage,
@@ -15,11 +16,16 @@ import {
   type SaveSettings,
 } from '../game/save';
 import { advanceGame } from '../game/simulation';
+import { buildRoad, removeRoad } from '../game/roads';
 import { createInitialState } from '../game/state';
-import type { ActionError, ActionResult, GameState, ToolId } from '../game/types';
+import { anchorFor, demolishStructure, placeStructure, refundFor, structureAt } from '../game/structures';
+import type { ActionError, ActionResult, GameState, Rotation, ToolId } from '../game/types';
 import { clearTasks, fireWorker, hireWorker, toggleTask } from '../game/workers';
 
-export type PanelId = 'shop' | 'inventory' | 'workers' | null;
+export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | null;
+
+/** Build mode: placing a structure type, painting roads, or demolishing (structures and roads). */
+export type BuildMode = StructureId | 'road' | 'demolish' | null;
 
 export interface Toast {
   id: number;
@@ -42,10 +48,16 @@ export interface GameStore {
   lastSavedAt: number | null;
   /** Dev-only extra time multiplier (not saved). */
   devTimeScale: number;
+  buildMode: BuildMode;
+  buildRotation: Rotation;
 
   advance: (realSeconds: number) => void;
   interactAt: (tile: number) => void;
+  /** Road painting while dragging: builds silently (errors are not shown on every tile). */
+  paintRoadAt: (tile: number) => void;
   setTool: (tool: ToolId) => void;
+  setBuildMode: (mode: BuildMode) => void;
+  rotateBuild: () => void;
   setSelectedCrop: (crop: CropId) => void;
   setHoveredTile: (tile: number | null) => void;
   setHoveredAnimal: (animal: number | null) => void;
@@ -100,6 +112,13 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'max-animals': 'A fazenda já tem o máximo de animais.',
   'no-animal': 'Você não tem esse animal.',
   'no-product': 'Este animal ainda não tem nada para coletar.',
+  'not-buildable': 'Esta construção não pode ser feita.',
+  'tile-busy': 'Há tarefas na fila neste lugar.',
+  'no-structure': 'Não há construção aqui.',
+  'not-demolishable': 'Esta construção não pode ser demolida.',
+  road: 'Há uma estrada aqui.',
+  'already-road': 'Já existe estrada aqui.',
+  'no-road': 'Não há nada para demolir aqui.',
 };
 
 const storage = (): Storage | null => {
@@ -142,6 +161,8 @@ export const useGameStore = create<GameStore>()(
       toast: null,
       lastSavedAt: null,
       devTimeScale: 1,
+      buildMode: null,
+      buildRotation: 0,
 
       advance: (realSeconds) => {
         const { settings, game, devTimeScale } = get();
@@ -161,6 +182,27 @@ export const useGameStore = create<GameStore>()(
         const { game, tool, selectedCrop } = get();
         const target = game.tiles[tile];
         if (!target) return;
+        const { buildMode, buildRotation } = get();
+        if (buildMode === 'road') {
+          commit(buildRoad(game, tile));
+          return;
+        }
+        if (buildMode === 'demolish') {
+          if (!target.structure && target.road) {
+            commit(removeRoad(game, tile));
+            return;
+          }
+          const found = structureAt(game, tile);
+          const text = found ? `${STRUCTURES[found.type].label} demolido(a): +${refundFor(found.type)} moedas.` : undefined;
+          commit(demolishStructure(game, tile), text);
+          return;
+        }
+        if (buildMode) {
+          const { x, y } = tileCoords(tile);
+          const at = anchorFor(buildMode, x, y, buildRotation);
+          commit(placeStructure(game, buildMode, at.x, at.y, buildRotation), `${STRUCTURES[buildMode].label} construído(a)!`);
+          return;
+        }
         if (target.state === 'locked') {
           get().requestPlot(plotOfTile(tile));
           return;
@@ -174,7 +216,14 @@ export const useGameStore = create<GameStore>()(
         else get().showMessage(ERROR_MESSAGES[result.error], 'error');
       },
 
-      setTool: (tool) => set({ tool }),
+      paintRoadAt: (tile) => {
+        const result = buildRoad(get().game, tile);
+        if (result.ok) set({ game: result.state });
+      },
+
+      setTool: (tool) => set({ tool, buildMode: null }),
+      setBuildMode: (buildMode) => set({ buildMode }),
+      rotateBuild: () => set((s) => ({ buildRotation: ((s.buildRotation + 1) % 4) as Rotation })),
       setSelectedCrop: (selectedCrop) => set({ selectedCrop, tool: 'seed' }),
       setHoveredTile: (hoveredTile) => {
         if (get().hoveredTile !== hoveredTile) set({ hoveredTile });
@@ -248,6 +297,7 @@ export const useGameStore = create<GameStore>()(
           selectedCrop: 'wheat',
           panel: null,
           pendingPlot: null,
+          buildMode: null,
         });
         get().save();
         get().showMessage('Novo jogo iniciado.', 'info');

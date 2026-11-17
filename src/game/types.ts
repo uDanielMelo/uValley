@@ -18,6 +18,21 @@ export interface Tile {
   wateredUntil?: number;
   /** Structure covering this tile, if any. */
   structure?: StructureId;
+  /** Dirt road on this tile (state stays 'grass', or 'locked' for the access road off the farm). */
+  road?: true;
+}
+
+/** Quarter turns applied to a placed structure. */
+export type Rotation = 0 | 1 | 2 | 3;
+
+/** A structure placed on the grid (the tiles it covers also carry `Tile.structure`). */
+export interface StructureInstance {
+  id: number;
+  type: StructureId;
+  /** Top-left tile of the (rotated) footprint. */
+  x: number;
+  y: number;
+  rotation: Rotation;
 }
 
 export type ItemCounts = Partial<Record<CropId, number>>;
@@ -103,7 +118,9 @@ export interface GameState {
   /** Work queue, oldest first. Tasks on the same tile run in queue order. */
   tasks: Task[];
   animals: Animal[];
-  /** Next id for tasks and workers. */
+  /** Placed structures, including the starting house and shipping bin. */
+  structures: StructureInstance[];
+  /** Next id for tasks, workers, animals and structures. */
   nextId: number;
 }
 
@@ -130,7 +147,14 @@ export type ActionError =
   | 'not-hired'
   | 'max-animals'
   | 'no-animal'
-  | 'no-product';
+  | 'no-product'
+  | 'not-buildable'
+  | 'tile-busy'
+  | 'no-structure'
+  | 'not-demolishable'
+  | 'road'
+  | 'already-road'
+  | 'no-road';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 

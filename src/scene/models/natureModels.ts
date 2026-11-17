@@ -1,4 +1,5 @@
 import { IcosahedronGeometry, type BufferGeometry } from 'three';
+import { PROP_SIZES, meters } from '../../data/scale';
 import { hash01 } from '../coords';
 import { PALETTE } from '../palette';
 import { cone, cylinder, merge, part, sphere } from './geometry';
@@ -17,8 +18,8 @@ export const grassTuft = (seed: number): BufferGeometry =>
     Array.from({ length: 7 }, (_, i) => {
       const angle = hash01(seed + i * 5) * Math.PI * 2;
       const r = hash01(seed + i * 9) * 0.09;
-      const h = 0.1 + hash01(seed + i * 13) * 0.12;
-      return cone(0.025, h, 3, i % 3 === 0 ? PALETTE.grassBladeDark : PALETTE.grassBlade, {
+      const h = meters(PROP_SIZES.grassMin + hash01(seed + i * 13) * (PROP_SIZES.grassMax - PROP_SIZES.grassMin));
+      return cone(0.02, h, 3, i % 3 === 0 ? PALETTE.grassBladeDark : PALETTE.grassBlade, {
         position: [Math.cos(angle) * r, h / 2, Math.sin(angle) * r],
         rotation: [(hash01(seed + i) - 0.5) * 0.6, 0, (hash01(seed + i * 3) - 0.5) * 0.6],
       });
@@ -32,10 +33,10 @@ export const flowerTuft = (color: string, seed: number): BufferGeometry =>
     ...Array.from({ length: 3 }, (_, i) => {
       const x = (hash01(seed + i * 17) - 0.5) * 0.18;
       const z = (hash01(seed + i * 19) - 0.5) * 0.18;
-      const h = 0.12 + hash01(seed + i * 23) * 0.08;
+      const h = meters(PROP_SIZES.grassMax + 0.05 + hash01(seed + i * 23) * 0.15);
       return merge([
-        cylinder(0.006, 0.006, h, 3, PALETTE.grassBladeDark, { position: [x, h / 2, z] }),
-        sphere(0.028, color, { position: [x, h, z] }, 5, 3),
+        cylinder(0.005, 0.005, h, 3, PALETTE.grassBladeDark, { position: [x, h / 2, z] }),
+        sphere(0.02, color, { position: [x, h, z] }, 5, 3),
       ]);
     }),
   ]);

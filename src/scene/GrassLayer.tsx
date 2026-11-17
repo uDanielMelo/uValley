@@ -23,7 +23,8 @@ const pickVariant = (r: number): Variant => {
   return 'rock';
 };
 
-const hasGrass = (tile: Tile): boolean => !tile.structure && (tile.state === 'grass' || tile.state === 'locked');
+const hasGrass = (tile: Tile): boolean =>
+  !tile.structure && !tile.road && (tile.state === 'grass' || tile.state === 'locked');
 
 /** Matrices per variant for every grassy tile. Deterministic per tile, so props never jump. */
 const layout = (tiles: readonly Tile[]): Record<Variant, Matrix4[]> => {

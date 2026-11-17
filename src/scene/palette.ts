@@ -13,6 +13,8 @@ export const PALETTE = {
   watered: '#5a3a22',
   /** Packed dirt under structures. */
   structureGround: '#b08a5c',
+  /** Packed dirt road. */
+  road: '#a88d66',
   // Outside the farm
   ground: '#6f9a3e',
   groundDark: '#557f33',

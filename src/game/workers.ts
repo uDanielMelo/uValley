@@ -1,4 +1,5 @@
 import { CROP_IDS, type CropId } from '../data/crops';
+import { ROAD_WALK_BONUS } from '../data/roads';
 import { MINUTES_PER_DAY } from '../data/world';
 import {
   DAILY_WAGE,
@@ -17,7 +18,7 @@ import {
 } from '../data/workers';
 import { applyTool, plant } from './actions';
 import { laborMultipliers } from './animals';
-import { tileCoords } from './grid';
+import { inBounds, tileCoords, tileIndex } from './grid';
 import { findPath } from './path';
 import {
   fail,
@@ -251,6 +252,13 @@ const walk = (worker: Worker, minutes: number, speed: number): { worker: Worker;
 
 const HOME_EPSILON = 0.05;
 
+/** Walking speed multiplier for the tile the worker is standing on (roads are faster). */
+const groundSpeed = (state: GameState, worker: Worker): number => {
+  const x = Math.floor(worker.x);
+  const y = Math.floor(worker.y);
+  return inBounds(x, y) && state.tiles[tileIndex(x, y)]?.road ? 1 + ROAD_WALK_BONUS : 1;
+};
+
 /**
  * Moves every worker for `minutes` of game time: picks tasks, walks, works and applies finished
  * tasks to the farm. Outside work hours (and when idle) workers head home.
@@ -290,7 +298,7 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
       }
     }
 
-    const moved = walk(w, minutes, WALK_SPEED * labor.walk);
+    const moved = walk(w, minutes, WALK_SPEED * labor.walk * groundSpeed(world, w));
     w = moved.worker;
 
     const taskId = w.taskId;

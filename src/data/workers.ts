@@ -8,13 +8,15 @@ export interface WorkerTemplate {
   role: string;
   /** Work speed multiplier (1 = normal). */
   efficiency: number;
+  /** Standing height in meters (visual only; hired workers get a random one). */
+  height?: number;
 }
 
 /** The family living in the house on a new game. They work for free. */
 export const FAMILY: readonly WorkerTemplate[] = [
-  { name: 'Antônio', role: 'Pai', efficiency: 1 },
-  { name: 'Helena', role: 'Mãe', efficiency: 1 },
-  { name: 'Lucas', role: 'Filho', efficiency: 0.8 },
+  { name: 'Antônio', role: 'Pai', efficiency: 1, height: 1.78 },
+  { name: 'Helena', role: 'Mãe', efficiency: 1, height: 1.65 },
+  { name: 'Lucas', role: 'Filho', efficiency: 0.8, height: 1.4 },
 ];
 
 /** Names given to hired workers, in hiring order (cycled when exhausted). */

@@ -1,5 +1,6 @@
 import { BufferGeometry, Color, Float32BufferAttribute, PlaneGeometry } from 'three';
 import { GRID_SIZE } from '../data/world';
+import { accessRoadExit } from '../game/roads';
 import { fbm, valueNoise } from './noise';
 import { PALETTE } from './palette';
 
@@ -18,13 +19,26 @@ const smoothstep = (a: number, b: number, t: number): number => {
   return k * k * (3 - 2 * k);
 };
 
-/** Ground height outside the farm: flat near the fence, rolling hills further away. */
+const EXIT = accessRoadExit();
+/** World X of the off-map road's center line. */
+export const OFFMAP_ROAD_X = EXIT.border.x - HALF;
+/** World Z where the road crosses the map border, and the direction it heads (-1 north, +1 south). */
+export const OFFMAP_ROAD_Z = EXIT.border.y - HALF;
+export const OFFMAP_ROAD_DIR = EXIT.outward;
+
+/** Distance from the off-map road's center line (Infinity on the map side of the border). */
+export const distanceFromRoad = (x: number, z: number): number =>
+  (z - OFFMAP_ROAD_Z) * OFFMAP_ROAD_DIR < -1 ? Infinity : Math.abs(x - OFFMAP_ROAD_X);
+
+/** Ground height outside the farm: flat near the fence and along the road, rolling hills further away. */
 export const terrainHeight = (x: number, z: number): number => {
   const d = distanceFromGrid(x, z);
   if (d <= 0) return EDGE_HEIGHT;
   const hills = (fbm(x * 0.018 + 100, z * 0.018 - 50, 4, 3) - 0.35) * 16;
   const bumps = (valueNoise(x * 0.25, z * 0.25, 9) - 0.5) * 0.35;
-  return EDGE_HEIGHT + Math.max(0, hills) * smoothstep(6, 45, d) + bumps * smoothstep(1, 6, d);
+  const natural = Math.max(0, hills) * smoothstep(6, 45, d) + bumps * smoothstep(1, 6, d);
+  // The road corridor is graded flat, blending back into the hills on both sides.
+  return EDGE_HEIGHT + natural * smoothstep(2, 9, distanceFromRoad(x, z));
 };
 
 const SIZE = 320;

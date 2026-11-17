@@ -123,11 +123,20 @@ export function HoverInfo() {
   const tile = useGameStore((s) => (s.hoveredTile === null ? undefined : s.game.tiles[s.hoveredTile]));
   if (hoveredAnimal !== null) return <AnimalInfo id={hoveredAnimal} />;
   if (hovered === null || !tile) return null;
-  const title = tile.structure ? STRUCTURES[tile.structure].label : STATE_LABELS[tile.state];
+  const title = tile.structure
+    ? STRUCTURES[tile.structure].label
+    : tile.road
+      ? tile.state === 'locked'
+        ? 'Estrada de acesso'
+        : 'Estrada de terra'
+      : STATE_LABELS[tile.state];
   return (
     <Card className="w-64 px-4 py-2">
       <p className="font-black">{title}</p>
       {tile.structure === 'shippingBin' && <p className="text-sm">Clique para vender sua colheita.</p>}
+      {tile.structure && tile.structure !== 'shippingBin' && (
+        <p className="text-sm">{STRUCTURES[tile.structure].description}</p>
+      )}
       {tile.state === 'locked' && <PlotDetails tileIndex={hovered} />}
       <CropDetails tile={tile} />
       <QueuedTasks tileIndex={hovered} />

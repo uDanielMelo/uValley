@@ -1,13 +1,14 @@
 import { useFrame } from '@react-three/fiber';
 import { createRef, useMemo, useRef } from 'react';
 import { MathUtils, type Group } from 'three';
+import { PERSON_HEIGHT } from '../data/scale';
 import { FAMILY } from '../data/workers';
 import { GRID_SIZE } from '../data/world';
 import type { ToolId, Worker } from '../game/types';
 import { workerActivity } from '../game/workers';
 import { useGameStore } from '../store/gameStore';
 import { hash01 } from './coords';
-import { Person, type PersonLook, type PersonRig } from './models/Person';
+import { Person, personScale, type PersonLook, type PersonRig } from './models/Person';
 
 const HALF = GRID_SIZE / 2;
 const TOOL_IDS: readonly ToolId[] = ['hoe', 'seed', 'water', 'hand'];
@@ -41,6 +42,13 @@ const lookFor = (worker: Worker): PersonLook => {
     hair: pick(HAIR, r(4)),
     hat: r(5) < 0.6 ? STRAW : null,
   };
+};
+
+/** Height in meters: the family's own, a random one around the adult default for hired hands. */
+const heightFor = (worker: Worker): number => {
+  const template = worker.kind === 'family' ? FAMILY.find((f) => f.name === worker.name) : undefined;
+  if (template?.height) return template.height;
+  return PERSON_HEIGHT.adult + (hash01(worker.id * 53 + 7) * 2 - 1) * PERSON_HEIGHT.variation;
 };
 
 /** Shortest signed angle from a to b. */
@@ -79,10 +87,14 @@ const workPose = (kind: ToolId, t: number): Pose => {
 };
 
 function WorkerFigure({ id }: { id: number }) {
-  const look = useMemo(() => {
+  const { look, height } = useMemo(() => {
     const worker = useGameStore.getState().game.workers.find((w) => w.id === id);
-    return worker ? lookFor(worker) : DEFAULT_LOOK;
+    return worker
+      ? { look: lookFor(worker), height: heightFor(worker) }
+      : { look: DEFAULT_LOOK, height: PERSON_HEIGHT.adult };
   }, [id]);
+  /** Model-to-world scale: strides and bobbing shrink with the person. */
+  const fit = personScale(height);
   const rig = useMemo<PersonRig>(
     () => ({
       root: createRef<Group>(),
@@ -125,7 +137,8 @@ function WorkerFigure({ id }: { id: number }) {
     const moved = Math.hypot(dx, dz);
     if (moved > 1e-4) {
       a.heading = Math.atan2(dx, dz);
-      a.phase += moved * 11;
+      // Stride rate is tuned for the unscaled model; shorter legs take more steps.
+      a.phase += (moved * 11) / fit;
     }
     a.x = x;
     a.z = z;
@@ -143,7 +156,7 @@ function WorkerFigure({ id }: { id: number }) {
 
     // Ease joints toward the pose so transitions between activities are smooth.
     const k = 1 - Math.exp(-14 * dt);
-    root.position.set(x, MathUtils.lerp(root.position.y, pose.bob, k), z);
+    root.position.set(x, MathUtils.lerp(root.position.y, pose.bob * fit, k), z);
     root.rotation.y += angleDelta(root.rotation.y, a.heading) * (1 - Math.exp(-10 * dt));
     legL.rotation.x = MathUtils.lerp(legL.rotation.x, pose.legL, k);
     legR.rotation.x = MathUtils.lerp(legR.rotation.x, pose.legR, k);
@@ -157,7 +170,7 @@ function WorkerFigure({ id }: { id: number }) {
     }
   });
 
-  return <Person look={look} rig={rig} />;
+  return <Person look={look} rig={rig} height={height} />;
 }
 
 /** All workers, animated from the game state every frame (no React re-renders while they move). */

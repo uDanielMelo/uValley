@@ -5,7 +5,10 @@ import { InstancedProps } from './InstancedProps';
 import { bush, flowerTuft, grassTuft, pineTree, rock, roundTree } from './models/natureModels';
 import { fbm } from './noise';
 import { PALETTE } from './palette';
-import { buildTerrain, distanceFromGrid, terrainHeight } from './terrain';
+import { buildTerrain, distanceFromGrid, distanceFromRoad, terrainHeight } from './terrain';
+
+/** Props keep this far (world units) from the off-map road's center line. */
+const ROAD_CLEARANCE = 1.6;
 
 const noRaycast = () => null;
 const UP = new Vector3(0, 1, 0);
@@ -31,6 +34,7 @@ const scatter = (o: ScatterOptions): Matrix4[] => {
     const z = (hash01(o.seed + i * 7 + 1) * 2 - 1) * reach;
     const d = distanceFromGrid(x, z);
     if (d < o.minDistance || d > o.maxDistance) continue;
+    if (distanceFromRoad(x, z) < ROAD_CLEARANCE * (o.scale[1] > 1 ? 2 : 1)) continue;
     if (hash01(o.seed + i * 11 + 2) > o.density(x, z)) continue;
     const s = o.scale[0] + hash01(o.seed + i * 13 + 3) * (o.scale[1] - o.scale[0]);
     q.setFromAxisAngle(UP, hash01(o.seed + i * 17 + 4) * Math.PI * 2);
