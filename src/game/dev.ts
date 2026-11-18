@@ -2,12 +2,12 @@
  * Cheats for testing (dev panel and `window.dev`). Pure `(state, …) => state` functions;
  * they never fail: invalid input is clamped or ignored.
  */
-import { ANIMALS, ANIMAL_PRODUCT_IDS, type AnimalId } from '../data/animals';
+import { ANIMAL_PRODUCT_IDS, GAME_MINUTES_PER_REAL_HOUR, type AnimalId } from '../data/animals';
 import { CROP_IDS } from '../data/crops';
 import { STRUCTURES } from '../data/structures';
 import { HOME_POSITION, MAX_WORKERS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
-import { addAnimal } from './animals';
+import { addAnimal, animalProduct } from './animals';
 import { addStock, sheltersFor } from './shelters';
 import { findFreeSpot, placeStructure } from './structures';
 import { growthMinutesNeeded } from './crops';
@@ -145,7 +145,13 @@ export const spawnAnimals = (state: GameState, kind: AnimalId, count: number): G
 export const readyAllProducts = (state: GameState): GameState => {
   const fed: GameState = { ...state, animals: state.animals.map((a) => ({ ...a, fed: true, productMinutes: 0 })) };
   return state.animals.reduce((s, a) => {
-    const product = ANIMALS[a.kind].product;
+    const product = animalProduct(a);
     return product ? addStock(s, a.shelterId, product) : s;
   }, fed);
 };
+
+/** Ages every animal by real hours (at 1×): 12 makes a baby young, 72 makes an adult old. */
+export const ageAnimals = (state: GameState, realHours: number): GameState => ({
+  ...state,
+  animals: state.animals.map((a) => ({ ...a, bornAt: a.bornAt - realHours * GAME_MINUTES_PER_REAL_HOUR })),
+});

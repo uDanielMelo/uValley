@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { ANIMALS, type AnimalId, type AnimalProductId } from '../data/animals';
+import { ANIMALS, BREEDS, type AnimalId, type AnimalProductId, type BreedId } from '../data/animals';
 import type { CropId } from '../data/crops';
 import { SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
-import { buyAnimal, sellAnimal } from '../game/animals';
+import { animalSalePrice, buyAnimal, sellAnimal, type PurchaseAge } from '../game/animals';
 import { buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
 import { plotOfTile, tileCoords, tileIndex, tilesInRect } from '../game/grid';
 import {
@@ -109,8 +109,11 @@ export interface GameStore {
   /** Opens the team hub on a worker's card (null closes the card). */
   selectWorker: (workerId: number | null) => void;
   clearTasks: () => void;
-  buyAnimal: (kind: AnimalId) => void;
-  sellAnimal: (kind: AnimalId) => void;
+  buyAnimal: (kind: AnimalId, breed: BreedId, age: PurchaseAge) => void;
+  sellAnimal: (animalId: number) => void;
+  /** Animal selected with the hand (its card is open). */
+  selectedAnimal: number | null;
+  selectAnimal: (id: number | null) => void;
   sellProduct: (product: AnimalProductId, quantity: number) => void;
   /** Dev tools: applies a state transform directly. */
   devApply: (transform: (game: GameState) => GameState, message?: string) => void;
@@ -225,6 +228,7 @@ export const useGameStore = create<GameStore>()(
       settings: loaded?.settings ?? DEFAULT_SETTINGS,
       tool: null,
       selectedStructure: null,
+      selectedAnimal: null,
       activitiesOpen: false,
       selectedCrop: 'wheat',
       hoveredTile: null,
@@ -243,9 +247,14 @@ export const useGameStore = create<GameStore>()(
         const { settings, game, devTimeScale } = get();
         if (settings.speed === 0 || realSeconds <= 0) return;
         const dt = realSeconds * GAME_MINUTES_PER_REAL_SECOND * settings.speed * devTimeScale;
-        const { state, workersLeft, hungryAnimals, tempsLeft, worksFinished } = advanceGame(game, dt);
+        const { state, workersLeft, hungryAnimals, tempsLeft, worksFinished, animalsDied } = advanceGame(game, dt);
         set({ game: state });
         for (const work of worksFinished) get().showMessage(finishedText(work), 'info');
+        if (animalsDied.length > 0) {
+          const names = animalsDied.map((a) => `${ANIMALS[a.kind].label.toLowerCase()} ${BREEDS[a.breed].label}`).join(', ');
+          get().showMessage(`Morreu de velhice: ${names}.`, 'info');
+          if (animalsDied.some((a) => a.id === get().selectedAnimal)) set({ selectedAnimal: null });
+        }
         if (tempsLeft > 0) get().showMessage('Fim do expediente: os esporádicos foram embora.', 'info');
         if (hungryAnimals > 0) {
           get().showMessage(`Sem dinheiro para a ração: ${hungryAnimals} animal(is) com fome hoje.`, 'error');
@@ -291,7 +300,9 @@ export const useGameStore = create<GameStore>()(
         }
         // Tool orders are given through areas (beginArea / finishArea). With the hand, a click
         // selects the structure on the tile (sites too), and open ground clears the selection.
-        if (get().tool === null) set({ selectedStructure: target.structure ? (structureAt(game, tile)?.id ?? null) : null });
+        if (get().tool === null) {
+          set({ selectedStructure: target.structure ? (structureAt(game, tile)?.id ?? null) : null, selectedAnimal: null });
+        }
       },
 
       beginArea: (tile) => set({ area: { anchor: tile, current: tile } }),
@@ -338,9 +349,11 @@ export const useGameStore = create<GameStore>()(
           buildMode: null,
           area: null,
           selectedStructure: null,
+          selectedAnimal: null,
           activitiesOpen: false,
         })),
-      selectStructure: (selectedStructure) => set({ selectedStructure }),
+      selectStructure: (selectedStructure) => set({ selectedStructure, selectedAnimal: null }),
+      selectAnimal: (selectedAnimal) => set({ selectedAnimal, selectedStructure: null }),
       setActivitiesOpen: (open) => set((s) => ({ activitiesOpen: open ?? !s.activitiesOpen })),
       upgradeShelter: (id) => {
         const game = get().game;
@@ -367,7 +380,7 @@ export const useGameStore = create<GameStore>()(
         set({ game: result.state });
         get().showMessage(demolishText(result.change), 'info');
       },
-      setBuildMode: (buildMode) => set({ buildMode, selectedStructure: null, activitiesOpen: false }),
+      setBuildMode: (buildMode) => set({ buildMode, selectedStructure: null, selectedAnimal: null, activitiesOpen: false }),
       rotateBuild: () => set((s) => ({ buildRotation: ((s.buildRotation + 1) % 4) as Rotation })),
       setSelectedCrop: (selectedCrop) => set({ selectedCrop, tool: 'seed', buildMode: null, selectedStructure: null }),
       setHoveredTile: (hoveredTile) => {
@@ -419,15 +432,20 @@ export const useGameStore = create<GameStore>()(
       },
       selectWorker: (selectedWorker) => set(selectedWorker === null ? { selectedWorker } : { selectedWorker, panel: 'workers' }),
       clearTasks: () => set((s) => ({ game: clearTasks(s.game) })),
-      buyAnimal: (kind) => {
-        const before = get().game;
-        if (!commit(buyAnimal(before, kind))) return;
+      buyAnimal: (kind, breed, age) => {
+        if (!commit(buyAnimal(get().game, kind, breed, age))) return;
         const animal = get().game.animals[get().game.animals.length - 1];
-        const home = get().game.structures.find((s) => s.id === animal?.shelterId);
-        if (home) get().showMessage(`${ANIMALS[kind].label} comprado(a): mora no ${STRUCTURES[home.type].label.toLowerCase()}.`, 'info');
+        const home = get().game.structures.find((x) => x.id === animal?.shelterId);
+        if (!animal || !home) return;
+        const who = `${ANIMALS[kind].label} ${BREEDS[breed].label}${age === 'baby' ? ' (filhote)' : ''}`;
+        get().showMessage(`${who} comprado(a), ${'★'.repeat(animal.stars)}: mora no ${STRUCTURES[home.type].label.toLowerCase()}.`, 'info');
       },
-      sellAnimal: (kind) => {
-        commit(sellAnimal(get().game, kind));
+      sellAnimal: (animalId) => {
+        const game = get().game;
+        const animal = game.animals.find((a) => a.id === animalId);
+        const price = animal ? animalSalePrice(game.gameMinutes, animal) : 0;
+        if (!commit(sellAnimal(game, animalId), `Animal vendido: +${price} moedas.`)) return;
+        if (get().selectedAnimal === animalId) set({ selectedAnimal: null });
       },
       sellProduct: (product, quantity) => {
         commit(sellAnimalProduct(get().game, product, quantity));
@@ -452,6 +470,7 @@ export const useGameStore = create<GameStore>()(
           game: createInitialState(),
           tool: null,
           selectedStructure: null,
+          selectedAnimal: null,
           selectedCrop: 'wheat',
           panel: null,
           pendingPlot: null,

@@ -68,8 +68,10 @@ Grande demais para uma entrega: dividida em sub-etapas, cada uma com branch e ve
   melhor no chiqueiro (texto; efeito na 3e). **O automatizado (nível 4, ordenhadeira etc.) ficou para
   depois**; o estábulo vai só até o 3. Junto: HUD minimalista, modo Mão (arrastar com o esquerdo move a
   câmera, clique seleciona estrutura e abre o card), hub de atividades. Save v9.
-- **3c, raças, estrelas e ciclo de vida**: fase derivada da idade (nunca salva). Curva de produção por
-  fase. **O animal morre de velhice** no fim do ciclo. Sem reprodução por enquanto.
+- **3c, raças, estrelas e ciclo de vida** ✅: fase derivada da idade (nunca salva). Curva de produção por
+  fase. **O animal morre de velhice** no fim do ciclo. Sem reprodução por enquanto. Feito: 2 raças por
+  espécie (comum e nobre), estrelas 1–3, filhote 12 h → jovem 12 h → adulto 48 h → idoso 24 h (tempo real
+  em 1×), compra de filhote ou adulto, venda pelo card do animal. Save v10.
 - **3d, saúde e predadores**: doença por hora (conforto, lotação, fome, idade), incubação percebida antes
   por quem tem a habilidade, remédio comprado e tarefa de medicar, visual de doente. Predador à noite por
   abrigo, com chance × (1 − segurança). Sorteios determinísticos (`hash01`).

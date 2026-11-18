@@ -1,7 +1,7 @@
-import { ANIMALS, ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
+import { ANIMALS, ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS, BREEDS, LIFE_STAGES } from '../data/animals';
 import { CROPS } from '../data/crops';
 import { STRUCTURES } from '../data/structures';
-import { animalActivity } from '../game/animals';
+import { animalActivity, animalProduct, lifeStage } from '../game/animals';
 import { levelDef, residents, shelterCapacity, shelterDef, stockCap, stockTotal } from '../game/shelters';
 import { growthProgress, isMature } from '../game/crops';
 import { nextPlotCost, plotStatus } from '../game/economy';
@@ -140,6 +140,12 @@ const ACTIVITY_LABELS = { walking: 'Passeando', grazing: 'Pastando', sleeping: '
 function AnimalInfo({ id }: { id: number }) {
   // Each selector returns a primitive, so the card only re-renders when what it shows changes.
   const kind = useGameStore((s) => s.game.animals.find((a) => a.id === id)?.kind);
+  const breed = useGameStore((s) => s.game.animals.find((a) => a.id === id)?.breed);
+  const stars = useGameStore((s) => s.game.animals.find((a) => a.id === id)?.stars ?? 1);
+  const stage = useGameStore((s) => {
+    const a = s.game.animals.find((x) => x.id === id);
+    return a ? lifeStage(s.game.gameMinutes, a) : 'adult';
+  });
   const activity = useGameStore((s) => {
     const a = s.game.animals.find((x) => x.id === id);
     return a ? animalActivity(s.game, a) : null;
@@ -156,13 +162,17 @@ function AnimalInfo({ id }: { id: number }) {
     const hours = ANIMALS[a.kind].productionHours;
     return hours > 0 ? Math.min(100, Math.floor((a.productMinutes / (hours * 60)) * 100)) : 0;
   });
-  if (!kind || !activity) return null;
+  if (!kind || !breed || !activity) return null;
   const def = ANIMALS[kind];
-  const product = def.product ? ANIMAL_PRODUCTS[def.product] : null;
+  const productId = animalProduct({ kind, breed });
+  const product = productId ? ANIMAL_PRODUCTS[productId] : null;
   return (
     <Card className="w-64 px-4 py-2">
       <p className="font-black">
-        {def.icon} {def.label}
+        {def.icon} {def.label} {BREEDS[breed].label}
+      </p>
+      <p className="text-xs font-bold text-wood/70">
+        {'★'.repeat(stars)} · {LIFE_STAGES[stage].label} · clique para ver
       </p>
       <p className="text-sm">
         {ACTIVITY_LABELS[activity]}
@@ -188,13 +198,14 @@ function AnimalInfo({ id }: { id: number }) {
 /** Small card describing the animal or tile under the mouse. */
 export function HoverInfo() {
   const hoveredAnimal = useGameStore((s) => s.hoveredAnimal);
+  const selectedAnimal = useGameStore((s) => s.selectedAnimal);
   const hovered = useGameStore((s) => s.hoveredTile);
   const tile = useGameStore((s) => (s.hoveredTile === null ? undefined : s.game.tiles[s.hoveredTile]));
   // The selected structure already has its card open.
   const onSelected = useGameStore(
     (s) => s.selectedStructure !== null && s.hoveredTile !== null && structureAt(s.game, s.hoveredTile)?.id === s.selectedStructure,
   );
-  if (hoveredAnimal !== null) return <AnimalInfo id={hoveredAnimal} />;
+  if (hoveredAnimal !== null) return hoveredAnimal === selectedAnimal ? null : <AnimalInfo id={hoveredAnimal} />;
   if (hovered === null || !tile || onSelected) return null;
   const title = tile.structure
     ? STRUCTURES[tile.structure].label

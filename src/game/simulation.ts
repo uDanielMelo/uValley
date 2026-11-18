@@ -1,10 +1,10 @@
 import { WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { GROWTH_STEP_MINUTES } from '../data/world';
 import { growTiles } from './growth';
-import { payFeed, stepAnimals } from './animals';
+import { payFeed, removeDeadAnimals, stepAnimals } from './animals';
 import { queueShelterChores } from './shelters';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
-import type { GameState, StructureInstance, StructureWorkKind } from './types';
+import type { Animal, GameState, StructureInstance, StructureWorkKind } from './types';
 import type { ShelterLevel, StructureId } from '../data/structures';
 import { refundFor } from './structures';
 import { stepWorkers } from './workers';
@@ -19,6 +19,8 @@ export interface TickResult {
   tempsLeft: number;
   /** Sites and demolitions the crew finished. */
   worksFinished: FinishedWork[];
+  /** Animals that died of old age. */
+  animalsDied: Animal[];
 }
 
 export interface FinishedWork {
@@ -53,12 +55,14 @@ const finishedWorks = (before: readonly StructureInstance[], after: readonly Str
  * at midnight the feed and a new hiring board.
  */
 export const advanceGame = (state: GameState, dtMinutes: number): TickResult => {
-  if (dtMinutes <= 0) return { state, workersLeft: [], hungryAnimals: 0, tempsLeft: 0, worksFinished: [] };
+  if (dtMinutes <= 0) return { state, workersLeft: [], hungryAnimals: 0, tempsLeft: 0, worksFinished: [], animalsDied: [] };
   const gameMinutes = state.gameMinutes + dtMinutes;
   const from = Math.floor(state.gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const to = Math.floor(gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const tiles = to > from ? growTiles(state.tiles, from, to) : state.tiles;
-  let next = queueShelterChores(stepAnimals(stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes), dtMinutes));
+  const aged = removeDeadAnimals(stepAnimals(stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes), dtMinutes));
+  const animalsDied = aged.died;
+  let next = queueShelterChores(aged.state);
   const worksFinished = finishedWorks(state.structures, next.structures);
 
   const workersLeft: string[] = [];
@@ -85,7 +89,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       hungryAnimals = fed.hungry;
     }
   }
-  return { state: next, workersLeft, hungryAnimals, tempsLeft, worksFinished };
+  return { state: next, workersLeft, hungryAnimals, tempsLeft, worksFinished, animalsDied };
 };
 
 /** advanceGame without the events. */

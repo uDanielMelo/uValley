@@ -58,6 +58,7 @@ export function useHotkeys(): void {
           else if (store.buildMode) store.setBuildMode(null);
           else if (store.activitiesOpen) store.setActivitiesOpen(false);
           else if (store.selectedStructure !== null) store.selectStructure(null);
+          else if (store.selectedAnimal !== null) store.selectAnimal(null);
           else if (store.panel) store.closePanel();
           else if (store.tool !== null) store.setTool(null);
           break;

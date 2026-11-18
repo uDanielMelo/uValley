@@ -96,6 +96,8 @@ describe('pasture', () => {
 describe('collecting', () => {
   it('the crew collects the shelter products as a tend task', () => {
     let s = spawnAnimals(coopFarm(), 'chicken', 4);
+    // Same stars for all, so they lay together.
+    s = { ...s, animals: s.animals.map((a) => ({ ...a, stars: 2 as const })) };
     s = skipMinutes({ ...s, workers: [] }, ANIMALS.chicken.productionHours * 60 + 15);
     expect(coopOf(s).stock?.egg).toBe(4);
     const tend = s.tasks.find((t) => t.kind === 'tend');

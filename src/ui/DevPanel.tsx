@@ -146,6 +146,7 @@ export function DevPanel() {
               </DevButton>
             ))}
             <DevButton onClick={dev.products}>✨ Produtos prontos</DevButton>
+            <DevButton onClick={() => dev.age(24)}>⏳ +24 h de idade</DevButton>
           </Section>
 
           <p className="text-[11px] text-white/60">

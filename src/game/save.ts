@@ -1,4 +1,16 @@
-import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCT_IDS, type AnimalId, type AnimalProductId } from '../data/animals';
+import {
+  ANIMALS,
+  ANIMAL_IDS,
+  ANIMAL_PRODUCT_IDS,
+  BREEDS,
+  BREED_IDS,
+  GAME_MINUTES_PER_REAL_HOUR,
+  LIFE_STAGES,
+  SPECIES_BREEDS,
+  type AnimalId,
+  type AnimalProductId,
+  type BreedId,
+} from '../data/animals';
 import { CROP_IDS, type CropId } from '../data/crops';
 import { ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X } from '../data/roads';
 import { SHELTER_LEVEL_IDS, START_STRUCTURES, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
@@ -40,7 +52,7 @@ import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -61,16 +73,17 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * work for the crew (`StructureInstance.work`, 'build' tasks with a `job`, 'build' in priorities);
  * v8 housed animals in shelters (`Animal.shelterId`, `path` instead of `target`, products in
  * `StructureInstance.stock`) and added the 'tend' activity; v9 added shelter levels
- * (`StructureInstance.level`, 'upgrade' work with `toLevel`).
+ * (`StructureInstance.level`, 'upgrade' work with `toLevel`); v10 gave animals a breed, stars and a
+ * birth time (`bornAt`).
  */
-export interface SaveDataV9 {
-  saveVersion: 9;
+export interface SaveDataV10 {
+  saveVersion: 10;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV9;
+export type SaveData = SaveDataV10;
 
 export interface LoadedSave {
   game: GameState;
@@ -188,6 +201,17 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
   },
   // v8 → v9: shelter levels. Absent level means level 1, so the data needs no change.
   8: (data) => data,
+  // v9 → v10: animals get the common breed of their species, 2 stars and a birth time that makes
+  // them just adult now (a whole adult life ahead).
+  9: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    const now = isFiniteNumber(game.gameMinutes) ? game.gameMinutes : 0;
+    const adultAt = LIFE_STAGES.adult.startsAtRealHours * GAME_MINUTES_PER_REAL_HOUR;
+    const animals = (Array.isArray(game.animals) ? game.animals : []).map((a) =>
+      isRecord(a) && isAnimalId(a.kind) ? { ...a, breed: SPECIES_BREEDS[a.kind][0], stars: 2, bornAt: now - adultAt } : a,
+    );
+    return { ...data, game: { ...game, animals } };
+  },
 };
 
 /** The v2–v5 family, as it was saved before v6. */
@@ -427,10 +451,13 @@ const parsePath = (v: unknown): GridPoint[] | null => {
   return points;
 };
 
+const isBreedId = (v: unknown): v is BreedId => BREED_IDS.some((b) => b === v);
+
 const parseAnimal = (v: unknown): Animal | null => {
   if (!isRecord(v)) return null;
-  const { id, kind, shelterId, x, y, waitMinutes, productMinutes, fed } = v;
+  const { id, kind, breed, stars, bornAt, shelterId, x, y, waitMinutes, productMinutes, fed } = v;
   if (!isId(id) || !isAnimalId(kind) || !isFiniteNumber(x) || !isFiniteNumber(y)) return null;
+  if (!isBreedId(breed) || BREEDS[breed].species !== kind || !isStars(stars) || !isFiniteNumber(bornAt)) return null;
   // A missing or unknown shelter (-1 after migrating) is fixed by rehomeAnimals.
   if (!isFiniteNumber(shelterId) || !Number.isInteger(shelterId)) return null;
   if (!isFiniteNumber(waitMinutes) || !isFiniteNumber(productMinutes) || typeof fed !== 'boolean') return null;
@@ -439,6 +466,9 @@ const parseAnimal = (v: unknown): Animal | null => {
   return {
     id,
     kind,
+    breed,
+    stars,
+    bornAt,
     shelterId,
     x,
     y,

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
+import { AnimalCard } from './AnimalCard';
 import { BuildBanner, BuildPanel } from './BuildPanel';
 import { DevPanel } from './DevPanel';
 import { DEV_ENABLED } from './devTools';
@@ -75,6 +76,7 @@ export function Hud() {
         <div className="flex w-72 flex-col justify-end gap-2">
           <HoverInfo />
           <StructureCard />
+          <AnimalCard />
         </div>
         <div className="flex flex-col items-center gap-2">
           <BuildBanner />

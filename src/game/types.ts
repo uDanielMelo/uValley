@@ -1,4 +1,4 @@
-import type { AnimalId, AnimalProductId } from '../data/animals';
+import type { AnimalId, AnimalProductId, BreedId } from '../data/animals';
 import type { CropId } from '../data/crops';
 import type { ShelterLevel, StructureId } from '../data/structures';
 import type { SkillId } from '../data/workers';
@@ -143,6 +143,10 @@ export type WorkerActivity = 'idle' | 'walking' | 'working' | 'resting';
 export interface Animal {
   id: number;
   kind: AnimalId;
+  breed: BreedId;
+  stars: Stars;
+  /** Game minute it was born (before the purchase for adults); the life stage is derived from it. */
+  bornAt: number;
   /** The shelter it lives in (it grazes around it and sleeps inside). */
   shelterId: number;
   /** Position in tile space. */

@@ -139,9 +139,13 @@ describe('animals', () => {
 
   it('sells back at a discount', () => {
     const s = unwrap(buyAnimal(spawnAnimals(rich(), 'horse', 1), 'horse'));
-    const sold = unwrap(sellAnimal(s, 'horse'));
+    const horse = s.animals[1];
+    if (!horse) throw new Error('no horse');
+    const sold = unwrap(sellAnimal(s, horse.id));
     expect(sold.animals).toHaveLength(1);
-    expect(sold.money).toBe(s.money + animalSalePrice('horse'));
+    expect(sold.money).toBe(s.money + animalSalePrice(s.gameMinutes, horse));
+    expect(animalSalePrice(s.gameMinutes, horse)).toBeLessThan(ANIMALS.horse.purchaseCost);
+    expect(sellAnimal(sold, horse.id)).toEqual({ ok: false, error: 'no-animal' });
   });
 
   it('round-trip in the save and migrate v2 saves', () => {

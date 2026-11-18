@@ -1,16 +1,36 @@
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useRef } from 'react';
-import { MathUtils, MeshBasicMaterial, MeshStandardMaterial, type Group } from 'three';
-import { ANIMAL_IDS, type AnimalId } from '../data/animals';
+import { Color, MathUtils, MeshBasicMaterial, MeshStandardMaterial, RingGeometry, type Group, type Mesh } from 'three';
+import { ANIMAL_IDS, BREED_IDS, type AnimalId, type BreedId } from '../data/animals';
 import { GRID_SIZE } from '../data/world';
-import { animalActivity, isInside } from '../game/animals';
+import { animalActivity, isInside, lifeStage } from '../game/animals';
 import { useGameStore } from '../store/gameStore';
 import { hash01 } from './coords';
 import { setHoverCursor } from './cursor';
-import { animalModel } from './models/animalModels';
+import { BREED_TINTS, OLD_TINT, STAGE_SCALE, animalModel } from './models/animalModels';
+import { PALETTE } from './palette';
 
 const HALF = GRID_SIZE / 2;
-const MATERIAL = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+/** Max pointer travel (px) for a click to count as a click and not a camera drag. */
+const CLICK_TOLERANCE = 5;
+
+/** One material per breed (and its old-age look), shared by every animal of that breed. */
+const materials = new Map<string, MeshStandardMaterial>();
+const materialFor = (breed: BreedId, old: boolean): MeshStandardMaterial => {
+  const key = `${breed}:${old ? 'old' : ''}`;
+  let material = materials.get(key);
+  if (!material) {
+    const color = new Color(BREED_TINTS[breed]);
+    if (old) color.lerp(new Color(OLD_TINT), 0.35);
+    material = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9, color });
+    materials.set(key, material);
+  }
+  return material;
+};
+
+/** Ring on the ground under the selected animal. */
+const RING = new RingGeometry(0.42, 0.52, 24).rotateX(-Math.PI / 2);
+const RING_MATERIAL = new MeshBasicMaterial({ color: PALETTE.selection, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false });
 /** Invisible material for the click box (keeps small animals easy to click). */
 const HITBOX_MATERIAL = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
 /** Leg swing per world unit walked, relative to the hip height. */
@@ -18,10 +38,15 @@ const STRIDE = 4.5;
 
 const angleDelta = (a: number, b: number): number => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
-function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
+function AnimalFigure({ id, kind, breed }: { id: number; kind: AnimalId; breed: BreedId }) {
   const model = animalModel(kind);
   const root = useRef<Group>(null);
+  const sizer = useRef<Group>(null);
   const body = useRef<Group>(null);
+  const ring = useRef<Mesh>(null);
+  const meshes = useRef<Mesh[]>([]);
+  /** null until the first frame (then whether the old-age look is applied). */
+  const looksOld = useRef<boolean | null>(null);
   const legs = useRef<Array<Group | null>>([]);
   const anim = useRef({ x: NaN, z: NaN, heading: hash01(id) * Math.PI * 2, phase: 0, time: hash01(id + 1) * 10 });
 
@@ -52,6 +77,21 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
 
     // Asleep in the shelter: out of sight until morning.
     r.visible = !isInside(game, animal);
+    // Size follows the life stage; old animals turn greyer.
+    const stage = lifeStage(game.gameMinutes, animal);
+    const size = sizer.current;
+    if (size) {
+      // Snap on the first frame; afterwards growing up is gradual.
+      const target = STAGE_SCALE[stage];
+      size.scale.setScalar(looksOld.current === null ? target : MathUtils.lerp(size.scale.x, target, 1 - Math.exp(-3 * dt)));
+    }
+    const old = stage === 'old';
+    if (old !== looksOld.current) {
+      looksOld.current = old;
+      const material = materialFor(breed, old);
+      for (const mesh of meshes.current) mesh.material = material;
+    }
+    if (ring.current) ring.current.visible = useGameStore.getState().selectedAnimal === id;
     const activity = animalActivity(game, animal);
     const k = 1 - Math.exp(-10 * dt);
     r.position.set(x, 0, z);
@@ -79,6 +119,17 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
   const stopDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button === 0) e.stopPropagation();
   };
+  // With the hand, a click selects the animal (its card opens).
+  const onClick = (e: ThreeEvent<MouseEvent>) => {
+    const { tool, buildMode, selectAnimal } = useGameStore.getState();
+    if (e.button !== 0 || e.delta > CLICK_TOLERANCE || tool !== null || buildMode !== null) return;
+    e.stopPropagation();
+    selectAnimal(id);
+  };
+  const keep = (mesh: Mesh | null) => {
+    if (mesh && !meshes.current.includes(mesh)) meshes.current.push(mesh);
+  };
+  const material = materialFor(breed, false);
   const onOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     useGameStore.getState().setHoveredAnimal(id);
@@ -90,13 +141,23 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
   };
 
   return (
-    <group ref={root} onPointerDown={stopDown} onPointerOver={onOver} onPointerOut={onOut}>
+    <group ref={root} onClick={onClick} onPointerDown={stopDown} onPointerOver={onOver} onPointerOut={onOut}>
+      <mesh
+        ref={ring}
+        geometry={RING}
+        material={RING_MATERIAL}
+        position={[0, 0.04, 0]}
+        scale={Math.max(0.35, model.hitbox[2] * model.fit[2] * 0.7)}
+        visible={false}
+        raycast={() => null}
+      />
+      <group ref={sizer}>
       <group scale={model.fit}>
       <mesh position={model.hitboxCenter} material={HITBOX_MATERIAL}>
         <boxGeometry args={model.hitbox} />
       </mesh>
       <group ref={body}>
-        <mesh geometry={model.body} material={MATERIAL} castShadow receiveShadow />
+        <mesh ref={keep} geometry={model.body} material={material} castShadow receiveShadow />
         {model.legs.map((position, i) => (
           <group
             key={i}
@@ -105,9 +166,10 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
               legs.current[i] = el;
             }}
           >
-            <mesh geometry={model.leg} material={MATERIAL} castShadow />
+            <mesh ref={keep} geometry={model.leg} material={material} castShadow />
           </group>
         ))}
+      </group>
       </group>
       </group>
     </group>
@@ -116,16 +178,17 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
 
 /** Farm animals, animated from the game state every frame (re-renders only when one is added or removed). */
 export function Animals() {
-  const list = useGameStore((s) => s.game.animals.map((a) => `${a.id}:${a.kind}`).join(','));
+  const list = useGameStore((s) => s.game.animals.map((a) => `${a.id}:${a.kind}:${a.breed}`).join(','));
   return (
     <group>
       {list
         .split(',')
         .filter(Boolean)
         .map((entry) => {
-          const [id = '', name = ''] = entry.split(':');
+          const [id = '', name = '', breedName = ''] = entry.split(':');
           const kind = ANIMAL_IDS.find((k) => k === name);
-          return kind ? <AnimalFigure key={id} id={Number(id)} kind={kind} /> : null;
+          const breed = BREED_IDS.find((b) => b === breedName);
+          return kind && breed ? <AnimalFigure key={id} id={Number(id)} kind={kind} breed={breed} /> : null;
         })}
     </group>
   );

@@ -1,6 +1,7 @@
 import { ANIMAL_IDS, type AnimalId } from '../data/animals';
 import {
   addMoney,
+  ageAnimals,
   addProduce,
   addSeeds,
   finishAllTasks,
@@ -44,6 +45,7 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.build()            conclui obras e demolições em andamento
   dev.spawn('cow', 3)    cria animais: ${ANIMAL_IDS.join(', ')}
   dev.products()         todos os animais com produto pronto
+  dev.age(24)            envelhece os animais 24 h reais (12 filhote→jovem, 72 adulto→idoso, 96 morre)
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -75,6 +77,7 @@ const devApi = {
     apply((g) => spawnAnimals(g, kind, count), `+${count} ${kind}`);
   },
   products: () => apply(readyAllProducts, 'Produtos prontos'),
+  age: (hours = 24) => apply((g) => ageAnimals(g, hours), `Animais +${hours} h de idade`),
   state: () => useGameStore.getState().game,
 };
 

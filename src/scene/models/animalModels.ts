@@ -1,5 +1,5 @@
 import { IcosahedronGeometry, type BufferGeometry } from 'three';
-import type { AnimalId } from '../../data/animals';
+import type { AnimalId, BreedId, LifeStage } from '../../data/animals';
 import { ANIMAL_MIN_HITBOX, ANIMAL_SIZES, meters } from '../../data/scale';
 import { box, merge, part } from './geometry';
 
@@ -267,3 +267,32 @@ export const animalModel = (kind: AnimalId): FittedAnimalModel => {
   }
   return model;
 };
+
+/**
+ * Breed coat tints. The shared animal material multiplies the vertex colors by its color, so a
+ * tint recolors the light parts of the body (white stays the base model's look).
+ */
+export const BREED_TINTS: Record<BreedId, string> = {
+  caipira: '#e2a978',
+  leghorn: '#ffffff',
+  pequim: '#ffffff',
+  corredor: '#c9a27a',
+  piau: '#e8d2c4',
+  duroc: '#c97752',
+  santaInes: '#9a7458',
+  merino: '#fff7e6',
+  moxoto: '#e9dcc0',
+  saanen: '#ffffff',
+  gir: '#d39a72',
+  holandesa: '#ffffff',
+  nelore: '#f2eee6',
+  guzera: '#b3aba1',
+  crioulo: '#ffffff',
+  mangalarga: '#b9a48c',
+};
+
+/** Old animals fade toward this grey. */
+export const OLD_TINT = '#b8b8b8';
+
+/** Body size for each life stage (relative to the adult). */
+export const STAGE_SCALE: Record<LifeStage, number> = { baby: 0.55, young: 0.8, adult: 1, old: 1 };

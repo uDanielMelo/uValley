@@ -1,9 +1,18 @@
-import { useState } from 'react';
-import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCTS, PLOT_PASTURE_UNITS, type AnimalId } from '../data/animals';
+import { useState, type ReactNode } from 'react';
+import {
+  ANIMALS,
+  ANIMAL_IDS,
+  ANIMAL_PRODUCTS,
+  BREEDS,
+  PLOT_PASTURE_UNITS,
+  SPECIES_BREEDS,
+  type AnimalId,
+  type BreedId,
+} from '../data/animals';
 import { STRUCTURES } from '../data/structures';
 import { CROPS, CROP_IDS, type CropId } from '../data/crops';
 import { PLOT_SIZE } from '../data/world';
-import { animalSalePrice } from '../game/animals';
+import { purchasePrice, type PurchaseAge } from '../game/animals';
 import { freeSlots, housesKind, pastureCapacity, pastureUsed, sheltersFor } from '../game/shelters';
 import { isOperational } from '../game/structures';
 import { nextPlotCost } from '../game/economy';
@@ -64,6 +73,30 @@ const shelterRoom = (kind: AnimalId) => (s: GameStore): number | null => {
   return homes.length === 0 ? null : homes.reduce((sum, x) => sum + Math.max(0, freeSlots(s.game, x)), 0);
 };
 
+function Choice({
+  active,
+  onClick,
+  title,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-pressed={active}
+      className={`rounded-lg px-2 py-0.5 text-xs font-extrabold ${active ? 'bg-wood text-parchment' : 'bg-parchment hover:bg-parchment-dark'}`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function AnimalRow({ kind }: { kind: AnimalId }) {
   const def = ANIMALS[kind];
   const money = useGameStore((s) => s.game.money);
@@ -73,8 +106,12 @@ function AnimalRow({ kind }: { kind: AnimalId }) {
   const shelterName = STRUCTURES[sheltersFor(kind)[0] ?? 'chickenCoop'].label;
   const blocked = room === null || room === 0 || pastureLeft < def.pastureUnits;
   const buy = useGameStore((s) => s.buyAnimal);
-  const sell = useGameStore((s) => s.sellAnimal);
-  const product = def.product ? ANIMAL_PRODUCTS[def.product] : null;
+  const breeds = SPECIES_BREEDS[kind];
+  const [breed, setBreed] = useState<BreedId>(breeds[0] ?? 'caipira');
+  const [age, setAge] = useState<PurchaseAge>('adult');
+  const price = purchasePrice(kind, breed, age);
+  const productId = BREEDS[breed].product ?? def.product;
+  const product = productId ? ANIMAL_PRODUCTS[productId] : null;
   return (
     <li className="rounded-xl bg-parchment-dark/60 p-3">
       <div className="flex items-center justify-between">
@@ -107,14 +144,25 @@ function AnimalRow({ kind }: { kind: AnimalId }) {
               ? 'Pasto lotado: compre um lote ou libere grama.'
               : `${shelterName}: ${room} ${room === 1 ? 'vaga' : 'vagas'}.`}
       </p>
-      <div className="mt-2 flex gap-2">
-        <Button className="flex-1 text-sm" disabled={money < def.purchaseCost || blocked} onClick={() => buy(kind)}>
-          Comprar <Coins value={formatCoins(def.purchaseCost)} />
-        </Button>
-        <Button variant="ghost" className="text-sm" disabled={owned === 0} onClick={() => sell(kind)}>
-          Vender <Coins value={formatCoins(animalSalePrice(kind))} />
-        </Button>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {breeds.map((id) => (
+          <Choice key={id} active={breed === id} onClick={() => setBreed(id)} title={BREEDS[id].note}>
+            {BREEDS[id].noble ? '★ ' : ''}
+            {BREEDS[id].label}
+          </Choice>
+        ))}
+        <span className="mx-1 w-px bg-wood/20" aria-hidden />
+        <Choice active={age === 'baby'} onClick={() => setAge('baby')} title="Mais barato; só produz depois de crescer">
+          Filhote
+        </Choice>
+        <Choice active={age === 'adult'} onClick={() => setAge('adult')} title="Já produz">
+          Adulto
+        </Choice>
       </div>
+      <p className="mt-1 text-[11px] font-bold text-wood/70">{BREEDS[breed].note}</p>
+      <Button className="mt-2 w-full text-sm" disabled={money < price || blocked} onClick={() => buy(kind, breed, age)}>
+        Comprar <Coins value={formatCoins(price)} />
+      </Button>
     </li>
   );
 }
@@ -146,7 +194,8 @@ function AnimalsTab() {
     <div className="flex flex-col gap-2">
       <p className="text-xs font-bold text-wood/80">
         Cada animal mora num abrigo da sua espécie, pasta por perto e dorme lá dentro. Os produtos ficam no abrigo
-        até a equipe com 🧺 Tratar animais coletar. A ração é cobrada à meia-noite.
+        até a equipe com 🪣 Tratar animais coletar. A ração é cobrada à meia-noite. Vivem cerca de 4 dias reais
+        (filhote, jovem, adulto e idoso); para vender, clique no animal com a mão.
       </p>
       <PastureSummary />
       <ul className="flex flex-col gap-2">
