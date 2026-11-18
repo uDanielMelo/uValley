@@ -43,16 +43,36 @@ branch própria, `npm run build` e `npm test` passando, migração de save quand
 6. **Atribuições e prioridades** por trabalhador (clicar no trabalhador abre a ficha).
 7. **Hub de gestão** com equipe, contratação e folha.
 
-### Etapa 2: obra feita pelos trabalhadores
-Construir vira tarefa e usa a habilidade Construção. Pré-requisito dos upgrades de abrigo.
+### Etapa 2: obra feita pelos trabalhadores ✅
+1. Construir, demolir e abrir ou remover estrada viram tarefas da atividade **Obras** (habilidade Construção).
+2. A ordem paga na hora e reserva a área; cancelar devolve tudo. A demolição devolve 50% ao terminar.
+3. Equipe de até 3 por obra, cada um num lado da construção; o progresso fica na obra e atravessa a noite.
+4. Construção em obra ou em demolição não funciona (camas do alojamento, porta de descanso).
+5. Canteiro na cena (chão de terra, andaime, prédio translúcido que firma com o progresso, barra), pose
+   de martelar, card de hover com % e equipe, aviso ao concluir. Save v7 com migração.
+6. `work.kind` já prevê `'upgrade'` para os níveis de abrigo da etapa 3.
 
 ### Etapa 3: animais e abrigos (seção 4)
-Raças, estrelas, ciclo de vida (filhote, jovem, adulto, idoso), lotação por quadrante (lote 4×4),
-abrigos por espécie (curral, aprisco, galinheiro, chiqueiro, estábulo) com 4 níveis (básico, reforçado,
-confortável, automatizado) e suas particularidades, saúde e remédios, predadores, esterco como adubo.
+Grande demais para uma entrega: dividida em sub-etapas, cada uma com branch e versão de save.
+
+- **3a, abrigos e lotação**: galinheiro (galinha e pata), aprisco (ovelha e cabra), curral (vaca e boi),
+  chiqueiro (porco) e estábulo (cavalo). O animal pertence a um abrigo (compra só com vaga), pasta perto
+  dele e dorme dentro. Lotação por lote 4×4 em unidades animais (ex.: 4 vacas ou 12 galinhas). O produto
+  fica no abrigo e a **coleta vira tarefa** da equipe (habilidade animais e especialidade); o clique
+  direto sai. O celeiro deixa de ser abrigo.
+- **3b, níveis**: básico, reforçado, confortável e automatizado (conforto e segurança). O upgrade é obra
+  (`work.kind = 'upgrade'`). Ordenhadeira no curral (nível 4 coleta sozinho), tela no galinheiro, esterco
+  melhor no chiqueiro, estábulo sem automação (até o nível 3).
+- **3c, raças, estrelas e ciclo de vida**: fase derivada da idade (nunca salva). Curva de produção por
+  fase. **O animal morre de velhice** no fim do ciclo. Sem reprodução por enquanto.
+- **3d, saúde e predadores**: doença por hora (conforto, lotação, fome, idade), incubação percebida antes
+  por quem tem a habilidade, remédio comprado e tarefa de medicar, visual de doente. Predador à noite por
+  abrigo, com chance × (1 − segurança). Sorteios determinísticos (`hash01`).
+- **3e, esterco e adubo**: esterco no abrigo, coletado pela equipe, e adubar acelera ou melhora a planta
+  (versão simples; a etapa 7 amplia).
 
 ### Etapa 4: armazenamento e clima
-Capacidade por construção, intempéries e estações, perda e conservação por nível, refrigeração.
+O celeiro guarda produtos agrícolas e animais. Capacidade por construção, intempéries e estações, perda e conservação por nível, refrigeração.
 
 ### Etapa 5: centro comercial (segundo ambiente)
 Troca de cena fazenda ↔ cidade, lojas clicáveis, peso dos itens e capacidade do veículo (upgrade),
@@ -71,11 +91,15 @@ fazenda com teto (para não premiar commits vazios).
 ## Decisões em aberto
 
 - "Quadrante" = lote 4×4? (assumido que sim)
-- Pata e boi: ficam, saem, ou o boi vira raça de tração?
-- Carne e couro: haverá abate?
 - Números de balanceamento: propostas iniciais ficam em `src/data/` e são ajustadas jogando.
-- As habilidades "Tratar animais" e "Construção" e as especialidades de animal já existem nos
-  trabalhadores, mas só têm efeito quando houver tarefas de obra (etapa 2) e de animais (etapa 3).
+
+## Decisões tomadas
+
+- Demolir e estradas também são obra (etapa 2).
+- Coleta de produtos animais é tarefa da equipe (etapa 3a).
+- Sem abate: o animal morre de velhice. Sem reprodução por enquanto.
+- Pata fica, no galinheiro com as galinhas. Boi fica como espécie de tração, no curral com as vacas.
+- O celeiro é armazenamento de produtos agrícolas e animais (etapa 4), não abrigo.
 
 ## Skills de apoio (instaladas globalmente)
 

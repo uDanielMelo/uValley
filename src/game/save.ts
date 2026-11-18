@@ -22,20 +22,24 @@ import type {
   Rotation,
   Specialty,
   Stars,
+  BuildJob,
   StructureInstance,
+  StructureWork,
+  StructureWorkKind,
   Task,
+  TaskKind,
   Tile,
   TileState,
-  ToolId,
   Worker,
   WorkerKind,
   WorkerProfile,
 } from './types';
+import { repairSiteTasks } from './construction';
 import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -52,16 +56,17 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * v2 added workers, the task queue and nextId; v3 added animals and animal products;
  * v4 added the list of placed structures; v5 added roads (`Tile.road`) and the access road;
  * v6 moved the access road south, replaced the family with staff (age, stars, skills,
- * priorities, hourly wage), added the bunkhouse and the hiring board.
+ * priorities, hourly wage), added the bunkhouse and the hiring board; v7 made construction
+ * work for the crew (`StructureInstance.work`, 'build' tasks with a `job`, 'build' in priorities).
  */
-export interface SaveDataV6 {
-  saveVersion: 6;
+export interface SaveDataV7 {
+  saveVersion: 7;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV6;
+export type SaveData = SaveDataV7;
 
 export interface LoadedSave {
   game: GameState;
@@ -142,6 +147,17 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
     const candidates = rollCandidates(day, nextId, names);
     nextId += candidates.length;
     return { ...data, game: { ...game, tiles, structures, workers, candidates, nextId } };
+  },
+  // v6 → v7: construction becomes crew work. Saved structures are finished; everyone gets the
+  // new 'build' activity at the end of their list.
+  6: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    const workers = (Array.isArray(game.workers) ? game.workers : []).map((w) =>
+      isRecord(w) && Array.isArray(w.priorities) && !w.priorities.includes('build')
+        ? { ...w, priorities: [...w.priorities, 'build'] }
+        : w,
+    );
+    return { ...data, game: { ...game, workers } };
   },
 };
 
@@ -286,12 +302,12 @@ const parseTile = (v: unknown): Tile | null => {
   return tile;
 };
 
-const TOOL_IDS: readonly ToolId[] = ['hoe', 'seed', 'water', 'hand'];
+const TASK_KINDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'build'];
 const WORKER_KINDS: readonly WorkerKind[] = ['staff', 'temp'];
 const STARS: readonly Stars[] = [1, 2, 3];
 const isStars = (v: unknown): v is Stars => STARS.some((s) => s === v);
 const isSkillId = (v: unknown): v is SkillId => SKILL_IDS.some((s) => s === v);
-const isToolId = (v: unknown): v is ToolId => TOOL_IDS.some((t) => t === v);
+const isTaskKind = (v: unknown): v is TaskKind => TASK_KINDS.some((t) => t === v);
 const isWorkerKind = (v: unknown): v is WorkerKind => WORKER_KINDS.some((k) => k === v);
 const isId = (v: unknown): v is number => isFiniteNumber(v) && Number.isInteger(v) && v >= 0;
 
@@ -322,7 +338,7 @@ const parseWorker = (v: unknown): Worker | null => {
   const profile = parseProfile(v);
   const { id, kind, priorities, x, y, taskId, path, progress } = v;
   if (!profile || !isId(id) || !isWorkerKind(kind)) return null;
-  if (!Array.isArray(priorities) || !priorities.every(isToolId)) return null;
+  if (!Array.isArray(priorities) || !priorities.every(isTaskKind)) return null;
   if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(progress)) return null;
   if (taskId !== null && !isId(taskId)) return null;
   if (!Array.isArray(path)) return null;
@@ -352,13 +368,22 @@ const parseCandidate = (v: unknown): Candidate | null => {
   return { ...profile, id: v.id, hireCost: v.hireCost };
 };
 
+const parseJob = (v: unknown): BuildJob | null => {
+  if (!isRecord(v)) return null;
+  if (v.type === 'structure' && isId(v.structureId)) return { type: 'structure', structureId: v.structureId };
+  if (v.type === 'road' && typeof v.remove === 'boolean') return { type: 'road', remove: v.remove };
+  return null;
+};
+
 const parseTask = (v: unknown): Task | null => {
   if (!isRecord(v)) return null;
   const { id, kind, tile, cropId, workerId } = v;
-  if (!isId(id) || !isToolId(kind) || !isFiniteNumber(tile) || !isValidTileIndex(tile)) return null;
+  if (!isId(id) || !isTaskKind(kind) || !isFiniteNumber(tile) || !isValidTileIndex(tile)) return null;
   if (cropId !== null && !isCropId(cropId)) return null;
   if (workerId !== null && !isId(workerId)) return null;
-  return { id, kind, tile, cropId, workerId };
+  if (kind !== 'build') return { id, kind, tile, cropId, workerId };
+  const job = parseJob(v.job);
+  return job ? { id, kind, tile, cropId: null, workerId, job } : null;
 };
 
 const parseAnimal = (v: unknown): Animal | null => {
@@ -385,12 +410,24 @@ const parseAnimal = (v: unknown): Animal | null => {
 const ROTATIONS: readonly Rotation[] = [0, 1, 2, 3];
 const isRotation = (v: unknown): v is Rotation => ROTATIONS.some((r) => r === v);
 
+const WORK_KINDS: readonly StructureWorkKind[] = ['build', 'demolish'];
+const isWorkKind = (v: unknown): v is StructureWorkKind => WORK_KINDS.some((k) => k === v);
+
+/** Structure work, or undefined when the field is absent (null when it is invalid). */
+const parseWork = (v: unknown): StructureWork | undefined | null => {
+  if (v === undefined) return undefined;
+  if (!isRecord(v) || !isWorkKind(v.kind) || !isFiniteNumber(v.done) || !isFiniteNumber(v.total)) return null;
+  return { kind: v.kind, done: Math.max(0, v.done), total: Math.max(0, v.total) };
+};
+
 const parseStructure = (v: unknown): StructureInstance | null => {
   if (!isRecord(v)) return null;
   const { id, type, x, y, rotation } = v;
   if (!isId(id) || !isStructureId(type) || !isRotation(rotation)) return null;
   if (!isId(x) || !isId(y) || !inBounds(x, y)) return null;
-  return { id, type, x, y, rotation };
+  const work = parseWork(v.work);
+  if (work === null) return null;
+  return work ? { id, type, x, y, rotation, work } : { id, type, x, y, rotation };
 };
 
 const parseList = <T>(v: unknown, parse: (item: unknown) => T | null): T[] | null => {
@@ -444,7 +481,8 @@ const parseGame = (v: unknown): GameState | null => {
     ...structures.map((s) => s.id),
   );
 
-  return {
+  // Construction tasks and sites must match (a site always has its crew tasks).
+  return repairSiteTasks({
     gameMinutes,
     money,
     // Tile flags are derived from the structure list, so footprint changes never leave stale tiles.
@@ -458,7 +496,7 @@ const parseGame = (v: unknown): GameState | null => {
     animals,
     structures,
     nextId: Math.max(nextId, maxId + 1),
-  };
+  });
 };
 
 const parseSettings = (v: unknown): SaveSettings => {

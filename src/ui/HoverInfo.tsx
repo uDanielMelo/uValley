@@ -4,11 +4,13 @@ import { STRUCTURES } from '../data/structures';
 import { animalActivity } from '../game/animals';
 import { growthProgress, isMature } from '../game/crops';
 import { nextPlotCost, plotStatus } from '../game/economy';
+import { workProgress } from '../game/construction';
 import { plotOfTile } from '../game/grid';
+import { structureAt } from '../game/structures';
 import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
-import { TASK_LABELS } from './tools';
+import { taskLabel } from './tools';
 import { Card, Coins } from './primitives';
 
 const STATE_LABELS: Record<Tile['state'], string> = {
@@ -54,12 +56,46 @@ function PlotDetails({ tileIndex }: { tileIndex: number }) {
   );
 }
 
+/** Site or demolition under way on the hovered structure: progress and crew at work. */
+function WorkDetails({ tileIndex }: { tileIndex: number }) {
+  // Primitive selectors: they only re-render when the numbers shown change.
+  const kind = useGameStore((s) => structureAt(s.game, tileIndex)?.work?.kind ?? null);
+  const percent = useGameStore((s) => {
+    const found = structureAt(s.game, tileIndex);
+    const progress = found ? workProgress(found) : null;
+    return progress === null ? 0 : Math.floor(progress * 100);
+  });
+  const crew = useGameStore((s) => {
+    const found = structureAt(s.game, tileIndex);
+    if (!found) return 0;
+    const ids = new Set(
+      s.game.tasks.filter((t) => t.job?.type === 'structure' && t.job.structureId === found.id).map((t) => t.id),
+    );
+    return s.game.workers.filter((w) => w.taskId !== null && ids.has(w.taskId) && w.path.length === 0).length;
+  });
+  if (!kind) return null;
+  return (
+    <div className="mt-1">
+      <div className="flex items-center justify-between text-sm font-extrabold">
+        <span>{kind === 'build' ? '🚧 Em obra' : '🧨 Em demolição'}</span>
+        <span className="tabular-nums">{percent}%</span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-wood/20">
+        <div className={`h-full ${kind === 'build' ? 'bg-leaf' : 'bg-red-700'}`} style={{ width: `${percent}%` }} />
+      </div>
+      <p className="mt-1 text-xs font-bold text-wood/80">
+        {crew > 0 ? `${crew} trabalhando agora` : 'Esperando alguém com Obras nas atividades'}
+      </p>
+    </div>
+  );
+}
+
 function QueuedTasks({ tileIndex }: { tileIndex: number }) {
-  // Joined into a string so the selector returns a primitive.
+  // Joined into a string so the selector returns a primitive. Structure work shows in WorkDetails.
   const queued = useGameStore((s) =>
     s.game.tasks
-      .filter((t) => t.tile === tileIndex)
-      .map((t) => TASK_LABELS[t.kind] + (t.workerId === null ? '' : ' (em andamento)'))
+      .filter((t) => t.tile === tileIndex && t.job?.type !== 'structure')
+      .map((t) => taskLabel(s.game, t) + (t.workerId === null ? '' : ' (em andamento)'))
       .join(' → '),
   );
   if (!queued) return null;
@@ -137,6 +173,7 @@ export function HoverInfo() {
       {tile.structure && tile.structure !== 'shippingBin' && (
         <p className="text-sm">{STRUCTURES[tile.structure].description}</p>
       )}
+      {tile.structure && <WorkDetails tileIndex={hovered} />}
       {tile.state === 'locked' && <PlotDetails tileIndex={hovered} />}
       <CropDetails tile={tile} />
       <QueuedTasks tileIndex={hovered} />

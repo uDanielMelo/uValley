@@ -52,4 +52,14 @@ export const PALETTE = {
   taskSeed: '#7fd35a',
   taskWater: '#5ab4f0',
   taskHand: '#ffd23f',
+  /** Road being opened, and road being removed. */
+  taskRoad: '#e0a45a',
+  taskRoadRemove: '#ff6b5a',
+  // Construction sites
+  siteGround: '#8a6a48',
+  scaffold: '#c9a26b',
+  lumber: '#b98a55',
+  progressBack: '#3b2a1a',
+  progressBuild: '#7fd35a',
+  progressDemolish: '#ff6b5a',
 } as const;

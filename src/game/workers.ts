@@ -1,28 +1,28 @@
-import { CROP_IDS, type CropId } from '../data/crops';
-import { ROAD_WALK_BONUS } from '../data/roads';
+import type { CropId } from '../data/crops';
+import { ROAD_COST, ROAD_WALK_BONUS } from '../data/roads';
 import { MINUTES_PER_DAY } from '../data/world';
 import { MAX_TASKS, TASK_MINUTES, WALK_SPEED, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
-import { applyTool, plant } from './actions';
 import { laborMultipliers } from './animals';
+import { addWork, cancelAllOrders, roadTaskMinutes, workSpot } from './construction';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { homeSpot } from './home';
 import { addCount } from './inventory';
 import { findPath } from './path';
 import { hash01 } from './random';
 import { harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
+import { applyTask, lastTaskOn, projectTasks } from './tasks';
 import {
   type ActionError,
-  type ActionResult,
-  fail,
   type GameState,
   type GridPoint,
   type Task,
+  type TaskKind,
   type ToolId,
   type Worker,
   type WorkerActivity,
 } from './types';
 
-export { homeSpot };
+export { applyTask, homeSpot, projectTasks };
 
 // ---------- workers ----------
 
@@ -39,19 +39,6 @@ export const workerActivity = (state: GameState, worker: Worker): WorkerActivity
 
 // ---------- tasks ----------
 
-/** Runs a task's action against a state. */
-export const applyTask = (state: GameState, task: Pick<Task, 'kind' | 'tile' | 'cropId'>): ActionResult => {
-  if (task.kind === 'seed') return task.cropId ? plant(state, task.tile, task.cropId) : fail('no-seeds');
-  return applyTool(state, task.kind, task.tile, CROP_IDS[0]);
-};
-
-/** The state as it will be once every queued task is done (failing tasks are skipped). */
-export const projectTasks = (state: GameState): GameState =>
-  state.tasks.reduce<GameState>((s, task) => {
-    const result = applyTask(s, task);
-    return result.ok ? result.state : s;
-  }, state);
-
 const removeTask = (state: GameState, taskId: number): GameState => ({
   ...state,
   tasks: state.tasks.filter((t) => t.id !== taskId),
@@ -59,12 +46,6 @@ const removeTask = (state: GameState, taskId: number): GameState => ({
     w.taskId === taskId ? { ...w, taskId: null, path: [], progress: 0 } : w,
   ),
 });
-
-const lastTaskOn = (tasks: readonly Task[], tile: number): Task | undefined => {
-  let last: Task | undefined;
-  for (const t of tasks) if (t.tile === tile) last = t;
-  return last;
-};
 
 const sameOrder = (task: Task, kind: ToolId, cropId: CropId): boolean =>
   task.kind === kind && (kind !== 'seed' || task.cropId === cropId);
@@ -176,14 +157,11 @@ export const applyArea = (
   return { state: { ...state, tasks: [...state.tasks, ...added], nextId }, mode, changed, error };
 };
 
-export const clearTasks = (state: GameState): GameState => ({
-  ...state,
-  tasks: [],
-  workers: state.workers.map((w) => (w.taskId === null ? w : { ...w, taskId: null, path: [], progress: 0 })),
-});
+/** Empties the queue: sites and demolitions are called off and queued roads refunded. */
+export const clearTasks = cancelAllOrders;
 
 /** Queued task kinds that no worker has in their list (they would wait forever). */
-export const unstaffedKinds = (state: GameState): ToolId[] => {
+export const unstaffedKinds = (state: GameState): TaskKind[] => {
   const covered = new Set(state.workers.flatMap((w) => w.priorities));
   return [...new Set(state.tasks.map((t) => t.kind))].filter((k) => !covered.has(k));
 };
@@ -193,6 +171,30 @@ export const unstaffedKinds = (state: GameState): ToolId[] => {
 const tileCenter = (tile: number): GridPoint => {
   const { x, y } = tileCoords(tile);
   return { x: x + 0.5, y: y + 0.5 };
+};
+
+/** Where a worker stands to do a task: on its tile, or beside the wall for structure work. */
+export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoint => {
+  const job = task.job;
+  if (job?.type !== 'structure') return tileCenter(task.tile);
+  const site = state.structures.find((s) => s.id === job.structureId);
+  return (site && workSpot(state, site, task.tile, from)) ?? tileCenter(task.tile);
+};
+
+/** Work minutes (at speed 1) of a task that is done in one go (structure work accumulates on the site). */
+export const taskMinutes = (task: Task): number =>
+  task.kind === 'build' ? roadTaskMinutes(task.job?.type === 'road' && task.job.remove) : TASK_MINUTES[task.kind];
+
+/** How far along a worker's current job is (0–1): the whole site for structure work. Null when idle. */
+export const taskProgress = (state: GameState, worker: Worker): number | null => {
+  const task = worker.taskId === null ? undefined : state.tasks.find((t) => t.id === worker.taskId);
+  if (!task) return null;
+  const job = task.job;
+  if (job?.type === 'structure') {
+    const work = state.structures.find((s) => s.id === job.structureId)?.work;
+    return work && work.total > 0 ? Math.min(1, work.done / work.total) : null;
+  }
+  return Math.min(1, worker.progress / taskMinutes(task));
 };
 
 /** Tasks a free worker may take: unassigned and first in the queue for their tile. */
@@ -226,10 +228,10 @@ const bestTask = (worker: Worker, tasks: readonly Task[]): Task | undefined => {
   return best;
 };
 
-/** What a task works on: the crop being planted, or the one on the tile (none for tilling). */
+/** What a task works on: the crop being planted, or the one on the tile (none for tilling and construction). */
 export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' | 'cropId'>): TaskContext => {
   if (task.kind === 'seed') return { kind: task.kind, cropId: task.cropId };
-  if (task.kind === 'hoe') return { kind: task.kind, cropId: null };
+  if (task.kind === 'hoe' || task.kind === 'build') return { kind: task.kind, cropId: null };
   return { kind: task.kind, cropId: state.tiles[task.tile]?.crop?.cropId ?? null };
 };
 
@@ -304,7 +306,7 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
       if (task) {
         const workerId = w.id;
         tasks = tasks.map((t) => (t.id === task.id ? { ...t, workerId } : t));
-        w = { ...w, taskId: task.id, progress: 0, path: findPath(world.tiles, w, tileCenter(task.tile)) };
+        w = { ...w, taskId: task.id, progress: 0, path: findPath(world.tiles, w, taskSpot(world, task, w)) };
       }
     }
     if (w.taskId === null && w.path.length === 0) {
@@ -322,14 +324,29 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
     if (task && w.path.length === 0 && moved.leftover > 0) {
       const boost = task.kind === 'hoe' ? labor.hoe : 1;
       const context = taskContext(world, task);
-      const progress = w.progress + moved.leftover * workSpeed(w, context) * boost;
-      if (progress >= TASK_MINUTES[task.kind]) {
-        const result = applyTask({ ...world, tasks, workers }, task);
-        if (result.ok) world = harvestBonus(result.state, w, task, context.cropId);
-        tasks = tasks.filter((t) => t.id !== task.id);
-        w = { ...w, taskId: null, progress: 0 };
+      const work = moved.leftover * workSpeed(w, context) * boost;
+      const job = task.job;
+      if (job?.type === 'structure') {
+        // Site work is kept on the structure, so it survives the end of the shift and crew changes.
+        world = addWork({ ...world, tasks, workers }, job.structureId, work);
+        tasks = world.tasks;
+        if (!world.structures.find((s) => s.id === job.structureId)?.work) {
+          // Finished (the site's tasks are gone), or a stray task without a site.
+          tasks = tasks.filter((t) => t.id !== task.id);
+          w = { ...w, taskId: null, progress: 0 };
+        }
       } else {
-        w = { ...w, progress };
+        const progress = w.progress + work;
+        if (progress >= taskMinutes(task)) {
+          const result = applyTask({ ...world, tasks, workers }, task);
+          if (result.ok) world = harvestBonus(result.state, w, task, context.cropId);
+          // A road that can no longer be opened gives its money back.
+          else if (job?.type === 'road' && !job.remove) world = { ...world, money: world.money + ROAD_COST };
+          tasks = tasks.filter((t) => t.id !== task.id);
+          w = { ...w, taskId: null, progress: 0 };
+        } else {
+          w = { ...w, progress };
+        }
       }
     }
     workers[i] = w;

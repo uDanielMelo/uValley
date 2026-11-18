@@ -3,14 +3,14 @@ import { createRef, useMemo, useRef } from 'react';
 import { MathUtils, type Group } from 'three';
 import { PERSON_HEIGHT } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
-import type { ToolId, Worker } from '../game/types';
+import type { TaskKind, Worker } from '../game/types';
 import { workerActivity } from '../game/workers';
 import { useGameStore } from '../store/gameStore';
 import { hash01 } from './coords';
 import { Person, personScale, type PersonLook, type PersonRig } from './models/Person';
 
 const HALF = GRID_SIZE / 2;
-const TOOL_IDS: readonly ToolId[] = ['hoe', 'seed', 'water', 'hand'];
+const TOOL_IDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'build'];
 const STRAW = '#e2c27a';
 
 const DEFAULT_LOOK: PersonLook = { shirt: '#3f6fb5', pants: '#4a5a7a', skin: '#e0ac85', hat: STRAW, hair: '#4a3324' };
@@ -70,7 +70,7 @@ interface Pose {
   bob: number;
 }
 
-const workPose = (kind: ToolId, t: number): Pose => {
+const workPose = (kind: TaskKind, t: number): Pose => {
   switch (kind) {
     case 'hoe': {
       const swing = Math.sin(t * 6.5) * 0.5 + 0.5;
@@ -90,6 +90,11 @@ const workPose = (kind: ToolId, t: number): Pose => {
         bend: 0.85 + Math.sin(t * 4) * 0.08,
         bob: -0.05,
       };
+    case 'build': {
+      // Hammering: quick raise and strike, the other hand steadying the board.
+      const strike = Math.max(0, Math.sin(t * 7));
+      return { legL: -0.2, legR: 0.2, armL: -0.9, armR: -2.1 + strike * 1.2, bend: 0.2, bob: 0 };
+    }
   }
 };
 
@@ -110,7 +115,13 @@ function WorkerFigure({ id }: { id: number }) {
       legR: createRef<Group>(),
       armL: createRef<Group>(),
       armR: createRef<Group>(),
-      tools: { hoe: createRef<Group>(), seed: createRef<Group>(), water: createRef<Group>(), hand: createRef<Group>() },
+      tools: {
+        hoe: createRef<Group>(),
+        seed: createRef<Group>(),
+        water: createRef<Group>(),
+        hand: createRef<Group>(),
+        build: createRef<Group>(),
+      },
     }),
     [],
   );
@@ -157,6 +168,12 @@ function WorkerFigure({ id }: { id: number }) {
       pose = { legL: s * 0.7, legR: -s * 0.7, armL: -s * 0.55, armR: s * 0.55, bend: 0.05, bob: Math.abs(s) * 0.025 };
     } else if (activity === 'working' && task) {
       pose = workPose(task.kind, a.time);
+      // Builders stand beside the wall: face the footprint tile they work on.
+      if (task.job?.type === 'structure') {
+        const tx = (task.tile % GRID_SIZE) + 0.5 - HALF;
+        const tz = Math.floor(task.tile / GRID_SIZE) + 0.5 - HALF;
+        a.heading = Math.atan2(tx - x, tz - z);
+      }
     } else {
       pose = { legL: 0, legR: 0, armL: 0.05, armR: -0.05, bend: 0, bob: Math.sin(a.time * 2) * 0.004 };
     }

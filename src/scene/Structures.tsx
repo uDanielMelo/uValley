@@ -1,47 +1,17 @@
 import type { ThreeEvent } from '@react-three/fiber';
-import type { ComponentType, ReactNode } from 'react';
-import type { StructureId } from '../data/structures';
-import { footprintOf } from '../game/structures';
-import type { Rotation } from '../game/types';
-import { useGameStore } from '../store/gameStore';
-import { cornerToWorld } from './coords';
-import { Barn, Bunkhouse, ChickenCoop, Silo, Warehouse } from './models/Buildings';
-import { House } from './models/House';
-import { ShippingBin } from './models/ShippingBin';
+import { STRUCTURE_IDS, type StructureId } from '../data/structures';
+import type { Rotation, StructureWorkKind } from '../game/types';
+import { useGameStore, type GameStore } from '../store/gameStore';
+import { ConstructionSite } from './ConstructionSite';
+import { STRUCTURE_MODELS, StructureTransform, type PlacedProps } from './structureModels';
 
-export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
-  house: House,
-  shippingBin: ShippingBin,
-  bunkhouse: Bunkhouse,
-  chickenCoop: ChickenCoop,
-  silo: Silo,
-  warehouse: Warehouse,
-  barn: Barn,
-};
+export { STRUCTURE_MODELS, StructureTransform };
 
 /** Click handlers per structure (structures without one let clicks fall through to tiles). */
 const ON_CLICK: Partial<Record<StructureId, () => void>> = {
   shippingBin: () => useGameStore.getState().showPanel('inventory'),
   bunkhouse: () => useGameStore.getState().showPanel('workers'),
 };
-
-interface PlacedProps {
-  type: StructureId;
-  x: number;
-  y: number;
-  rotation: Rotation;
-}
-
-/** World transform for a structure footprint: centered on it, turned by quarter turns. */
-export function StructureTransform({ type, x, y, rotation, children }: PlacedProps & { children: ReactNode }) {
-  const fp = footprintOf(type, x, y, rotation);
-  const [x0, z0] = cornerToWorld(fp.x, fp.y);
-  return (
-    <group position={[x0 + fp.width / 2, 0, z0 + fp.depth / 2]} rotation={[0, (rotation * Math.PI) / 2, 0]}>
-      {children}
-    </group>
-  );
-}
 
 const stopDown = (e: ThreeEvent<PointerEvent>) => {
   if (e.button === 0 && !useGameStore.getState().buildMode) e.stopPropagation();
@@ -72,14 +42,53 @@ function PlacedStructure({ type, x, y, rotation }: PlacedProps) {
   );
 }
 
-/** Renders the placed structures. The list only changes when something is built or demolished. */
+interface Placed extends PlacedProps {
+  id: number;
+  work: StructureWorkKind | null;
+}
+
+const isStructureId = (v: string): v is StructureId => STRUCTURE_IDS.some((id) => id === v);
+const isWorkKind = (v: string): v is StructureWorkKind => v === 'build' || v === 'demolish';
+
+/** "id:type:x:y:rotation:work" per structure: changes only when something is placed, finished or removed. */
+const layoutKey = (s: GameStore): string =>
+  s.game.structures.map((x) => `${x.id}:${x.type}:${x.x}:${x.y}:${x.rotation}:${x.work?.kind ?? ''}`).join(',');
+
+const parseLayout = (key: string): Placed[] =>
+  key
+    .split(',')
+    .filter(Boolean)
+    .flatMap((entry) => {
+      const [id, type, x, y, rotation, work] = entry.split(':');
+      if (!type || !isStructureId(type)) return [];
+      const r = Number(rotation);
+      return [
+        {
+          id: Number(id),
+          type,
+          x: Number(x),
+          y: Number(y),
+          rotation: (r === 1 || r === 2 || r === 3 ? r : 0) as Rotation,
+          work: work && isWorkKind(work) ? work : null,
+        },
+      ];
+    });
+
+/**
+ * Renders the placed structures. Work progress changes the structure list every frame, so the
+ * layout is selected as a string and progress is read inside the sites' useFrame.
+ */
 export function Structures() {
-  const structures = useGameStore((s) => s.game.structures);
+  const key = useGameStore(layoutKey);
   return (
     <group>
-      {structures.map((s) => (
-        <PlacedStructure key={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} />
-      ))}
+      {parseLayout(key).map((s) =>
+        s.work ? (
+          <ConstructionSite key={`${s.id}-${s.work}`} id={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} kind={s.work} />
+        ) : (
+          <PlacedStructure key={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} />
+        ),
+      )}
     </group>
   );
 }

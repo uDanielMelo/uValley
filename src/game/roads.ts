@@ -1,4 +1,4 @@
-import { ACCESS_ROAD_EDGE, ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X, HIGHWAY, OFFMAP_ROAD_LENGTH, ROAD_COST } from '../data/roads';
+import { ACCESS_ROAD_EDGE, ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X, HIGHWAY, OFFMAP_ROAD_LENGTH } from '../data/roads';
 import { PROP_SIZES, meters } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
 import { isValidTileIndex, tileIndex } from './grid';
@@ -61,29 +61,27 @@ export const withAccessRoad = (tiles: readonly Tile[]): Tile[] => {
   return result;
 };
 
-/** Why a road cannot be built on this tile, or null when it can. */
-export const checkRoad = (state: GameState, index: number): ActionError | null => {
+/** Why this tile cannot get a road (ignoring money and the queue), or null when it can. */
+export const roadError = (state: GameState, index: number): ActionError | null => {
   const tile = isValidTileIndex(index) ? state.tiles[index] : undefined;
   if (!tile) return 'out-of-bounds';
   if (tile.state === 'locked') return 'locked';
   if (tile.structure) return 'structure';
   if (tile.road) return 'already-road';
   if (tile.state !== 'grass') return 'not-grass';
-  if (state.tasks.some((t) => t.tile === index)) return 'tile-busy';
-  if (state.money < ROAD_COST) return 'not-enough-money';
   return null;
 };
 
-/** Builds one tile of dirt road on free owned grass. */
-export const buildRoad = (state: GameState, index: number): ActionResult => {
-  const error = checkRoad(state, index);
+/** Opens one tile of dirt road on free owned grass (what a finished road task does; already paid for). */
+export const layRoad = (state: GameState, index: number): ActionResult => {
+  const error = roadError(state, index);
   if (error) return fail(error);
   const tiles = state.tiles.slice();
   tiles[index] = { state: 'grass', road: true };
-  return ok({ ...state, tiles, money: state.money - ROAD_COST });
+  return ok({ ...state, tiles });
 };
 
-/** Removes a road tile on owned land (the access road outside the farm is fixed). */
+/** Removes a road tile on owned land (what a finished removal task does; the access road outside the farm is fixed). */
 export const removeRoad = (state: GameState, index: number): ActionResult => {
   const tile = isValidTileIndex(index) ? state.tiles[index] : undefined;
   if (!tile?.road) return fail('no-road');

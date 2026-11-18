@@ -26,6 +26,17 @@ export interface Tile {
 /** Quarter turns applied to a placed structure. */
 export type Rotation = 0 | 1 | 2 | 3;
 
+/** Work the crew still has to do on a structure: raising it or tearing it down. */
+export type StructureWorkKind = 'build' | 'demolish';
+
+export interface StructureWork {
+  kind: StructureWorkKind;
+  /** Work minutes done so far (at work speed 1). */
+  done: number;
+  /** Work minutes needed. */
+  total: number;
+}
+
 /** A structure placed on the grid (the tiles it covers also carry `Tile.structure`). */
 export interface StructureInstance {
   id: number;
@@ -34,6 +45,11 @@ export interface StructureInstance {
   x: number;
   y: number;
   rotation: Rotation;
+  /**
+   * Construction site or demolition in progress. Absent: the structure is finished and working.
+   * The footprint is reserved (Tile.structure) for the whole time.
+   */
+  work?: StructureWork;
 }
 
 export type ItemCounts = Partial<Record<CropId, number>>;
@@ -46,15 +62,24 @@ export interface Inventory {
   products: ProductCounts;
 }
 
-/** A queued tool application on a tile, executed by a worker. */
+/** What a construction ('build') task works on. */
+export type BuildJob =
+  /** A structure site or demolition; the task tile is one of the footprint tiles. */
+  | { type: 'structure'; structureId: number }
+  /** Opening (or removing) the road on the task tile. */
+  | { type: 'road'; remove: boolean };
+
+/** A queued order on a tile, executed by a worker. */
 export interface Task {
   id: number;
-  kind: ToolId;
+  kind: TaskKind;
   tile: number;
   /** Crop to plant (only for 'seed' tasks). */
   cropId: CropId | null;
   /** Worker currently assigned, if any. */
   workerId: number | null;
+  /** Present on (and only on) 'build' tasks. */
+  job?: BuildJob;
 }
 
 /** Staff live in the bunkhouse and earn an hourly wage; day laborers ('temp') leave at the end of the shift. */
@@ -87,7 +112,7 @@ export interface Worker extends WorkerProfile {
   id: number;
   kind: WorkerKind;
   /** Tasks this worker does, most important first. Tasks of other kinds are left to others. */
-  priorities: ToolId[];
+  priorities: TaskKind[];
   /** Current position in tile space. */
   x: number;
   y: number;
@@ -151,6 +176,8 @@ export interface GameState {
 }
 
 export type ToolId = 'hoe' | 'seed' | 'water' | 'hand';
+/** Kinds of queued work: the four farm tools plus construction (structures and roads). */
+export type TaskKind = ToolId | 'build';
 
 export type ActionError =
   | 'out-of-bounds'
@@ -185,7 +212,8 @@ export type ActionError =
   | 'not-demolishable'
   | 'road'
   | 'already-road'
-  | 'no-road';
+  | 'no-road'
+  | 'under-construction';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 

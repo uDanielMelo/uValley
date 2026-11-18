@@ -1,10 +1,14 @@
 import { BUILDABLE_IDS, CATEGORY_LABELS, DEMOLISH_REFUND, STRUCTURES, type StructureCategory, type StructureId } from '../data/structures';
 import { ROAD_COST, ROAD_WALK_BONUS } from '../data/roads';
+import { buildMinutesFor } from '../game/structures';
 import { useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
 import { Button, Card, Coins, Panel } from './primitives';
 
 const CATEGORIES: readonly StructureCategory[] = ['housing', 'animals', 'storage'];
+
+/** Work time for one worker at normal speed, e.g. "5 h" or "1,5 h". */
+const workHours = (minutes: number): string => `${(Math.round(minutes / 30) / 2).toLocaleString('pt-BR')} h`;
 
 function StructureRow({ id }: { id: StructureId }) {
   const def = STRUCTURES[id];
@@ -29,7 +33,7 @@ function StructureRow({ id }: { id: StructureId }) {
           <Coins value={formatCoins(cost)} className={money < cost ? 'text-red-700' : ''} />
         </div>
         <p className="mt-0.5 text-xs font-bold text-wood/80">
-          {def.description} · {def.width}×{def.depth} tiles
+          {def.description} · {def.width}×{def.depth} tiles · obra de {workHours(buildMinutesFor(id))}
         </p>
       </button>
     </li>
@@ -56,8 +60,8 @@ function RoadRow() {
         </span>
       </div>
       <p className="mt-0.5 text-xs font-bold text-wood/80">
-        Clique e arraste para traçar. A equipe anda {Math.round(ROAD_WALK_BONUS * 100)}% mais rápido nela, e o carro
-        segue as estradas até a caixa de venda.
+        Clique e arraste para traçar; a equipe abre cada trecho. Ela anda {Math.round(ROAD_WALK_BONUS * 100)}% mais
+        rápido na estrada, e o carro segue as estradas até a caixa de venda.
       </p>
     </button>
   );
@@ -85,8 +89,12 @@ export function BuildPanel() {
           <h3 className="mb-2 text-sm font-black tracking-wide text-wood/70 uppercase">Caminhos</h3>
           <RoadRow />
         </section>
+        <p className="text-xs font-bold text-wood/80">
+          Toda obra é feita pela equipe com 🔨 Obras nas atividades (Construção deixa mais rápido). O valor é pago na
+          ordem e volta inteiro se você cancelar.
+        </p>
         <Button variant={demolishing ? 'danger' : 'ghost'} onClick={() => setBuildMode(demolishing ? null : 'demolish')}>
-          🧨 Demolir (construções devolvem {Math.round(DEMOLISH_REFUND * 100)}%)
+          🧨 Demolir ou cancelar obra (demolição devolve {Math.round(DEMOLISH_REFUND * 100)}%)
         </Button>
       </div>
     </Panel>
@@ -100,10 +108,10 @@ export function BuildBanner() {
   if (!mode) return null;
   const text =
     mode === 'demolish'
-      ? '🧨 Demolindo: clique numa construção ou estrada'
+      ? '🧨 Demolir: clique numa construção ou estrada (numa obra na fila, cancela)'
       : mode === 'road'
         ? '🛤️ Estrada: clique e arraste para traçar'
-        : `${STRUCTURES[mode].icon} Construindo ${STRUCTURES[mode].label.toLowerCase()}: clique para posicionar · R gira`;
+        : `${STRUCTURES[mode].icon} Nova obra: ${STRUCTURES[mode].label.toLowerCase()} · clique para posicionar · R gira`;
   return (
     <Card className="flex items-center gap-3 px-4 py-2 text-sm font-extrabold">
       <span>{text}</span>

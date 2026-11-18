@@ -122,6 +122,7 @@ export function DevPanel() {
 
           <Section title="Fazenda">
             <DevButton onClick={dev.unlock}>🔓 Liberar lotes</DevButton>
+            <DevButton onClick={dev.build}>🔨 Concluir obras</DevButton>
             <DevButton onClick={() => dev.hire(1)}>👨‍🌾 +1 trabalhador</DevButton>
           </Section>
 

@@ -39,7 +39,7 @@ import {
   type Specialty,
   type Stars,
   type Task,
-  type ToolId,
+  type TaskKind,
   type Worker,
   type WorkerKind,
   type WorkerProfile,
@@ -59,7 +59,7 @@ export const hourlyWageFor = (stars: Stars, specialty: Specialty | null): number
 
 /** What a task is about, for skill and specialty matching. */
 export interface TaskContext {
-  kind: ToolId;
+  kind: TaskKind;
   /** Crop being planted, watered or harvested, if any. */
   cropId: CropId | null;
 }
@@ -300,7 +300,7 @@ export const releaseTemps = (state: GameState): GameState =>
   removeWorkers(state, new Set(state.workers.filter((w) => w.kind === 'temp').map((w) => w.id)));
 
 /** Replaces a worker's task list (unknown or repeated kinds are dropped). */
-export const setPriorities = (state: GameState, workerId: number, priorities: readonly ToolId[]): ActionResult => {
+export const setPriorities = (state: GameState, workerId: number, priorities: readonly TaskKind[]): ActionResult => {
   const worker = state.workers.find((w) => w.id === workerId);
   if (!worker) return fail('no-worker');
   const clean = [...new Set(priorities)].filter((k) => DEFAULT_PRIORITIES.includes(k));

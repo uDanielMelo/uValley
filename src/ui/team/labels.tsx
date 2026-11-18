@@ -21,6 +21,9 @@ export const farmingStats = (profile: WorkerProfile): { speed: string; effective
   return { speed: percent(workSpeed(profile, task)), effectiveness: percent(workEffectiveness(profile, task)) };
 };
 
+/** Speed on construction work (sites, demolitions and roads). */
+export const buildSpeed = (profile: WorkerProfile): string => percent(workSpeed(profile, { kind: 'build', cropId: null }));
+
 /** General skills and specialty as chips. */
 export function SkillChips({ skills, specialty }: { skills: readonly SkillId[]; specialty: Specialty | null }) {
   return (

@@ -1,10 +1,9 @@
 import { CROPS } from '../../data/crops';
-import { TASK_MINUTES } from '../../data/workers';
 import type { GameState, Worker } from '../../game/types';
-import { workerActivity } from '../../game/workers';
+import { taskProgress, workerActivity } from '../../game/workers';
 import { useGameStore } from '../../store/gameStore';
 import { Stars } from '../primitives';
-import { TASK_LABELS, TASK_VERBS } from '../tools';
+import { taskLabel, taskVerb } from '../tools';
 import { WorkerCard } from './WorkerCard';
 
 /** One-line status of a worker, as a primitive so the row only re-renders when it changes. */
@@ -16,20 +15,20 @@ const workerStatus = (game: GameState, worker: Worker): string => {
     case 'idle':
       return worker.priorities.length === 0 ? 'Sem atividades designadas' : 'Sem tarefas';
     case 'walking':
-      return task ? `A caminho: ${TASK_LABELS[task.kind].toLowerCase()}` : 'Voltando para o alojamento';
+      return task ? `A caminho: ${taskLabel(game, task).toLowerCase()}` : 'Voltando para o alojamento';
     case 'working': {
       if (!task) return 'Trabalhando';
       const crop = task.kind === 'seed' && task.cropId ? ` ${CROPS[task.cropId].label.toLowerCase()}` : '';
-      return `${TASK_VERBS[task.kind]}${crop}`;
+      return `${taskVerb(game, task)}${crop}`;
     }
   }
 };
 
-/** Progress of the current task in 10% buckets (null when not working). */
+/** Progress of the current task (the whole site for structure work) in 10% buckets (null when not working). */
 const workerProgress = (game: GameState, worker: Worker): number | null => {
-  const task = worker.taskId === null ? undefined : game.tasks.find((t) => t.id === worker.taskId);
-  if (!task || worker.path.length > 0) return null;
-  return Math.min(10, Math.floor((worker.progress / TASK_MINUTES[task.kind]) * 10)) * 10;
+  if (worker.path.length > 0) return null;
+  const progress = taskProgress(game, worker);
+  return progress === null ? null : Math.min(10, Math.floor(progress * 10)) * 10;
 };
 
 const find = (s: { game: GameState }, id: number) => s.game.workers.find((w) => w.id === id);

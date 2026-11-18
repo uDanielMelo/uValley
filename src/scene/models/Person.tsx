@@ -1,7 +1,7 @@
 import type { RefObject } from 'react';
 import type { Group } from 'three';
 import { meters } from '../../data/scale';
-import type { ToolId } from '../../game/types';
+import type { TaskKind } from '../../game/types';
 
 export interface PersonLook {
   shirt: string;
@@ -22,8 +22,8 @@ export interface PersonRig {
   legR: GroupRef;
   armL: GroupRef;
   armR: GroupRef;
-  /** Tool held in the right hand, one per task kind. */
-  tools: Record<ToolId, GroupRef>;
+  /** Tool held in the right hand, one per task kind (a hammer for construction). */
+  tools: Record<TaskKind, GroupRef>;
 }
 
 type Vec3 = [number, number, number];
@@ -76,6 +76,10 @@ function Tools({ tools }: { tools: PersonRig['tools'] }) {
       </group>
       <group ref={tools.hand} visible={false}>
         <Cyl args={[0.08, 0.06, 0.08, 7]} position={[0, -0.06, 0.04]} color={BASKET} />
+      </group>
+      <group ref={tools.build} visible={false}>
+        <Box size={[0.022, 0.2, 0.022]} position={[0, -0.03, 0.06]} color={WOOD} rotation={[1.3, 0, 0]} />
+        <Box size={[0.05, 0.05, 0.1]} position={[0, -0.06, 0.15]} color={METAL} rotation={[1.3, 0, 0]} />
       </group>
     </group>
   );

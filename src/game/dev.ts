@@ -15,7 +15,8 @@ import { startOfNextDay } from './time';
 import type { GameState } from './types';
 import { homeSpot } from './home';
 import { makeWorker, rollProfile } from './staff';
-import { applyTask } from './workers';
+import { completeAllWork } from './construction';
+import { applyTask } from './tasks';
 
 export const addMoney = (state: GameState, amount: number): GameState => ({
   ...state,
@@ -95,12 +96,16 @@ export const hireFree = (state: GameState): GameState => {
   return { ...state, workers: [...state.workers, worker], nextId: state.nextId + 1 };
 };
 
-/** Completes the whole queue instantly, in order. Tasks that turn out invalid are dropped. */
+/** Finishes every construction site and demolition at once. */
+export const finishWorks = (state: GameState): GameState => completeAllWork(state);
+
+/** Completes the whole queue instantly, in order (sites and demolitions too). Tasks that turn out invalid are dropped. */
 export const finishAllTasks = (state: GameState): GameState => {
-  const done = state.tasks.reduce<GameState>((s, task) => {
+  const built = completeAllWork(state);
+  const done = built.tasks.reduce<GameState>((s, task) => {
     const result = applyTask(s, task);
     return result.ok ? result.state : s;
-  }, state);
+  }, built);
   return {
     ...done,
     tasks: [],

@@ -1,6 +1,6 @@
 /** Workers: attributes, hiring, wages and work rules. All balancing for labor lives here. */
 
-import type { Specialty, Stars, ToolId } from '../game/types';
+import type { Specialty, Stars, TaskKind, ToolId } from '../game/types';
 
 // ---------- attributes ----------
 
@@ -14,12 +14,13 @@ export const SKILLS: Record<SkillId, { label: string; icon: string }> = {
   construction: { label: 'Construção', icon: '🔨' },
 };
 
-/** The general skill each task uses. Animal care and construction tasks come in later stages. */
-export const TASK_SKILL: Record<ToolId, SkillId> = {
+/** The general skill each task uses. Animal care tasks come in a later stage. */
+export const TASK_SKILL: Record<TaskKind, SkillId> = {
   hoe: 'farming',
   seed: 'farming',
   water: 'farming',
   hand: 'farming',
+  build: 'construction',
 };
 
 export interface AgeBand {
@@ -130,7 +131,7 @@ export const MAX_WORKERS = 12;
 export const MAX_TASKS = 300;
 
 /** Order in which a new worker picks tasks (editable per worker). */
-export const DEFAULT_PRIORITIES: readonly ToolId[] = ['water', 'hand', 'seed', 'hoe'];
+export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['water', 'hand', 'seed', 'hoe', 'build'];
 
 /** Workers only work between these game hours; outside them they go home. Wages are paid per hour in between. */
 export const WORK_START_HOUR = 6;
@@ -139,7 +140,7 @@ export const WORK_END_HOUR = 20;
 /** Walking speed in tiles per game minute (1× speed: about 1.4 tiles per real second). */
 export const WALK_SPEED = 1.5;
 
-/** Game minutes of work for each task at speed 1. */
+/** Game minutes of work for each tool task at speed 1 (construction: see data/structures and data/roads). */
 export const TASK_MINUTES: Record<ToolId, number> = {
   hoe: 12,
   seed: 6,

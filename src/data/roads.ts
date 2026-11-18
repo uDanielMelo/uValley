@@ -19,8 +19,10 @@ export const HIGHWAY = {
   reach: 90,
 } as const;
 
-/** Price of one tile of dirt road. Removing a road is free and gives nothing back. */
+/** Price of one tile of dirt road, paid when ordered. Removing a road is free and gives nothing back. */
 export const ROAD_COST = 5;
+/** Work minutes (at work speed 1) to open one road tile, and to remove one. */
+export const ROAD_WORK_MINUTES = { build: 20, remove: 10 } as const;
 /** Workers walk this much faster on roads (0.5 = 50%). */
 export const ROAD_WALK_BONUS = 0.5;
 

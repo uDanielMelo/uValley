@@ -15,12 +15,12 @@ import {
   type GraphicsQuality,
   type SaveSettings,
 } from '../game/save';
-import { advanceGame } from '../game/simulation';
-import { buildRoad, removeRoad } from '../game/roads';
+import { demolishClick, orderRoad, orderStructure, roadClick, type DemolishChange } from '../game/construction';
+import { advanceGame, type FinishedWork } from '../game/simulation';
 import { createInitialState } from '../game/state';
-import { anchorFor, demolishStructure, placeStructure, refundFor, structureAt } from '../game/structures';
+import { anchorFor, refundFor } from '../game/structures';
 import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/staff';
-import type { ActionError, ActionResult, GameState, Rotation, ToolId } from '../game/types';
+import type { ActionError, ActionResult, GameState, Rotation, TaskKind, ToolId } from '../game/types';
 import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
 
 export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | null;
@@ -68,7 +68,7 @@ export interface GameStore {
   extendArea: (tile: number) => void;
   finishArea: () => void;
   cancelArea: () => void;
-  /** Road painting while dragging: builds silently (errors are not shown on every tile). */
+  /** Road painting while dragging: queues road work silently (errors are not shown on every tile). */
   paintRoadAt: (tile: number) => void;
   setTool: (tool: ToolId) => void;
   setBuildMode: (mode: BuildMode) => void;
@@ -92,7 +92,7 @@ export interface GameStore {
   hireCandidate: (candidateId: number) => void;
   hireTemp: () => void;
   dismiss: (workerId: number) => void;
-  setPriorities: (workerId: number, priorities: ToolId[]) => void;
+  setPriorities: (workerId: number, priorities: TaskKind[]) => void;
   /** Opens the team hub on a worker's card (null closes the card). */
   selectWorker: (workerId: number | null) => void;
   clearTasks: () => void;
@@ -143,7 +143,32 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   road: 'Há uma estrada aqui.',
   'already-road': 'Já existe estrada aqui.',
   'no-road': 'Não há nada para demolir aqui.',
+  'under-construction': 'Esta construção já está em obra.',
 };
+
+const label = (type: StructureId): string => STRUCTURES[type].label;
+
+/** Toast text for what the demolish tool did. */
+const demolishText = (change: DemolishChange): string => {
+  switch (change.kind) {
+    case 'build-cancelled':
+      return `Obra de ${label(change.type).toLowerCase()} cancelada: +${change.refund} moedas.`;
+    case 'demolish-queued':
+      return `Demolição de ${label(change.type).toLowerCase()} na fila: devolve ${refundFor(change.type)} moedas ao terminar.`;
+    case 'demolish-cancelled':
+      return `Demolição de ${label(change.type).toLowerCase()} cancelada.`;
+    case 'road-cancelled':
+      return change.refund > 0 ? `Estrada cancelada: +${change.refund} moedas.` : 'Remoção de estrada cancelada.';
+    case 'road-removal-queued':
+      return 'Remoção da estrada na fila.';
+  }
+};
+
+/** Toast text for a site or demolition the crew finished. */
+const finishedText = (work: FinishedWork): string =>
+  work.kind === 'build'
+    ? `${label(work.type)} pronto(a)!`
+    : `${label(work.type)} demolido(a): +${refundFor(work.type)} moedas.`;
 
 const storage = (): Storage | null => {
   try {
@@ -194,8 +219,9 @@ export const useGameStore = create<GameStore>()(
         const { settings, game, devTimeScale } = get();
         if (settings.speed === 0 || realSeconds <= 0) return;
         const dt = realSeconds * GAME_MINUTES_PER_REAL_SECOND * settings.speed * devTimeScale;
-        const { state, workersLeft, hungryAnimals, tempsLeft } = advanceGame(game, dt);
+        const { state, workersLeft, hungryAnimals, tempsLeft, worksFinished } = advanceGame(game, dt);
         set({ game: state });
+        for (const work of worksFinished) get().showMessage(finishedText(work), 'info');
         if (tempsLeft > 0) get().showMessage('Fim do expediente: os esporádicos foram embora.', 'info');
         if (hungryAnimals > 0) {
           get().showMessage(`Sem dinheiro para a ração: ${hungryAnimals} animal(is) com fome hoje.`, 'error');
@@ -211,23 +237,28 @@ export const useGameStore = create<GameStore>()(
         if (!target) return;
         const { buildMode, buildRotation } = get();
         if (buildMode === 'road') {
-          commit(buildRoad(game, tile));
+          const result = roadClick(game, tile);
+          if (!result.ok) get().showMessage(ERROR_MESSAGES[result.error], 'error');
+          else set({ game: result.state });
           return;
         }
         if (buildMode === 'demolish') {
-          if (!target.structure && target.road) {
-            commit(removeRoad(game, tile));
+          const result = demolishClick(game, tile);
+          if (!result.ok) {
+            get().showMessage(ERROR_MESSAGES[result.error], 'error');
             return;
           }
-          const found = structureAt(game, tile);
-          const text = found ? `${STRUCTURES[found.type].label} demolido(a): +${refundFor(found.type)} moedas.` : undefined;
-          commit(demolishStructure(game, tile), text);
+          set({ game: result.state });
+          get().showMessage(demolishText(result.change), 'info');
           return;
         }
         if (buildMode) {
           const { x, y } = tileCoords(tile);
           const at = anchorFor(buildMode, x, y, buildRotation);
-          commit(placeStructure(game, buildMode, at.x, at.y, buildRotation), `${STRUCTURES[buildMode].label} construído(a)!`);
+          commit(
+            orderStructure(game, buildMode, at.x, at.y, buildRotation),
+            `Obra de ${label(buildMode).toLowerCase()} na fila: a equipe com Obras nas atividades vai construir.`,
+          );
           return;
         }
         if (target.state === 'locked') {
@@ -271,7 +302,7 @@ export const useGameStore = create<GameStore>()(
       },
 
       paintRoadAt: (tile) => {
-        const result = buildRoad(get().game, tile);
+        const result = orderRoad(get().game, tile);
         if (result.ok) set({ game: result.state });
       },
 

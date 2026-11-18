@@ -4,7 +4,8 @@ import { GRID_SIZE } from '../../data/world';
 import { till } from '../actions';
 import { isPasture } from '../animals';
 import { tileIndex } from '../grid';
-import { buildRoad, checkRoad, removeRoad } from '../roads';
+import { checkRoadOrder, orderRoad } from '../construction';
+import { layRoad, removeRoad } from '../roads';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { tick } from '../simulation';
 import { createInitialState } from '../state';
@@ -35,25 +36,28 @@ describe('roads', () => {
     expect(s.tiles[tileIndex(ACCESS_ROAD_X - 1, 24)]?.road).toBeUndefined();
   });
 
-  it('builds a road on owned grass for ROAD_COST', () => {
+  it('charges ROAD_COST when the road is ordered; the crew opens it later', () => {
     const s0 = createInitialState();
-    const s = unwrap(buildRoad(s0, FREE));
-    expect(s.tiles[FREE]).toEqual({ state: 'grass', road: true });
+    const s = unwrap(orderRoad(s0, FREE));
     expect(s.money).toBe(s0.money - ROAD_COST);
+    expect(s.tiles[FREE]).toEqual({ state: 'grass' });
+    expect(s.tasks).toHaveLength(1);
+    expect(unwrap(layRoad(s, FREE)).tiles[FREE]).toEqual({ state: 'grass', road: true });
   });
 
-  it('rejects locked land, buildings, existing roads, worked soil, queued tiles and lack of money', () => {
+  it('rejects locked land, buildings, existing roads, worked soil, soil queued to be tilled and lack of money', () => {
     const s = createInitialState();
-    expect(checkRoad(s, tileIndex(0, 0))).toBe('locked');
-    expect(checkRoad(s, tileIndex(15, 15))).toBe('structure');
-    expect(checkRoad(s, ACCESS_IN_FARM)).toBe('already-road');
-    expect(checkRoad(unwrap(till(s, FREE)), FREE)).toBe('not-grass');
-    expect(checkRoad(unwrap(toggleTask(s, 'hoe', FREE, 'wheat')), FREE)).toBe('tile-busy');
-    expect(checkRoad({ ...s, money: 0 }, FREE)).toBe('not-enough-money');
+    expect(checkRoadOrder(s, tileIndex(0, 0))).toBe('locked');
+    expect(checkRoadOrder(s, tileIndex(15, 15))).toBe('structure');
+    expect(checkRoadOrder(s, ACCESS_IN_FARM)).toBe('already-road');
+    expect(checkRoadOrder(unwrap(till(s, FREE)), FREE)).toBe('not-grass');
+    expect(checkRoadOrder(unwrap(toggleTask(s, 'hoe', FREE, 'wheat')), FREE)).toBe('not-grass');
+    expect(checkRoadOrder(unwrap(orderRoad(s, FREE)), FREE)).toBe('already-road');
+    expect(checkRoadOrder({ ...s, money: 0 }, FREE)).toBe('not-enough-money');
   });
 
   it('blocks farming, building and grazing on roads', () => {
-    const s = unwrap(buildRoad(createInitialState(), FREE));
+    const s = unwrap(layRoad(createInitialState(), FREE));
     expect(till(s, FREE)).toEqual({ ok: false, error: 'road' });
     expect(toggleTask(s, 'hoe', FREE, 'wheat')).toEqual({ ok: false, error: 'road' });
     expect(checkPlacement(s, 'chickenCoop', 12, 13, 0)).toBe('road');
@@ -61,7 +65,7 @@ describe('roads', () => {
   });
 
   it('removes roads on owned land but keeps the access road off the farm', () => {
-    const s = unwrap(buildRoad(createInitialState(), FREE));
+    const s = unwrap(layRoad(createInitialState(), FREE));
     expect(unwrap(removeRoad(s, FREE)).tiles[FREE]).toEqual({ state: 'grass' });
     expect(removeRoad(s, ACCESS_OFF_FARM)).toEqual({ ok: false, error: 'locked' });
     expect(removeRoad(s, tileIndex(12, 12))).toEqual({ ok: false, error: 'no-road' });
@@ -115,7 +119,7 @@ describe('visiting car', () => {
     expect(short[short.length - 1]).toEqual({ x: ACCESS_ROAD_X + 0.5, y: 19.5 });
     // A detour west of the cut reaches the spot right below the bin (17, 16).
     let s = cut;
-    for (const y of [19, 18, 17]) s = unwrap(buildRoad(s, tileIndex(17, y)));
+    for (const y of [19, 18, 17]) s = unwrap(layRoad(s, tileIndex(17, y)));
     const detour = carRoutes(s.tiles).arrive;
     expect(detour[detour.length - 1]).toEqual({ x: 17.5, y: 17.5 });
     expect(detour).toContainEqual({ x: 17.5, y: 19.5 });
@@ -159,7 +163,7 @@ describe('visiting car', () => {
 
 describe('road saves', () => {
   it('round-trips roads', () => {
-    const s = unwrap(buildRoad(createInitialState(), FREE));
+    const s = unwrap(layRoad(createInitialState(), FREE));
     const loaded = deserialize(serialize(s, DEFAULT_SETTINGS));
     expect(loaded?.game.tiles[FREE]).toEqual({ state: 'grass', road: true });
     expect(loaded?.game.tiles[ACCESS_OFF_FARM]?.road).toBe(true);

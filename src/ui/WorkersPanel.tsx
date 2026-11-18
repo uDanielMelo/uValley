@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TEMP_WORKERS, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
+import { DEFAULT_PRIORITIES, TEMP_WORKERS, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { hourlyPayroll, staffCount, tempCount } from '../game/staff';
 import { bedCount } from '../game/structures';
 import { unstaffedKinds } from '../game/workers';
@@ -8,7 +8,7 @@ import { formatCoins } from './format';
 import { Button, Coins, Panel } from './primitives';
 import { HireBoard } from './team/HireBoard';
 import { WorkerList } from './team/WorkerList';
-import { TASK_LABELS, TOOLS } from './tools';
+import { TASK_LABELS } from './tools';
 
 type Tab = 'team' | 'hire';
 
@@ -58,8 +58,8 @@ function QueueBar() {
       {orphans && (
         <p className="mt-1 text-xs text-red-700">
           Ninguém faz:{' '}
-          {TOOLS.filter((t) => orphans.split(',').includes(t.id))
-            .map((t) => TASK_LABELS[t.id])
+          {DEFAULT_PRIORITIES.filter((kind) => orphans.split(',').includes(kind))
+            .map((kind) => TASK_LABELS[kind])
             .join(', ')}
           . Adicione a atividade na ficha de alguém.
         </p>

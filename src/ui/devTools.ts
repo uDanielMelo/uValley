@@ -4,6 +4,7 @@ import {
   addProduce,
   addSeeds,
   finishAllTasks,
+  finishWorks,
   growAll,
   hireFree,
   readyAllProducts,
@@ -39,7 +40,8 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.water()            rega todas as plantas
   dev.unlock()           libera todos os lotes
   dev.hire(2)            contrata 2 trabalhadores de graça
-  dev.finish()           conclui toda a fila de tarefas
+  dev.finish()           conclui toda a fila de tarefas (obras incluídas)
+  dev.build()            conclui obras e demolições em andamento
   dev.spawn('cow', 3)    cria animais: ${ANIMAL_IDS.join(', ')}
   dev.products()         todos os animais com produto pronto
   dev.state()            mostra o estado atual do jogo
@@ -64,6 +66,7 @@ const devApi = {
   hire: (count = 1) =>
     apply((g) => Array.from({ length: count }).reduce<GameState>((s) => hireFree(s), g), `+${count} trabalhador(es)`),
   finish: () => apply(finishAllTasks, 'Fila concluída'),
+  build: () => apply(finishWorks, 'Obras concluídas'),
   spawn: (kind: string, count = 1) => {
     if (!isAnimal(kind)) {
       console.warn(`Animal desconhecido "${kind}". Use: ${ANIMAL_IDS.join(', ')}`);

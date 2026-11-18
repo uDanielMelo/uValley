@@ -17,6 +17,8 @@ export interface StructureDef {
   depth: number;
   /** Price to build. Absent: the structure cannot be built or demolished by the player. */
   cost?: number;
+  /** Work minutes (at work speed 1) the crew needs to raise it. Buildable structures only. */
+  buildMinutes?: number;
   category?: StructureCategory;
   /** Short pt-BR description for the build menu. */
   description: string;
@@ -39,6 +41,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     width: 2,
     depth: 1,
     cost: 300,
+    buildMinutes: 480,
     category: 'housing',
     description: 'Casa dos trabalhadores fixos: 3 camas.',
   },
@@ -49,6 +52,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     width: 2,
     depth: 1,
     cost: 150,
+    buildMinutes: 300,
     category: 'animals',
     description: 'Casinha e cercado telado para galinhas e patas.',
   },
@@ -59,6 +63,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     width: 2,
     depth: 2,
     cost: 250,
+    buildMinutes: 600,
     category: 'storage',
     description: 'Guarda grãos e ração.',
   },
@@ -69,6 +74,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     width: 3,
     depth: 2,
     cost: 350,
+    buildMinutes: 720,
     category: 'storage',
     description: 'Estoque extra de colheita e produtos.',
   },
@@ -79,6 +85,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     width: 3,
     depth: 3,
     cost: 400,
+    buildMinutes: 960,
     category: 'animals',
     description: 'Abrigo para vacas, bois, cavalos e porcos.',
   },
@@ -93,8 +100,12 @@ export const CATEGORY_LABELS: Record<StructureCategory, string> = {
   storage: 'Armazenamento',
 };
 
-/** Fraction of the build cost refunded when demolishing. */
+/** Fraction of the build cost refunded when a demolition is finished. */
 export const DEMOLISH_REFUND = 0.5;
+/** Tearing down takes this fraction of the build work. */
+export const DEMOLISH_WORK = 0.35;
+/** Most workers on one site at a time (each takes a different side of the footprint). */
+export const BUILD_CREW_MAX = 3;
 
 export interface StructurePlacement {
   id: StructureId;

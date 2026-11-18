@@ -1,4 +1,4 @@
-import { DEMOLISH_REFUND, STRUCTURES, type StructureId } from '../data/structures';
+import { DEMOLISH_REFUND, DEMOLISH_WORK, STRUCTURES, type StructureId } from '../data/structures';
 import { BUNKHOUSE_BEDS } from '../data/workers';
 import { inBounds, tileIndex } from './grid';
 import { findPath, isWalkable } from './path';
@@ -66,13 +66,22 @@ export const stampStructures = (tiles: readonly Tile[], structures: readonly Str
   return result;
 };
 
-/** Beds for staff workers: one set per bunkhouse. */
+/** A structure works (beds, a door to rest at…) only when no construction or demolition is under way. */
+export const isOperational = (s: StructureInstance): boolean => s.work === undefined;
+
+/** Beds for staff workers: one set per finished bunkhouse (not one being built or torn down). */
 export const bedCount = (state: Pick<GameState, 'structures'>): number =>
-  state.structures.filter((s) => s.type === 'bunkhouse').length * BUNKHOUSE_BEDS;
+  state.structures.filter((s) => s.type === 'bunkhouse' && isOperational(s)).length * BUNKHOUSE_BEDS;
 
 export const buildCost = (type: StructureId): number => STRUCTURES[type].cost ?? 0;
 
 export const refundFor = (type: StructureId): number => Math.floor(buildCost(type) * DEMOLISH_REFUND);
+
+/** Work minutes (at speed 1) to raise a structure. */
+export const buildMinutesFor = (type: StructureId): number => STRUCTURES[type].buildMinutes ?? 0;
+
+/** Work minutes (at speed 1) to tear a structure down. */
+export const demolishMinutesFor = (type: StructureId): number => Math.round(buildMinutesFor(type) * DEMOLISH_WORK);
 
 /** Why a structure cannot be placed there, or null when it can. */
 export const checkPlacement = (
@@ -130,7 +139,10 @@ const evictWorker = (w: Worker, fp: Footprint, state: GameState): Worker => {
   return { ...w, x: moved.x, y: moved.y, path: last ? findPath(state.tiles, moved, last) : [] };
 };
 
-/** Builds a structure, charging its cost. Whoever stands in the footprint is moved aside. */
+/**
+ * Places a finished structure at once, charging its cost. Whoever stands in the footprint is moved
+ * aside. The player's orders go through `orderStructure` (construction.ts), which adds the work.
+ */
 export const placeStructure = (
   state: GameState,
   type: StructureId,
@@ -168,25 +180,37 @@ export const structureAt = (state: GameState, tile: number): StructureInstance |
     footprintCells(footprintOf(s.type, s.x, s.y, s.rotation)).some((c) => tileIndex(c.x, c.y) === tile),
   );
 
-/** Demolishes the buildable structure covering a tile and refunds part of its cost. */
-export const demolishStructure = (state: GameState, tile: number): ActionResult => {
-  const found = structureAt(state, tile);
-  if (!found) return fail('no-structure');
-  if (STRUCTURES[found.type].cost === undefined) return fail('not-demolishable');
-  if (found.type === 'bunkhouse') {
-    const staff = state.workers.filter((w) => w.kind === 'staff').length;
-    if (bedCount(state) - BUNKHOUSE_BEDS < staff) return fail('beds-in-use');
-  }
+/** Takes a structure off the map: its tiles go back to bare ground (no refund). */
+export const removeStructure = (state: GameState, structureId: number): GameState => {
+  const found = state.structures.find((s) => s.id === structureId);
+  if (!found) return state;
   const tiles = state.tiles.slice();
   for (const c of footprintCells(footprintOf(found.type, found.x, found.y, found.rotation))) {
+    if (!inBounds(c.x, c.y)) continue;
     const index = tileIndex(c.x, c.y);
     const current = tiles[index];
     if (current) tiles[index] = { state: current.state };
   }
-  return ok({
-    ...state,
-    tiles,
-    money: state.money + refundFor(found.type),
-    structures: state.structures.filter((s) => s.id !== found.id),
-  });
+  return { ...state, tiles, structures: state.structures.filter((s) => s.id !== structureId) };
+};
+
+/** Why the structure covering a tile cannot be torn down, or the structure itself. */
+export const checkDemolish = (state: GameState, tile: number): StructureInstance | ActionError => {
+  const found = structureAt(state, tile);
+  if (!found) return 'no-structure';
+  if (STRUCTURES[found.type].cost === undefined) return 'not-demolishable';
+  if (found.work) return 'under-construction';
+  if (found.type === 'bunkhouse') {
+    const staff = state.workers.filter((w) => w.kind === 'staff').length;
+    if (bedCount(state) - BUNKHOUSE_BEDS < staff) return 'beds-in-use';
+  }
+  return found;
+};
+
+/** Demolishes the finished structure covering a tile at once and refunds part of its cost. */
+export const demolishStructure = (state: GameState, tile: number): ActionResult => {
+  const found = checkDemolish(state, tile);
+  if (typeof found === 'string') return fail(found);
+  const removed = removeStructure(state, found.id);
+  return ok({ ...removed, money: removed.money + refundFor(found.type) });
 };

@@ -1,13 +1,11 @@
 import { DEFAULT_PRIORITIES, SEVERANCE_HOURS } from '../../data/workers';
 import { severanceFor } from '../../game/staff';
-import type { GameState, ToolId } from '../../game/types';
+import type { GameState } from '../../game/types';
 import { useGameStore } from '../../store/gameStore';
 import { formatCoins } from '../format';
 import { Button, Coins } from '../primitives';
-import { TASK_LABELS, TOOLS } from '../tools';
-import { ageLabel, farmingStats, SkillChips } from './labels';
-
-const ICONS: Record<ToolId, string> = Object.fromEntries(TOOLS.map((t) => [t.id, t.icon])) as Record<ToolId, string>;
+import { TASK_ICONS, TASK_LABELS } from '../tools';
+import { ageLabel, buildSpeed, farmingStats, SkillChips } from './labels';
 
 const find = (s: { game: GameState }, id: number) => s.game.workers.find((w) => w.id === id);
 
@@ -33,7 +31,7 @@ function Priorities({ id }: { id: number }) {
         {list.map((kind, i) => (
           <li key={kind} className="flex items-center gap-2 rounded-lg bg-parchment px-2 py-1 text-sm font-extrabold">
             <span className="w-4 text-xs text-wood/60 tabular-nums">{i + 1}</span>
-            <span aria-hidden>{ICONS[kind]}</span>
+            <span aria-hidden>{TASK_ICONS[kind]}</span>
             <span className="flex-1">{TASK_LABELS[kind]}</span>
             <button
               type="button"
@@ -73,7 +71,7 @@ function Priorities({ id }: { id: number }) {
               onClick={() => setPriorities(id, [...list, kind])}
               className="rounded-lg border-2 border-dashed border-wood/30 px-2 py-0.5 text-xs font-extrabold text-wood/80 hover:bg-parchment"
             >
-              + {ICONS[kind]} {TASK_LABELS[kind]}
+              + {TASK_ICONS[kind]} {TASK_LABELS[kind]}
             </button>
           ))}
         </div>
@@ -97,7 +95,8 @@ export function WorkerCard({ id }: { id: number }) {
   const money = useGameStore((s) => s.game.money);
   const dismiss = useGameStore((s) => s.dismiss);
   if (!skills) return null;
-  const stats = farmingStats({ name: '', age, stars, skills, specialty, hourlyWage: wage });
+  const profile = { name: '', age, stars, skills, specialty, hourlyWage: wage };
+  const stats = farmingStats(profile);
 
   return (
     <div className="flex flex-col gap-3 border-t-2 border-wood/15 px-3 pt-2 pb-3">
@@ -110,6 +109,8 @@ export function WorkerCard({ id }: { id: number }) {
         <dd className="tabular-nums">{stats.speed}</dd>
         <dt className="text-wood/70">Efetividade no plantio</dt>
         <dd className="tabular-nums">{stats.effectiveness}</dd>
+        <dt className="text-wood/70">Ritmo em obras</dt>
+        <dd className="tabular-nums">{buildSpeed(profile)}</dd>
       </dl>
       <SkillChips skills={skills} specialty={specialty} />
       <Priorities id={id} />
