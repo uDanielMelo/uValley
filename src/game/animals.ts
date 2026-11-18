@@ -5,25 +5,29 @@ import {
   ANIMAL_SLEEP_HOUR,
   ANIMAL_WAKE_HOUR,
   LABOR_BONUS_CAP,
+  LEASH_RADIUS,
   MAX_ANIMALS,
   WANDER_PAUSE,
   WANDER_RADIUS,
   type AnimalId,
 } from '../data/animals';
-import { HOME_POSITION } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
-import { inBounds, tileCoords, tileIndex } from './grid';
-import { addCount } from './inventory';
-import { segmentClear } from './path';
+import { findPath, segmentClear } from './path';
 import { hash01 } from './random';
+import {
+  addStock,
+  crowdingFactor,
+  isPasture,
+  pastureCapacity,
+  pastureUsed,
+  shelterDoor,
+  shelterFor,
+  stockCap,
+  stockTotal,
+} from './shelters';
 import { fail, ok, type ActionResult, type Animal, type AnimalActivity, type GameState, type GridPoint, type Tile } from './types';
 
-/** Animals graze on unlocked grass without structures or roads; tilled land is off limits. */
-export const isPasture = (tiles: readonly Tile[], x: number, y: number): boolean => {
-  if (!inBounds(x, y)) return false;
-  const tile = tiles[tileIndex(x, y)];
-  return !!tile && tile.state === 'grass' && !tile.structure && !tile.road;
-};
+export { isPasture };
 
 export const isAwake = (gameMinutes: number): boolean => {
   const hour = (((gameMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY) / 60;
@@ -31,50 +35,53 @@ export const isAwake = (gameMinutes: number): boolean => {
 };
 
 export const animalActivity = (state: GameState, animal: Animal): AnimalActivity => {
-  if (!isAwake(state.gameMinutes)) return 'sleeping';
-  return animal.target ? 'walking' : 'grazing';
+  if (animal.path.length > 0) return 'walking';
+  return isAwake(state.gameMinutes) ? 'grazing' : 'sleeping';
 };
 
-/** Ideal distance (tiles) from the house door for new animals: close, but out of the doorway. */
-const SPAWN_DISTANCE = 3;
+/** How close to the door counts as being in the shelter. */
+const AT_DOOR = 0.3;
 
-/** Drop-off point for a new animal: pasture a few tiles from the house, avoiding crowded tiles. */
-const spawnPoint = (state: GameState, salt: number): GridPoint => {
-  const crowd = new Map<number, number>();
-  for (const a of state.animals) {
-    const index = tileIndex(Math.floor(a.x), Math.floor(a.y));
-    crowd.set(index, (crowd.get(index) ?? 0) + 1);
-  }
-  let best: GridPoint | null = null;
-  let bestScore = Infinity;
-  state.tiles.forEach((_, i) => {
-    const { x, y } = tileCoords(i);
-    if (!isPasture(state.tiles, x, y)) return;
-    const distance = Math.hypot(x + 0.5 - HOME_POSITION.x, y + 0.5 - HOME_POSITION.y);
-    const score =
-      Math.abs(distance - SPAWN_DISTANCE) + (crowd.get(i) ?? 0) * 2.5 + hash01(salt * 31 + i) * 2;
-    if (score < bestScore) {
-      bestScore = score;
-      best = { x: x + 0.5, y: y + 0.5 };
-    }
-  });
-  return best ?? { x: HOME_POSITION.x, y: HOME_POSITION.y };
+/** The point an animal goes home to (its shelter's door), if the shelter exists. */
+export const homeOf = (state: Pick<GameState, 'structures'>, animal: Animal): GridPoint | null => {
+  const shelter = state.structures.find((s) => s.id === animal.shelterId);
+  return shelter ? shelterDoor(shelter) : null;
 };
 
-/** Adds an animal without charging anything (used by buying and dev tools). */
-export const addAnimal = (state: GameState, kind: AnimalId): ActionResult => {
+/** Asleep inside its shelter (not drawn). */
+export const isInside = (state: GameState, animal: Animal): boolean => {
+  if (isAwake(state.gameMinutes) || animal.path.length > 0) return false;
+  const home = homeOf(state, animal);
+  return !!home && Math.hypot(home.x - animal.x, home.y - animal.y) <= AT_DOOR;
+};
+
+export interface AddAnimalOptions {
+  /** Dev tools: ignore the pasture limit. */
+  ignorePasture?: boolean;
+}
+
+/**
+ * Adds an animal without charging anything (used by buying and dev tools). It moves into a
+ * finished shelter for its species with room and needs room on the pasture.
+ */
+export const addAnimal = (state: GameState, kind: AnimalId, options: AddAnimalOptions = {}): ActionResult => {
   if (state.animals.length >= MAX_ANIMALS) return fail('max-animals');
+  const shelter = shelterFor(state, kind);
+  if (typeof shelter === 'string') return fail(shelter);
+  if (!options.ignorePasture && pastureUsed(state) + ANIMALS[kind].pastureUnits > pastureCapacity(state)) {
+    return fail('pasture-full');
+  }
   const id = state.nextId;
-  const at = spawnPoint(state, id);
+  const door = shelterDoor(shelter);
   const animal: Animal = {
     id,
     kind,
-    x: at.x,
-    y: at.y,
-    target: null,
+    shelterId: shelter.id,
+    x: door.x,
+    y: door.y,
+    path: [],
     waitMinutes: 5,
     productMinutes: 0,
-    hasProduct: false,
     fed: true,
   };
   return ok({ ...state, animals: [...state.animals, animal], nextId: id + 1 });
@@ -100,25 +107,6 @@ export const sellAnimal = (state: GameState, kind: AnimalId): ActionResult => {
     animals: state.animals.filter((a) => a.id !== animal.id),
   });
 };
-
-/** Collects an animal's ready product into the inventory. */
-export const collectProduct = (state: GameState, animalId: number): ActionResult => {
-  const animal = state.animals.find((a) => a.id === animalId);
-  if (!animal) return fail('no-animal');
-  const product = ANIMALS[animal.kind].product;
-  if (!product || !animal.hasProduct) return fail('no-product');
-  return ok({
-    ...state,
-    animals: state.animals.map((a) => (a.id === animalId ? { ...a, hasProduct: false } : a)),
-    inventory: { ...state.inventory, products: addCount(state.inventory.products, product, 1) },
-  });
-};
-
-export const collectAllProducts = (state: GameState): GameState =>
-  state.animals.reduce((s, a) => {
-    const result = collectProduct(s, a.id);
-    return result.ok ? result.state : s;
-  }, state);
 
 export const dailyFeedCost = (state: GameState): number =>
   state.animals.reduce((sum, a) => sum + ANIMALS[a.kind].feedCostPerDay, 0);
@@ -152,8 +140,8 @@ export const laborMultipliers = (state: GameState): { hoe: number; walk: number 
   return { hoe: 1 + Math.min(hoe, LABOR_BONUS_CAP), walk: 1 + Math.min(walk, LABOR_BONUS_CAP) };
 };
 
-/** Picks a nearby pasture spot reachable in a straight line over pasture, or null. */
-const pickTarget = (tiles: readonly Tile[], animal: Animal, seed: number): GridPoint | null => {
+/** Picks a nearby pasture spot within reach of home, reachable in a straight line over pasture, or null. */
+const pickTarget = (tiles: readonly Tile[], animal: Animal, home: GridPoint, seed: number): GridPoint | null => {
   const fx = Math.floor(animal.x);
   const fy = Math.floor(animal.y);
   const onPasture = isPasture(tiles, fx, fy);
@@ -161,7 +149,7 @@ const pickTarget = (tiles: readonly Tile[], animal: Animal, seed: number): GridP
   for (let k = 0; k < 8; k++) {
     const dx = Math.round((hash01(seed + k * 7) * 2 - 1) * WANDER_RADIUS);
     const dy = Math.round((hash01(seed + k * 11 + 3) * 2 - 1) * WANDER_RADIUS);
-    // Off-pasture animals (their tile was tilled) look further to find grass.
+    // Off-pasture animals (at the door, or their tile was tilled) look further to find grass.
     const tx = fx + dx * (onPasture ? 1 : 2);
     const ty = fy + dy * (onPasture ? 1 : 2);
     if (!pasture(tx, ty)) continue;
@@ -169,59 +157,87 @@ const pickTarget = (tiles: readonly Tile[], animal: Animal, seed: number): GridP
       x: tx + 0.2 + hash01(seed + k * 13 + 5) * 0.6,
       y: ty + 0.2 + hash01(seed + k * 17 + 9) * 0.6,
     };
+    if (Math.hypot(target.x - home.x, target.y - home.y) > LEASH_RADIUS) continue;
     if (!onPasture || segmentClear(animal, target, pasture)) return target;
   }
   return null;
 };
 
+/** Moves along a path for `distance` tiles. */
+const followPath = (from: Pick<Animal, 'x' | 'y' | 'path'>, distance: number): Pick<Animal, 'x' | 'y' | 'path'> => {
+  let budget = distance;
+  let { x, y } = from;
+  let index = 0;
+  while (index < from.path.length && budget > 0) {
+    const target = from.path[index];
+    if (!target) break;
+    const d = Math.hypot(target.x - x, target.y - y);
+    if (d <= budget) {
+      x = target.x;
+      y = target.y;
+      budget -= d;
+      index++;
+    } else {
+      x += ((target.x - x) / d) * budget;
+      y += ((target.y - y) / d) * budget;
+      budget = 0;
+    }
+  }
+  return { x, y, path: index === 0 ? from.path : from.path.slice(index) };
+};
+
 /**
- * Moves every animal for `minutes`: wander between pasture spots with pauses while awake,
- * sleep at night, and accumulate production while fed.
+ * Moves every animal for `minutes`. Awake: wander over pasture near the shelter, with pauses (and
+ * walk back when too far). At night: walk home and sleep inside. Fed animals produce; products go
+ * to the shelter's stock (production waits while it is full, and slows on crowded pasture).
  */
 export const stepAnimals = (state: GameState, minutes: number): GameState => {
   if (minutes <= 0 || state.animals.length === 0) return state;
   const awake = isAwake(state.gameMinutes);
   const tick = Math.floor(state.gameMinutes * 10);
+  const crowd = crowdingFactor(state);
+  let world = state;
   const animals = state.animals.map((a) => {
     const def = ANIMALS[a.kind];
-    let { productMinutes, hasProduct, waitMinutes, target, x, y } = a;
+    let { productMinutes, waitMinutes } = a;
+    let spot: Pick<Animal, 'x' | 'y' | 'path'> = { x: a.x, y: a.y, path: a.path };
+    const shelter = world.structures.find((s) => s.id === a.shelterId);
+    const home = shelter ? shelterDoor(shelter) : { x: a.x, y: a.y };
 
-    if (def.product && a.fed && !hasProduct) {
-      productMinutes += minutes;
-      if (productMinutes >= def.productionHours * 60) {
+    if (def.product && a.fed && shelter) {
+      const needed = def.productionHours * 60;
+      productMinutes = Math.min(needed, productMinutes + minutes * crowd);
+      if (productMinutes >= needed && stockTotal(shelter.stock) < stockCap(shelter.type)) {
+        world = addStock(world, shelter.id, def.product);
         productMinutes = 0;
-        hasProduct = true;
       }
     }
 
-    if (awake) {
-      if (!target && waitMinutes > 0) {
+    if (spot.path.length === 0) {
+      const away = Math.hypot(home.x - spot.x, home.y - spot.y);
+      if (!awake) {
+        if (away > AT_DOOR) spot = { ...spot, path: findPath(world.tiles, spot, home) };
+      } else if (away > LEASH_RADIUS + 1) {
+        spot = { ...spot, path: findPath(world.tiles, spot, home) };
+      } else if (waitMinutes > 0) {
         waitMinutes = Math.max(0, waitMinutes - minutes);
-      } else if (!target) {
-        target = pickTarget(state.tiles, a, a.id * 7919 + tick);
-        if (!target) waitMinutes = WANDER_PAUSE[0];
+      } else {
+        const target = pickTarget(world.tiles, a, home, a.id * 7919 + tick);
+        if (target) spot = { ...spot, path: [target] };
+        else waitMinutes = WANDER_PAUSE[0];
       }
-      if (target) {
-        const dx = target.x - x;
-        const dy = target.y - y;
-        const d = Math.hypot(dx, dy);
-        const step = def.moveSpeed * minutes;
-        if (d <= step) {
-          x = target.x;
-          y = target.y;
-          target = null;
-          const [min, max] = WANDER_PAUSE;
-          waitMinutes = min + hash01(a.id * 131 + tick) * (max - min);
-        } else {
-          x += (dx / d) * step;
-          y += (dy / d) * step;
-        }
+    }
+    if (spot.path.length > 0) {
+      spot = followPath(spot, def.moveSpeed * minutes);
+      if (spot.path.length === 0 && awake) {
+        const [min, max] = WANDER_PAUSE;
+        waitMinutes = min + hash01(a.id * 131 + tick) * (max - min);
       }
     }
 
-    return { ...a, x, y, target, waitMinutes, productMinutes, hasProduct };
+    return { ...a, ...spot, waitMinutes, productMinutes };
   });
-  return { ...state, animals };
+  return { ...world, animals };
 };
 
 export const productLabel = (kind: AnimalId): string | null => {

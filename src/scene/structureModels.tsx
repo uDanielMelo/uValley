@@ -5,6 +5,7 @@ import type { Rotation } from '../game/types';
 import { cornerToWorld } from './coords';
 import { Barn, Bunkhouse, ChickenCoop, Silo, Warehouse } from './models/Buildings';
 import { House } from './models/House';
+import { Corral, Pigsty, Sheepfold, Stable } from './models/Shelters';
 import { ShippingBin } from './models/ShippingBin';
 
 export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
@@ -12,6 +13,10 @@ export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   shippingBin: ShippingBin,
   bunkhouse: Bunkhouse,
   chickenCoop: ChickenCoop,
+  pigsty: Pigsty,
+  sheepfold: Sheepfold,
+  corral: Corral,
+  stable: Stable,
   silo: Silo,
   warehouse: Warehouse,
   barn: Barn,

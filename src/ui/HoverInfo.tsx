@@ -1,7 +1,8 @@
-import { ANIMALS, ANIMAL_PRODUCTS } from '../data/animals';
+import { ANIMALS, ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
 import { CROPS } from '../data/crops';
 import { STRUCTURES } from '../data/structures';
 import { animalActivity } from '../game/animals';
+import { residents, shelterDef, stockCap, stockTotal } from '../game/shelters';
 import { growthProgress, isMature } from '../game/crops';
 import { nextPlotCost, plotStatus } from '../game/economy';
 import { workProgress } from '../game/construction';
@@ -90,11 +91,43 @@ function WorkDetails({ tileIndex }: { tileIndex: number }) {
   );
 }
 
+/** Who lives in the hovered shelter and what is waiting there to be collected. */
+function ShelterDetails({ tileIndex }: { tileIndex: number }) {
+  // Strings and numbers only, so the card re-renders just when they change.
+  const summary = useGameStore((s) => {
+    const found = structureAt(s.game, tileIndex);
+    const def = found ? shelterDef(found.type) : undefined;
+    if (!found || !def || found.work) return null;
+    return `${residents(s.game, found.id)}/${def.capacity}`;
+  });
+  const stock = useGameStore((s) => {
+    const found = structureAt(s.game, tileIndex);
+    const stock = found?.stock;
+    if (!stock) return '';
+    return ANIMAL_PRODUCT_IDS.filter((id) => (stock[id] ?? 0) > 0)
+      .map((id) => `${ANIMAL_PRODUCTS[id].icon} ${stock[id] ?? 0}`)
+      .join('  ');
+  });
+  const full = useGameStore((s) => {
+    const found = structureAt(s.game, tileIndex);
+    return !!found && stockTotal(found.stock) >= stockCap(found.type) && stockCap(found.type) > 0;
+  });
+  if (summary === null) return null;
+  return (
+    <div className="mt-1 text-xs font-bold">
+      <p>Animais: {summary}</p>
+      <p className={full ? 'text-red-700' : 'text-wood/80'}>
+        {stock ? `Para coletar: ${stock}${full ? ' · cheio, a produção parou' : ''}` : 'Nada para coletar.'}
+      </p>
+    </div>
+  );
+}
+
 function QueuedTasks({ tileIndex }: { tileIndex: number }) {
   // Joined into a string so the selector returns a primitive. Structure work shows in WorkDetails.
   const queued = useGameStore((s) =>
     s.game.tasks
-      .filter((t) => t.tile === tileIndex && t.job?.type !== 'structure')
+      .filter((t) => t.tile === tileIndex && t.job?.type !== 'structure' && t.job?.type !== 'shelter')
       .map((t) => taskLabel(s.game, t) + (t.workerId === null ? '' : ' (em andamento)'))
       .join(' → '),
   );
@@ -112,7 +145,11 @@ function AnimalInfo({ id }: { id: number }) {
     return a ? animalActivity(s.game, a) : null;
   });
   const fed = useGameStore((s) => s.game.animals.find((a) => a.id === id)?.fed ?? true);
-  const ready = useGameStore((s) => s.game.animals.find((a) => a.id === id)?.hasProduct ?? false);
+  const home = useGameStore((s) => {
+    const shelterId = s.game.animals.find((a) => a.id === id)?.shelterId;
+    const shelter = s.game.structures.find((x) => x.id === shelterId);
+    return shelter ? STRUCTURES[shelter.type].label : null;
+  });
   const progress = useGameStore((s) => {
     const a = s.game.animals.find((x) => x.id === id);
     if (!a) return 0;
@@ -129,23 +166,19 @@ function AnimalInfo({ id }: { id: number }) {
       </p>
       <p className="text-sm">
         {ACTIVITY_LABELS[activity]}
+        {home && ` · mora no ${home.toLowerCase()}`}
         {!fed && <span className="font-black text-red-700"> · com fome</span>}
       </p>
-      {product &&
-        (ready ? (
-          <p className="text-sm font-black text-leaf">
-            {product.icon} {product.label} pronto! Clique para coletar.
+      {product && (
+        <div className="mt-1">
+          <p className="text-xs font-bold">
+            Próximo {product.label.toLowerCase()}: {progress}%
           </p>
-        ) : (
-          <div className="mt-1">
-            <p className="text-xs font-bold">
-              Próximo {product.label.toLowerCase()}: {progress}%
-            </p>
-            <div className="mt-1 h-2 overflow-hidden rounded-full bg-wood/20">
-              <div className="h-full bg-leaf" style={{ width: `${progress}%` }} />
-            </div>
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-wood/20">
+            <div className="h-full bg-leaf" style={{ width: `${progress}%` }} />
           </div>
-        ))}
+        </div>
+      )}
       {def.labor.hoe && <p className="text-xs font-bold">Ajuda a equipe a arar mais rápido.</p>}
       {def.labor.walk && <p className="text-xs font-bold">Ajuda a equipe a andar mais rápido.</p>}
     </Card>
@@ -174,6 +207,7 @@ export function HoverInfo() {
         <p className="text-sm">{STRUCTURES[tile.structure].description}</p>
       )}
       {tile.structure && <WorkDetails tileIndex={hovered} />}
+      {tile.structure && <ShelterDetails tileIndex={hovered} />}
       {tile.state === 'locked' && <PlotDetails tileIndex={hovered} />}
       <CropDetails tile={tile} />
       <QueuedTasks tileIndex={hovered} />

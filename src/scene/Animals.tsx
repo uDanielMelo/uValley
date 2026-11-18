@@ -1,17 +1,14 @@
-import { Html } from '@react-three/drei';
 import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { useRef } from 'react';
 import { MathUtils, MeshBasicMaterial, MeshStandardMaterial, type Group } from 'three';
-import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCTS, type AnimalId } from '../data/animals';
+import { ANIMAL_IDS, type AnimalId } from '../data/animals';
 import { GRID_SIZE } from '../data/world';
-import { animalActivity } from '../game/animals';
+import { animalActivity, isInside } from '../game/animals';
 import { useGameStore } from '../store/gameStore';
 import { hash01 } from './coords';
 import { animalModel } from './models/animalModels';
 
 const HALF = GRID_SIZE / 2;
-/** Max pointer travel (px) for a click to count as a click and not a camera drag. */
-const CLICK_TOLERANCE = 5;
 const MATERIAL = new MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
 /** Invisible material for the click box (keeps small animals easy to click). */
 const HITBOX_MATERIAL = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
@@ -25,9 +22,7 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
   const root = useRef<Group>(null);
   const body = useRef<Group>(null);
   const legs = useRef<Array<Group | null>>([]);
-  const icon = useRef<HTMLDivElement>(null);
   const anim = useRef({ x: NaN, z: NaN, heading: hash01(id) * Math.PI * 2, phase: 0, time: hash01(id + 1) * 10 });
-  const product = ANIMALS[kind].product;
 
   useFrame((_, delta) => {
     const { game, settings } = useGameStore.getState();
@@ -54,6 +49,8 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
     a.x = x;
     a.z = z;
 
+    // Asleep in the shelter: out of sight until morning.
+    r.visible = !isInside(game, animal);
     const activity = animalActivity(game, animal);
     const k = 1 - Math.exp(-10 * dt);
     r.position.set(x, 0, z);
@@ -75,20 +72,9 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
       const swing = walking ? Math.sin(a.phase + pairPhase) * 0.55 : 0;
       leg.rotation.x = MathUtils.lerp(leg.rotation.x, swing, k * 1.5);
     });
-
-    if (icon.current) {
-      const show = animal.hasProduct && !!product;
-      icon.current.style.display = show ? 'block' : 'none';
-      if (show) icon.current.style.transform = `translateY(${Math.sin(a.time * 3) * 4}px)`;
-    }
   });
 
-  const onClick = (e: ThreeEvent<MouseEvent>) => {
-    if (e.button !== 0 || e.delta > CLICK_TOLERANCE) return;
-    e.stopPropagation();
-    useGameStore.getState().collectAnimal(id);
-  };
-  // Pressing on an animal collects it instead of starting an area drag on the tile below.
+  // Pressing on an animal does not start an area drag on the tile below.
   const stopDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button === 0) e.stopPropagation();
   };
@@ -103,7 +89,7 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
   };
 
   return (
-    <group ref={root} onClick={onClick} onPointerDown={stopDown} onPointerOver={onOver} onPointerOut={onOut}>
+    <group ref={root} onPointerDown={stopDown} onPointerOver={onOver} onPointerOut={onOut}>
       <group scale={model.fit}>
       <mesh position={model.hitboxCenter} material={HITBOX_MATERIAL}>
         <boxGeometry args={model.hitbox} />
@@ -123,17 +109,6 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
         ))}
       </group>
       </group>
-      {product && (
-        <Html position={[0, model.worldHeight + 0.12, 0]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
-          <div
-            ref={icon}
-            style={{ display: 'none' }}
-            className="rounded-full border-2 border-wood/50 bg-parchment/95 px-1.5 text-lg leading-7 shadow"
-          >
-            {ANIMAL_PRODUCTS[product].icon}
-          </div>
-        </Html>
-      )}
     </group>
   );
 }

@@ -1,4 +1,4 @@
-import { ANIMAL_IDS, ANIMAL_PRODUCT_IDS, type AnimalId, type AnimalProductId } from '../data/animals';
+import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCT_IDS, type AnimalId, type AnimalProductId } from '../data/animals';
 import { CROP_IDS, type CropId } from '../data/crops';
 import { ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X } from '../data/roads';
 import { START_STRUCTURES, STRUCTURE_IDS, type StructureId } from '../data/structures';
@@ -22,7 +22,7 @@ import type {
   Rotation,
   Specialty,
   Stars,
-  BuildJob,
+  TaskJob,
   StructureInstance,
   StructureWork,
   StructureWorkKind,
@@ -35,11 +35,12 @@ import type {
   WorkerProfile,
 } from './types';
 import { repairSiteTasks } from './construction';
+import { rehomeAnimals } from './shelters';
 import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -57,16 +58,18 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * v4 added the list of placed structures; v5 added roads (`Tile.road`) and the access road;
  * v6 moved the access road south, replaced the family with staff (age, stars, skills,
  * priorities, hourly wage), added the bunkhouse and the hiring board; v7 made construction
- * work for the crew (`StructureInstance.work`, 'build' tasks with a `job`, 'build' in priorities).
+ * work for the crew (`StructureInstance.work`, 'build' tasks with a `job`, 'build' in priorities);
+ * v8 housed animals in shelters (`Animal.shelterId`, `path` instead of `target`, products in
+ * `StructureInstance.stock`) and added the 'tend' activity.
  */
-export interface SaveDataV7 {
-  saveVersion: 7;
+export interface SaveDataV8 {
+  saveVersion: 8;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV7;
+export type SaveData = SaveDataV8;
 
 export interface LoadedSave {
   game: GameState;
@@ -158,6 +161,29 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
         : w,
     );
     return { ...data, game: { ...game, workers } };
+  },
+  // v7 → v8: animals move into shelters (assigned on load by rehomeAnimals), walk along paths and
+  // leave their products in the shelter; a ready product is laid as soon as the game runs. Everyone
+  // gets the new 'tend' activity at the end of their list.
+  7: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    const workers = (Array.isArray(game.workers) ? game.workers : []).map((w) =>
+      isRecord(w) && Array.isArray(w.priorities) && !w.priorities.includes('tend')
+        ? { ...w, priorities: [...w.priorities, 'tend'] }
+        : w,
+    );
+    const animals = (Array.isArray(game.animals) ? game.animals : []).map((a) => {
+      if (!isRecord(a)) return a;
+      const { target, hasProduct, ...rest } = a;
+      const hours = isAnimalId(a.kind) ? ANIMALS[a.kind].productionHours : 0;
+      return {
+        ...rest,
+        shelterId: -1,
+        path: isRecord(target) ? [target] : [],
+        productMinutes: hasProduct === true ? hours * 60 : rest.productMinutes,
+      };
+    });
+    return { ...data, game: { ...game, workers, animals } };
   },
 };
 
@@ -302,7 +328,7 @@ const parseTile = (v: unknown): Tile | null => {
   return tile;
 };
 
-const TASK_KINDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'build'];
+const TASK_KINDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'tend', 'build'];
 const WORKER_KINDS: readonly WorkerKind[] = ['staff', 'temp'];
 const STARS: readonly Stars[] = [1, 2, 3];
 const isStars = (v: unknown): v is Stars => STARS.some((s) => s === v);
@@ -368,9 +394,10 @@ const parseCandidate = (v: unknown): Candidate | null => {
   return { ...profile, id: v.id, hireCost: v.hireCost };
 };
 
-const parseJob = (v: unknown): BuildJob | null => {
+const parseJob = (v: unknown): TaskJob | null => {
   if (!isRecord(v)) return null;
   if (v.type === 'structure' && isId(v.structureId)) return { type: 'structure', structureId: v.structureId };
+  if (v.type === 'shelter' && isId(v.structureId)) return { type: 'shelter', structureId: v.structureId };
   if (v.type === 'road' && typeof v.remove === 'boolean') return { type: 'road', remove: v.remove };
   return null;
 };
@@ -381,28 +408,40 @@ const parseTask = (v: unknown): Task | null => {
   if (!isId(id) || !isTaskKind(kind) || !isFiniteNumber(tile) || !isValidTileIndex(tile)) return null;
   if (cropId !== null && !isCropId(cropId)) return null;
   if (workerId !== null && !isId(workerId)) return null;
-  if (kind !== 'build') return { id, kind, tile, cropId, workerId };
+  if (kind !== 'build' && kind !== 'tend') return { id, kind, tile, cropId, workerId };
   const job = parseJob(v.job);
   return job ? { id, kind, tile, cropId: null, workerId, job } : null;
 };
 
+const parsePath = (v: unknown): GridPoint[] | null => {
+  if (!Array.isArray(v)) return null;
+  const points: GridPoint[] = [];
+  for (const raw of v) {
+    const p = parsePoint(raw);
+    if (!p) return null;
+    points.push(p);
+  }
+  return points;
+};
+
 const parseAnimal = (v: unknown): Animal | null => {
   if (!isRecord(v)) return null;
-  const { id, kind, x, y, target, waitMinutes, productMinutes, hasProduct, fed } = v;
+  const { id, kind, shelterId, x, y, waitMinutes, productMinutes, fed } = v;
   if (!isId(id) || !isAnimalId(kind) || !isFiniteNumber(x) || !isFiniteNumber(y)) return null;
-  if (!isFiniteNumber(waitMinutes) || !isFiniteNumber(productMinutes)) return null;
-  if (typeof hasProduct !== 'boolean' || typeof fed !== 'boolean') return null;
-  const point = target === null ? null : parsePoint(target);
-  if (target !== null && !point) return null;
+  // A missing or unknown shelter (-1 after migrating) is fixed by rehomeAnimals.
+  if (!isFiniteNumber(shelterId) || !Number.isInteger(shelterId)) return null;
+  if (!isFiniteNumber(waitMinutes) || !isFiniteNumber(productMinutes) || typeof fed !== 'boolean') return null;
+  const path = parsePath(v.path);
+  if (!path) return null;
   return {
     id,
     kind,
+    shelterId,
     x,
     y,
-    target: point,
+    path,
     waitMinutes: Math.max(0, waitMinutes),
     productMinutes: Math.max(0, productMinutes),
-    hasProduct,
     fed,
   };
 };
@@ -427,7 +466,17 @@ const parseStructure = (v: unknown): StructureInstance | null => {
   if (!isId(x) || !isId(y) || !inBounds(x, y)) return null;
   const work = parseWork(v.work);
   if (work === null) return null;
-  return work ? { id, type, x, y, rotation, work } : { id, type, x, y, rotation };
+  const stock = v.stock === undefined ? undefined : parseProducts(v.stock);
+  if (stock === null) return null;
+  return {
+    id,
+    type,
+    x,
+    y,
+    rotation,
+    ...(work ? { work } : {}),
+    ...(stock && Object.keys(stock).length > 0 ? { stock } : {}),
+  };
 };
 
 const parseList = <T>(v: unknown, parse: (item: unknown) => T | null): T[] | null => {
@@ -481,8 +530,8 @@ const parseGame = (v: unknown): GameState | null => {
     ...structures.map((s) => s.id),
   );
 
-  // Construction tasks and sites must match (a site always has its crew tasks).
-  return repairSiteTasks({
+  // Every animal has a shelter, and construction tasks and sites match (a site always has its crew).
+  return repairSiteTasks(rehomeAnimals({
     gameMinutes,
     money,
     // Tile flags are derived from the structure list, so footprint changes never leave stale tiles.
@@ -496,7 +545,7 @@ const parseGame = (v: unknown): GameState | null => {
     animals,
     structures,
     nextId: Math.max(nextId, maxId + 1),
-  });
+  }));
 };
 
 const parseSettings = (v: unknown): SaveSettings => {

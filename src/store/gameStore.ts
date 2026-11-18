@@ -1,10 +1,10 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import type { AnimalId, AnimalProductId } from '../data/animals';
+import { ANIMALS, type AnimalId, type AnimalProductId } from '../data/animals';
 import type { CropId } from '../data/crops';
 import { STRUCTURES, type StructureId } from '../data/structures';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
-import { buyAnimal, collectProduct, sellAnimal } from '../game/animals';
+import { buyAnimal, sellAnimal } from '../game/animals';
 import { buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
 import { plotOfTile, tileCoords, tilesInRect } from '../game/grid';
 import {
@@ -98,7 +98,6 @@ export interface GameStore {
   clearTasks: () => void;
   buyAnimal: (kind: AnimalId) => void;
   sellAnimal: (kind: AnimalId) => void;
-  collectAnimal: (animalId: number) => void;
   sellProduct: (product: AnimalProductId, quantity: number) => void;
   /** Dev tools: applies a state transform directly. */
   devApply: (transform: (game: GameState) => GameState, message?: string) => void;
@@ -144,6 +143,10 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'already-road': 'Já existe estrada aqui.',
   'no-road': 'Não há nada para demolir aqui.',
   'under-construction': 'Esta construção já está em obra.',
+  'no-shelter': 'Construa um abrigo para esta espécie primeiro (menu Construir).',
+  'shelter-full': 'Os abrigos desta espécie estão cheios. Construa outro.',
+  'pasture-full': 'O pasto está lotado. Compre um lote ou deixe mais grama livre.',
+  'shelter-in-use': 'Há animais morando neste abrigo. Venda-os antes de demolir.',
 };
 
 const label = (type: StructureId): string => STRUCTURES[type].label;
@@ -360,13 +363,14 @@ export const useGameStore = create<GameStore>()(
       selectWorker: (selectedWorker) => set(selectedWorker === null ? { selectedWorker } : { selectedWorker, panel: 'workers' }),
       clearTasks: () => set((s) => ({ game: clearTasks(s.game) })),
       buyAnimal: (kind) => {
-        commit(buyAnimal(get().game, kind));
+        const before = get().game;
+        if (!commit(buyAnimal(before, kind))) return;
+        const animal = get().game.animals[get().game.animals.length - 1];
+        const home = get().game.structures.find((s) => s.id === animal?.shelterId);
+        if (home) get().showMessage(`${ANIMALS[kind].label} comprado(a): mora no ${STRUCTURES[home.type].label.toLowerCase()}.`, 'info');
       },
       sellAnimal: (kind) => {
         commit(sellAnimal(get().game, kind));
-      },
-      collectAnimal: (animalId) => {
-        commit(collectProduct(get().game, animalId));
       },
       sellProduct: (product, quantity) => {
         commit(sellAnimalProduct(get().game, product, quantity));

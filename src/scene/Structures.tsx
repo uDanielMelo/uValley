@@ -1,8 +1,9 @@
 import type { ThreeEvent } from '@react-three/fiber';
-import { STRUCTURE_IDS, type StructureId } from '../data/structures';
+import { STRUCTURES, STRUCTURE_IDS, type StructureId } from '../data/structures';
 import type { Rotation, StructureWorkKind } from '../game/types';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { ConstructionSite } from './ConstructionSite';
+import { ShelterBadge } from './ShelterBadge';
 import { STRUCTURE_MODELS, StructureTransform, type PlacedProps } from './structureModels';
 
 export { STRUCTURE_MODELS, StructureTransform };
@@ -86,7 +87,10 @@ export function Structures() {
         s.work ? (
           <ConstructionSite key={`${s.id}-${s.work}`} id={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} kind={s.work} />
         ) : (
-          <PlacedStructure key={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} />
+          <group key={s.id}>
+            <PlacedStructure type={s.type} x={s.x} y={s.y} rotation={s.rotation} />
+            {STRUCTURES[s.type].shelter && <ShelterBadge id={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} />}
+          </group>
         ),
       )}
     </group>

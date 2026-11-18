@@ -1,4 +1,4 @@
-import { ANIMAL_IDS } from '../data/animals';
+import { ANIMAL_IDS, type AnimalId } from '../data/animals';
 import { CROP_IDS, type CropId } from '../data/crops';
 import {
   AGE_BANDS,
@@ -62,11 +62,19 @@ export interface TaskContext {
   kind: TaskKind;
   /** Crop being planted, watered or harvested, if any. */
   cropId: CropId | null;
+  /** Animals being tended, if any. */
+  animalId?: AnimalId | null;
 }
+
+const specialtyMatches = (specialty: Specialty | null, task: TaskContext): boolean => {
+  if (!specialty) return false;
+  if (specialty.kind === 'crop') return task.cropId !== null && specialty.id === task.cropId;
+  return task.animalId != null && specialty.id === task.animalId;
+};
 
 const matches = (profile: WorkerProfile, task: TaskContext): { skill: boolean; specialty: boolean } => ({
   skill: profile.skills.includes(TASK_SKILL[task.kind]),
-  specialty: profile.specialty?.kind === 'crop' && task.cropId !== null && profile.specialty.id === task.cropId,
+  specialty: specialtyMatches(profile.specialty, task),
 });
 
 /** Multiplier on work speed for a task (1 = normal): age, stars, skill and specialty. */

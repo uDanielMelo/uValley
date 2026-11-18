@@ -9,6 +9,7 @@ import { MAX_TASKS } from '../data/workers';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { isWalkable } from './path';
 import { roadError } from './roads';
+import { collectShelter, shelterDef } from './shelters';
 import {
   buildCost,
   buildMinutesFor,
@@ -114,6 +115,10 @@ const addSiteTasks = (state: GameState, s: StructureInstance): GameState => {
 
 const isSiteTask = (structureId: number) => (t: Task) => t.job?.type === 'structure' && t.job.structureId === structureId;
 
+/** Any task on a structure: its site work or its chores (when the structure goes away). */
+const isTaskOn = (structureId: number) => (t: Task) =>
+  (t.job?.type === 'structure' || t.job?.type === 'shelter') && t.job.structureId === structureId;
+
 const withWork = (state: GameState, structureId: number, work: StructureWork | undefined): GameState => ({
   ...state,
   structures: state.structures.map((s) => {
@@ -162,19 +167,21 @@ export const orderDemolish = (state: GameState, tile: number): ActionResult => {
 export const cancelWork = (state: GameState, structureId: number): ActionResult => {
   const s = state.structures.find((x) => x.id === structureId);
   if (!s?.work) return fail('no-structure');
-  const cleared = dropTasks(state, isSiteTask(structureId));
-  if (s.work.kind === 'demolish') return ok(withWork(cleared, structureId, undefined));
-  const removed = removeStructure(cleared, structureId);
+  if (s.work.kind === 'demolish') return ok(withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined));
+  const removed = removeStructure(dropTasks(state, isTaskOn(structureId)), structureId);
   return ok({ ...removed, money: removed.money + buildCost(s.type) });
 };
 
-/** Finishes a structure's work: the building is ready, or it is gone and part of its cost comes back. */
+/**
+ * Finishes a structure's work: the building is ready, or it is gone, part of its cost comes back
+ * and whatever products were left in it go to the inventory.
+ */
 export const completeWork = (state: GameState, structureId: number): GameState => {
   const s = state.structures.find((x) => x.id === structureId);
   if (!s?.work) return state;
-  const cleared = dropTasks(state, isSiteTask(structureId));
-  if (s.work.kind === 'build') return withWork(cleared, structureId, undefined);
-  const removed = removeStructure(cleared, structureId);
+  if (s.work.kind === 'build') return withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined);
+  const emptied = collectShelter(state, structureId);
+  const removed = removeStructure(dropTasks(emptied.ok ? emptied.state : state, isTaskOn(structureId)), structureId);
   return { ...removed, money: removed.money + refundFor(s.type) };
 };
 
@@ -321,15 +328,17 @@ export const cancelAllOrders = (state: GameState): GameState => {
 };
 
 /**
- * Keeps the queue and the sites consistent (after loading a save): drops construction tasks
- * without a site and requeues the crew of sites that lost their tasks.
+ * Keeps the queue and the sites consistent (after loading a save): drops construction and chore
+ * tasks without their structure and requeues the crew of sites that lost their tasks.
  */
 export const repairSiteTasks = (state: GameState): GameState => {
   const sites = new Set(state.structures.filter((s) => s.work).map((s) => s.id));
-  let next = dropTasks(
-    state,
-    (t) => t.kind === 'build' && (!t.job || (t.job.type === 'structure' && !sites.has(t.job.structureId))),
-  );
+  const shelters = new Set(state.structures.filter((s) => shelterDef(s.type)).map((s) => s.id));
+  let next = dropTasks(state, (t) => {
+    if (t.kind === 'tend') return t.job?.type !== 'shelter' || !shelters.has(t.job.structureId);
+    if (t.kind !== 'build') return false;
+    return !t.job || t.job.type === 'shelter' || (t.job.type === 'structure' && !sites.has(t.job.structureId));
+  });
   for (const s of next.structures) if (s.work) next = addSiteTasks(next, s);
   return next;
 };

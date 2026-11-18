@@ -1,6 +1,7 @@
 import { CROP_IDS } from '../data/crops';
 import { applyTool, plant } from './actions';
 import { layRoad, removeRoad } from './roads';
+import { collectShelter } from './shelters';
 import { fail, ok, type ActionResult, type GameState, type Task } from './types';
 
 /** What a task needs to be applied. */
@@ -12,9 +13,14 @@ export type TaskOrder = Pick<Task, 'kind' | 'tile' | 'cropId' | 'job'>;
  */
 export const applyTask = (state: GameState, task: TaskOrder): ActionResult => {
   if (task.kind === 'seed') return task.cropId ? plant(state, task.tile, task.cropId) : fail('no-seeds');
-  if (task.kind !== 'build') return applyTool(state, task.kind, task.tile, CROP_IDS[0]);
+  if (task.kind !== 'build' && task.kind !== 'tend') return applyTool(state, task.kind, task.tile, CROP_IDS[0]);
   const job = task.job;
   if (!job) return fail('no-structure');
+  // Collecting never fails in the projected queue: a shelter may fill up before the crew gets there.
+  if (job.type === 'shelter') {
+    const collected = collectShelter(state, job.structureId);
+    return collected.ok || collected.error === 'no-product' ? ok(collected.ok ? collected.state : state) : collected;
+  }
   if (job.type === 'road') return job.remove ? removeRoad(state, task.tile) : layRoad(state, task.tile);
   return state.structures.some((s) => s.id === job.structureId && s.work) ? ok(state) : fail('no-structure');
 };

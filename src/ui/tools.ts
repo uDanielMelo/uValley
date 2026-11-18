@@ -23,6 +23,7 @@ export const TASK_LABELS: Record<TaskKind, string> = {
   seed: 'Plantar',
   water: 'Regar',
   hand: 'Colher',
+  tend: 'Tratar animais',
   build: 'Obras',
 };
 
@@ -31,6 +32,7 @@ export const TASK_ICONS: Record<TaskKind, string> = {
   seed: '🌱',
   water: '💧',
   hand: '✋',
+  tend: '🧺',
   build: '🔨',
 };
 
@@ -40,23 +42,25 @@ export const TASK_VERBS: Record<TaskKind, string> = {
   seed: 'Plantando',
   water: 'Regando',
   hand: 'Colhendo',
+  tend: 'Coletando',
   build: 'Em obra',
 };
 
-/** What a construction task is about: [label, ongoing verb] (pt-BR). */
-const buildTaskWords = (game: GameState, task: Task): [string, string] => {
+/** What a construction or animal care task is about: [label, ongoing verb] (pt-BR). */
+const jobWords = (game: GameState, task: Task): [string, string] => {
   const job = task.job;
   if (job?.type === 'road') return job.remove ? ['Remover estrada', 'Removendo estrada'] : ['Abrir estrada', 'Abrindo estrada'];
-  const site = job ? game.structures.find((s) => s.id === job.structureId) : undefined;
-  if (!site) return [TASK_LABELS.build, TASK_VERBS.build];
-  const name = STRUCTURES[site.type].label.toLowerCase();
-  return site.work?.kind === 'demolish' ? [`Demolir ${name}`, `Demolindo ${name}`] : [`Construir ${name}`, `Construindo ${name}`];
+  const target = job ? game.structures.find((s) => s.id === job.structureId) : undefined;
+  if (!target) return [TASK_LABELS[task.kind], TASK_VERBS[task.kind]];
+  const name = STRUCTURES[target.type].label.toLowerCase();
+  if (job?.type === 'shelter') return [`Coletar no ${name}`, `Coletando no ${name}`];
+  return target.work?.kind === 'demolish' ? [`Demolir ${name}`, `Demolindo ${name}`] : [`Construir ${name}`, `Construindo ${name}`];
 };
 
 /** Name of a queued task, e.g. "Regar" or "Construir galinheiro". */
 export const taskLabel = (game: GameState, task: Task): string =>
-  task.kind === 'build' ? buildTaskWords(game, task)[0] : TASK_LABELS[task.kind];
+  task.job ? jobWords(game, task)[0] : TASK_LABELS[task.kind];
 
-/** What a worker doing the task is doing, e.g. "Regando" or "Construindo galinheiro". */
+/** What a worker doing the task is doing, e.g. "Regando" or "Coletando no galinheiro". */
 export const taskVerb = (game: GameState, task: Task): string =>
-  task.kind === 'build' ? buildTaskWords(game, task)[1] : TASK_VERBS[task.kind];
+  task.job ? jobWords(game, task)[1] : TASK_VERBS[task.kind];

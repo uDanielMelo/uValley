@@ -42,6 +42,8 @@ export interface AnimalDef {
   /** Fed game hours between products. */
   productionHours: number;
   labor: LaborBonus;
+  /** Room it takes on pasture (a plot of free grass holds PLOT_PASTURE_UNITS). */
+  pastureUnits: number;
   /** Wandering speed in tiles per game minute. */
   moveSpeed: number;
   icon: string;
@@ -56,6 +58,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     product: 'egg',
     productionHours: 24,
     labor: {},
+    pastureUnits: 1,
     moveSpeed: 0.5,
     icon: '🐔',
   },
@@ -67,6 +70,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     product: 'duckEgg',
     productionHours: 24,
     labor: {},
+    pastureUnits: 1,
     moveSpeed: 0.4,
     icon: '🦆',
   },
@@ -78,6 +82,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     product: 'truffle',
     productionHours: 48,
     labor: {},
+    pastureUnits: 3,
     moveSpeed: 0.3,
     icon: '🐖',
   },
@@ -89,6 +94,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     product: 'wool',
     productionHours: 72,
     labor: {},
+    pastureUnits: 2,
     moveSpeed: 0.28,
     icon: '🐑',
   },
@@ -100,6 +106,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     product: 'goatMilk',
     productionHours: 24,
     labor: {},
+    pastureUnits: 2,
     moveSpeed: 0.4,
     icon: '🐐',
   },
@@ -111,6 +118,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     product: 'milk',
     productionHours: 24,
     labor: {},
+    pastureUnits: 3,
     moveSpeed: 0.25,
     icon: '🐄',
   },
@@ -122,6 +130,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     product: null,
     productionHours: 0,
     labor: { hoe: 0.4 },
+    pastureUnits: 3,
     moveSpeed: 0.22,
     icon: '🐂',
   },
@@ -133,10 +142,23 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     product: null,
     productionHours: 0,
     labor: { walk: 0.3 },
+    pastureUnits: 3,
     moveSpeed: 0.45,
     icon: '🐎',
   },
 };
+
+/**
+ * Pasture: each 4×4 plot of free grass holds this many units (e.g. 4 cows or 12 chickens).
+ * Plots with crops, roads or buildings hold proportionally less.
+ */
+export const PLOT_PASTURE_UNITS = 12;
+/** A shelter keeps up to this many products per head of capacity until the crew collects them. */
+export const SHELTER_STOCK_PER_HEAD = 3;
+/** Animals graze within this many tiles of their shelter's door. */
+export const LEASH_RADIUS = 5;
+/** Work minutes (at speed 1) to collect a shelter's products. */
+export const COLLECT_MINUTES = 10;
 
 /** Maximum total labor bonus of each kind (1 = twice as fast). */
 export const LABOR_BONUS_CAP = 1;

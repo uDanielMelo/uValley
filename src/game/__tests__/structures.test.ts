@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STRUCTURES } from '../../data/structures';
-import { addAnimal } from '../animals';
+import { spawnAnimals } from '../dev';
 import { tileIndex } from '../grid';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { createInitialState } from '../state';
@@ -80,7 +80,7 @@ describe('structure placement', () => {
   });
 
   it('moves animals out of the new footprint onto free land', () => {
-    const base = unwrap(addAnimal(createInitialState(), 'chicken'));
+    const base = spawnAnimals(createInitialState(), 'pig', 1);
     const animal = base.animals[0];
     if (!animal) throw new Error('no animal');
     const s0 = { ...base, animals: [{ ...animal, x: 12.6, y: 12.4 }] };

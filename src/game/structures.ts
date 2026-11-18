@@ -1,5 +1,6 @@
 import { DEMOLISH_REFUND, DEMOLISH_WORK, STRUCTURES, type StructureId } from '../data/structures';
 import { BUNKHOUSE_BEDS } from '../data/workers';
+import { GRID_SIZE } from '../data/world';
 import { inBounds, tileIndex } from './grid';
 import { findPath, isWalkable } from './path';
 import {
@@ -34,6 +35,34 @@ export const footprintOf = (type: StructureId, x: number, y: number, rotation: R
 export const anchorFor = (type: StructureId, tileX: number, tileY: number, rotation: Rotation): GridPoint => {
   const { width, depth } = footprintOf(type, 0, 0, rotation);
   return { x: tileX - Math.floor((width - 1) / 2), y: tileY - Math.floor((depth - 1) / 2) };
+};
+
+/** Direction a structure's front (+z in its model) faces in tile space, for each quarter turn. */
+const FRONT: Record<Rotation, GridPoint> = {
+  0: { x: 0, y: 1 },
+  1: { x: 1, y: 0 },
+  2: { x: 0, y: -1 },
+  3: { x: -1, y: 0 },
+};
+
+/**
+ * A point in front of a structure: `gap` tiles out from the front wall (negative: inside), shifted
+ * `across` tiles along the wall.
+ */
+export const frontPoint = (s: Pick<StructureInstance, 'type' | 'x' | 'y' | 'rotation'>, gap: number, across = 0): GridPoint => {
+  const fp = footprintOf(s.type, s.x, s.y, s.rotation);
+  const front = FRONT[s.rotation];
+  const reach = STRUCTURES[s.type].depth / 2 + gap;
+  return {
+    x: fp.x + fp.width / 2 + front.x * reach - front.y * across,
+    y: fp.y + fp.depth / 2 + front.y * reach + front.x * across,
+  };
+};
+
+/** The footprint tile at the middle of the front wall (where the door is). */
+export const frontTile = (s: Pick<StructureInstance, 'type' | 'x' | 'y' | 'rotation'>): number => {
+  const p = frontPoint(s, -0.5, -0.01);
+  return tileIndex(Math.floor(p.x), Math.floor(p.y));
 };
 
 /** Tile coordinates covered by a footprint (may be out of bounds). */
@@ -104,6 +133,49 @@ export const checkPlacement = (
   return null;
 };
 
+/**
+ * Where a structure fits without cost checks (free owned grass, no road, no queued work), as close
+ * as possible to `near`. It prefers spots with a one-tile gap to other structures and roads, so
+ * doors and paths stay clear. Used by save migrations and dev tools. Null when it fits nowhere.
+ */
+export const findFreeSpot = (
+  state: Pick<GameState, 'tiles' | 'tasks'>,
+  type: StructureId,
+  near: GridPoint,
+): { x: number; y: number; rotation: Rotation } | null => {
+  const busy = new Set(state.tasks.map((t) => t.tile));
+  const free = (x: number, y: number): boolean => {
+    if (!inBounds(x, y)) return false;
+    const index = tileIndex(x, y);
+    const tile = state.tiles[index];
+    return !!tile && tile.state === 'grass' && !tile.structure && !tile.road && !busy.has(index);
+  };
+  const clear = (x: number, y: number): boolean => {
+    const tile = inBounds(x, y) ? state.tiles[tileIndex(x, y)] : undefined;
+    return !tile?.structure && !tile?.road;
+  };
+  const search = (gap: number) => {
+    let best: { x: number; y: number; rotation: Rotation } | null = null;
+    let bestDistance = Infinity;
+    for (const rotation of [0, 1] as const) {
+      const { width, depth } = footprintOf(type, 0, 0, rotation);
+      for (let y = 0; y + depth <= GRID_SIZE; y++) {
+        for (let x = 0; x + width <= GRID_SIZE; x++) {
+          const d = Math.hypot(x + width / 2 - near.x, y + depth / 2 - near.y) + rotation * 0.01;
+          if (d >= bestDistance) continue;
+          if (!footprintCells({ x, y, width, depth }).every((c) => free(c.x, c.y))) continue;
+          const margin = { x: x - gap, y: y - gap, width: width + gap * 2, depth: depth + gap * 2 };
+          if (gap > 0 && !footprintCells(margin).every((c) => clear(c.x, c.y))) continue;
+          best = { x, y, rotation };
+          bestDistance = d;
+        }
+      }
+    }
+    return best;
+  };
+  return search(1) ?? search(0);
+};
+
 type Passable = (x: number, y: number) => boolean;
 
 /**
@@ -129,7 +201,7 @@ const pushOut = (p: GridPoint, fp: Footprint, passable: Passable): GridPoint => 
 
 const evictAnimal = (a: Animal, fp: Footprint, state: GameState): Animal => {
   const moved = pushOut({ x: a.x, y: a.y }, fp, (x, y) => isWalkable(state.tiles, x, y));
-  return moved.x === a.x && moved.y === a.y ? a : { ...a, x: moved.x, y: moved.y, target: null };
+  return moved.x === a.x && moved.y === a.y ? a : { ...a, x: moved.x, y: moved.y, path: [] };
 };
 
 const evictWorker = (w: Worker, fp: Footprint, state: GameState): Worker => {
@@ -200,6 +272,7 @@ export const checkDemolish = (state: GameState, tile: number): StructureInstance
   if (!found) return 'no-structure';
   if (STRUCTURES[found.type].cost === undefined) return 'not-demolishable';
   if (found.work) return 'under-construction';
+  if (state.animals.some((a) => a.shelterId === found.id)) return 'shelter-in-use';
   if (found.type === 'bunkhouse') {
     const staff = state.workers.filter((w) => w.kind === 'staff').length;
     if (bedCount(state) - BUNKHOUSE_BEDS < staff) return 'beds-in-use';

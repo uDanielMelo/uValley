@@ -50,6 +50,8 @@ export interface StructureInstance {
    * The footprint is reserved (Tile.structure) for the whole time.
    */
   work?: StructureWork;
+  /** Animal products waiting in a shelter for the crew to collect. */
+  stock?: ProductCounts;
 }
 
 export type ItemCounts = Partial<Record<CropId, number>>;
@@ -62,12 +64,14 @@ export interface Inventory {
   products: ProductCounts;
 }
 
-/** What a construction ('build') task works on. */
-export type BuildJob =
+/** What a 'build' or 'tend' task works on. */
+export type TaskJob =
   /** A structure site or demolition; the task tile is one of the footprint tiles. */
   | { type: 'structure'; structureId: number }
   /** Opening (or removing) the road on the task tile. */
-  | { type: 'road'; remove: boolean };
+  | { type: 'road'; remove: boolean }
+  /** Collecting a shelter's products ('tend'); the task tile is the footprint tile by the door. */
+  | { type: 'shelter'; structureId: number };
 
 /** A queued order on a tile, executed by a worker. */
 export interface Task {
@@ -78,8 +82,8 @@ export interface Task {
   cropId: CropId | null;
   /** Worker currently assigned, if any. */
   workerId: number | null;
-  /** Present on (and only on) 'build' tasks. */
-  job?: BuildJob;
+  /** Present on (and only on) 'build' and 'tend' tasks. */
+  job?: TaskJob;
 }
 
 /** Staff live in the bunkhouse and earn an hourly wage; day laborers ('temp') leave at the end of the shift. */
@@ -135,17 +139,17 @@ export type WorkerActivity = 'idle' | 'walking' | 'working' | 'resting';
 export interface Animal {
   id: number;
   kind: AnimalId;
+  /** The shelter it lives in (it grazes around it and sleeps inside). */
+  shelterId: number;
   /** Position in tile space. */
   x: number;
   y: number;
-  /** Where it is wandering to, if moving. */
-  target: GridPoint | null;
+  /** Waypoints it is walking along (a wander leg, or the way home); empty when standing. */
+  path: GridPoint[];
   /** Game minutes left resting before picking a new spot. */
   waitMinutes: number;
-  /** Fed minutes accumulated toward the next product. */
+  /** Fed minutes accumulated toward the next product (it goes to the shelter). */
   productMinutes: number;
-  /** A product is ready to collect (click the animal). */
-  hasProduct: boolean;
   /** Fed today (feed is paid at midnight). */
   fed: boolean;
 }
@@ -176,8 +180,8 @@ export interface GameState {
 }
 
 export type ToolId = 'hoe' | 'seed' | 'water' | 'hand';
-/** Kinds of queued work: the four farm tools plus construction (structures and roads). */
-export type TaskKind = ToolId | 'build';
+/** Kinds of queued work: the four farm tools, animal care (collecting at shelters) and construction. */
+export type TaskKind = ToolId | 'tend' | 'build';
 
 export type ActionError =
   | 'out-of-bounds'
@@ -213,7 +217,11 @@ export type ActionError =
   | 'road'
   | 'already-road'
   | 'no-road'
-  | 'under-construction';
+  | 'under-construction'
+  | 'no-shelter'
+  | 'shelter-full'
+  | 'pasture-full'
+  | 'shelter-in-use';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 

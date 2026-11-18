@@ -1,8 +1,10 @@
 import type { CropId } from '../data/crops';
 import { ROAD_COST, ROAD_WALK_BONUS } from '../data/roads';
 import { MINUTES_PER_DAY } from '../data/world';
+import { ANIMALS, COLLECT_MINUTES } from '../data/animals';
 import { MAX_TASKS, TASK_MINUTES, WALK_SPEED, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { laborMultipliers } from './animals';
+import { mainSpecies } from './shelters';
 import { addWork, cancelAllOrders, roadTaskMinutes, workSpot } from './construction';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { homeSpot } from './home';
@@ -173,17 +175,20 @@ const tileCenter = (tile: number): GridPoint => {
   return { x: x + 0.5, y: y + 0.5 };
 };
 
-/** Where a worker stands to do a task: on its tile, or beside the wall for structure work. */
+/** Where a worker stands to do a task: on its tile, or beside the wall for structure and shelter work. */
 export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoint => {
   const job = task.job;
-  if (job?.type !== 'structure') return tileCenter(task.tile);
+  if (job?.type !== 'structure' && job?.type !== 'shelter') return tileCenter(task.tile);
   const site = state.structures.find((s) => s.id === job.structureId);
   return (site && workSpot(state, site, task.tile, from)) ?? tileCenter(task.tile);
 };
 
 /** Work minutes (at speed 1) of a task that is done in one go (structure work accumulates on the site). */
-export const taskMinutes = (task: Task): number =>
-  task.kind === 'build' ? roadTaskMinutes(task.job?.type === 'road' && task.job.remove) : TASK_MINUTES[task.kind];
+export const taskMinutes = (task: Task): number => {
+  if (task.kind === 'tend') return COLLECT_MINUTES;
+  if (task.kind === 'build') return roadTaskMinutes(task.job?.type === 'road' && task.job.remove);
+  return TASK_MINUTES[task.kind];
+};
 
 /** How far along a worker's current job is (0–1): the whole site for structure work. Null when idle. */
 export const taskProgress = (state: GameState, worker: Worker): number | null => {
@@ -228,19 +233,33 @@ const bestTask = (worker: Worker, tasks: readonly Task[]): Task | undefined => {
   return best;
 };
 
-/** What a task works on: the crop being planted, or the one on the tile (none for tilling and construction). */
-export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' | 'cropId'>): TaskContext => {
+/** What a task works on: the crop being planted or the one on the tile, or the animals tended. */
+export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' | 'cropId' | 'job'>): TaskContext => {
   if (task.kind === 'seed') return { kind: task.kind, cropId: task.cropId };
+  if (task.kind === 'tend') {
+    const job = task.job;
+    return { kind: task.kind, cropId: null, animalId: job?.type === 'shelter' ? mainSpecies(state, job.structureId) : null };
+  }
   if (task.kind === 'hoe' || task.kind === 'build') return { kind: task.kind, cropId: null };
   return { kind: task.kind, cropId: state.tiles[task.tile]?.crop?.cropId ?? null };
 };
 
-/** Effective harvests can give one extra unit (rolled deterministically from the task id). */
-const harvestBonus = (state: GameState, worker: Worker, task: Task, cropId: CropId | null): GameState => {
-  if (task.kind !== 'hand' || cropId === null) return state;
-  const chance = harvestBonusChance(workEffectiveness(worker, { kind: 'hand', cropId }));
-  if (hash01(task.id * 7 + 3) >= chance) return state;
-  return { ...state, inventory: { ...state.inventory, produce: addCount(state.inventory.produce, cropId, 1) } };
+/**
+ * Effective harvests and collections can give one extra unit (rolled deterministically from the
+ * task id): a crop when harvesting, the main product when collecting at a shelter.
+ */
+const effectivenessBonus = (state: GameState, worker: Worker, task: Task, context: TaskContext): GameState => {
+  if (task.kind !== 'hand' && task.kind !== 'tend') return state;
+  if (hash01(task.id * 7 + 3) >= harvestBonusChance(workEffectiveness(worker, context))) return state;
+  const { inventory } = state;
+  if (task.kind === 'hand' && context.cropId) {
+    return { ...state, inventory: { ...inventory, produce: addCount(inventory.produce, context.cropId, 1) } };
+  }
+  const product = context.animalId ? ANIMALS[context.animalId].product : null;
+  if (task.kind === 'tend' && product) {
+    return { ...state, inventory: { ...inventory, products: addCount(inventory.products, product, 1) } };
+  }
+  return state;
 };
 
 /** Walks along the path for up to `minutes`. Returns the moved worker and unused minutes. */
@@ -339,7 +358,7 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
         const progress = w.progress + work;
         if (progress >= taskMinutes(task)) {
           const result = applyTask({ ...world, tasks, workers }, task);
-          if (result.ok) world = harvestBonus(result.state, w, task, context.cropId);
+          if (result.ok) world = effectivenessBonus(result.state, w, task, context);
           // A road that can no longer be opened gives its money back.
           else if (job?.type === 'road' && !job.remove) world = { ...world, money: world.money + ROAD_COST };
           tasks = tasks.filter((t) => t.id !== task.id);

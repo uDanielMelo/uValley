@@ -10,7 +10,7 @@ import { hash01 } from './coords';
 import { Person, personScale, type PersonLook, type PersonRig } from './models/Person';
 
 const HALF = GRID_SIZE / 2;
-const TOOL_IDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'build'];
+const TOOL_IDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'tend', 'build'];
 const STRAW = '#e2c27a';
 
 const DEFAULT_LOOK: PersonLook = { shirt: '#3f6fb5', pants: '#4a5a7a', skin: '#e0ac85', hat: STRAW, hair: '#4a3324' };
@@ -90,6 +90,16 @@ const workPose = (kind: TaskKind, t: number): Pose => {
         bend: 0.85 + Math.sin(t * 4) * 0.08,
         bob: -0.05,
       };
+    case 'tend':
+      // Crouched at the shelter door, filling the bucket.
+      return {
+        legL: -0.6,
+        legR: 0.35,
+        armL: -0.5,
+        armR: -0.9 + Math.sin(t * 3) * 0.3,
+        bend: 0.6 + Math.sin(t * 3) * 0.05,
+        bob: -0.06,
+      };
     case 'build': {
       // Hammering: quick raise and strike, the other hand steadying the board.
       const strike = Math.max(0, Math.sin(t * 7));
@@ -120,6 +130,7 @@ function WorkerFigure({ id }: { id: number }) {
         seed: createRef<Group>(),
         water: createRef<Group>(),
         hand: createRef<Group>(),
+        tend: createRef<Group>(),
         build: createRef<Group>(),
       },
     }),
@@ -168,8 +179,8 @@ function WorkerFigure({ id }: { id: number }) {
       pose = { legL: s * 0.7, legR: -s * 0.7, armL: -s * 0.55, armR: s * 0.55, bend: 0.05, bob: Math.abs(s) * 0.025 };
     } else if (activity === 'working' && task) {
       pose = workPose(task.kind, a.time);
-      // Builders stand beside the wall: face the footprint tile they work on.
-      if (task.job?.type === 'structure') {
+      // Builders and carers stand beside the wall: face the footprint tile they work on.
+      if (task.job?.type === 'structure' || task.job?.type === 'shelter') {
         const tx = (task.tile % GRID_SIZE) + 0.5 - HALF;
         const tz = Math.floor(task.tile / GRID_SIZE) + 0.5 - HALF;
         a.heading = Math.atan2(tx - x, tz - z);

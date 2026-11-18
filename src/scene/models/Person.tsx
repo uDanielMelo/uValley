@@ -77,6 +77,9 @@ function Tools({ tools }: { tools: PersonRig['tools'] }) {
       <group ref={tools.hand} visible={false}>
         <Cyl args={[0.08, 0.06, 0.08, 7]} position={[0, -0.06, 0.04]} color={BASKET} />
       </group>
+      <group ref={tools.tend} visible={false}>
+        <Cyl args={[0.07, 0.055, 0.1, 8]} position={[0, -0.07, 0.04]} color={METAL} />
+      </group>
       <group ref={tools.build} visible={false}>
         <Box size={[0.022, 0.2, 0.022]} position={[0, -0.03, 0.06]} color={WOOD} rotation={[1.3, 0, 0]} />
         <Box size={[0.05, 0.05, 0.1]} position={[0, -0.06, 0.15]} color={METAL} rotation={[1.3, 0, 0]} />

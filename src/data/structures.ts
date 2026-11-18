@@ -1,13 +1,34 @@
 /** Structures placed on the grid. */
 
-export const STRUCTURE_IDS = ['house', 'shippingBin', 'bunkhouse', 'chickenCoop', 'silo', 'warehouse', 'barn'] as const;
+import type { AnimalId } from './animals';
+
+export const STRUCTURE_IDS = [
+  'house',
+  'shippingBin',
+  'bunkhouse',
+  'chickenCoop',
+  'pigsty',
+  'sheepfold',
+  'corral',
+  'stable',
+  'silo',
+  'warehouse',
+  'barn',
+] as const;
 export type StructureId = (typeof STRUCTURE_IDS)[number];
 
 export type StructureCategory = 'housing' | 'animals' | 'storage';
 
+/** An animal shelter: which species live there and how many heads fit. */
+export interface ShelterDef {
+  species: readonly AnimalId[];
+  capacity: number;
+}
+
 /**
  * Footprints are in tiles of TILE_METERS (3.5 m, see data/scale.ts) and the models are built to
- * match real sizes: bunkhouse 7 × 3.5 m, coop 7 × 3.5 m, silo Ø 5 m × 12 m, warehouse 10.5 × 7 m, barn 10.5 × 10.5 m.
+ * match real sizes: bunkhouse 7 × 3.5 m, coop 7 × 3.5 m, pigsty 7 × 3.5 m, sheepfold 7 × 7 m,
+ * corral 10.5 × 7 m, stable 7 × 7 m, silo Ø 5 m × 12 m, warehouse 10.5 × 7 m, barn 10.5 × 10.5 m.
  */
 export interface StructureDef {
   id: StructureId;
@@ -20,6 +41,8 @@ export interface StructureDef {
   /** Work minutes (at work speed 1) the crew needs to raise it. Buildable structures only. */
   buildMinutes?: number;
   category?: StructureCategory;
+  /** Present on animal shelters. */
+  shelter?: ShelterDef;
   /** Short pt-BR description for the build menu. */
   description: string;
 }
@@ -54,7 +77,56 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 150,
     buildMinutes: 300,
     category: 'animals',
+    shelter: { species: ['chicken', 'duck'], capacity: 12 },
     description: 'Casinha e cercado telado para galinhas e patas.',
+  },
+  pigsty: {
+    id: 'pigsty',
+    label: 'Chiqueiro',
+    icon: '🐖',
+    width: 2,
+    depth: 1,
+    cost: 250,
+    buildMinutes: 360,
+    category: 'animals',
+    shelter: { species: ['pig'], capacity: 4 },
+    description: 'Abrigo coberto e baia de lama para porcos.',
+  },
+  sheepfold: {
+    id: 'sheepfold',
+    label: 'Aprisco',
+    icon: '🐑',
+    width: 2,
+    depth: 2,
+    cost: 300,
+    buildMinutes: 420,
+    category: 'animals',
+    shelter: { species: ['sheep', 'goat'], capacity: 6 },
+    description: 'Galpão baixo e cercado para ovelhas e cabras.',
+  },
+  corral: {
+    id: 'corral',
+    label: 'Curral',
+    icon: '🐄',
+    width: 3,
+    depth: 2,
+    cost: 400,
+    buildMinutes: 540,
+    category: 'animals',
+    shelter: { species: ['cow', 'ox'], capacity: 4 },
+    description: 'Cobertura aberta e cerca de tábuas para vacas e bois.',
+  },
+  stable: {
+    id: 'stable',
+    label: 'Estábulo',
+    icon: '🐎',
+    width: 2,
+    depth: 2,
+    cost: 450,
+    buildMinutes: 600,
+    category: 'animals',
+    shelter: { species: ['horse'], capacity: 3 },
+    description: 'Baias individuais para cavalos.',
   },
   silo: {
     id: 'silo',
@@ -86,10 +158,13 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     depth: 3,
     cost: 400,
     buildMinutes: 960,
-    category: 'animals',
-    description: 'Abrigo para vacas, bois, cavalos e porcos.',
+    category: 'storage',
+    description: 'Guarda colheita e produtos animais.',
   },
 };
+
+/** Structures that house animals, in menu order. */
+export const SHELTER_IDS: readonly StructureId[] = STRUCTURE_IDS.filter((id) => STRUCTURES[id].shelter !== undefined);
 
 /** Structures the player can build, in menu order. */
 export const BUILDABLE_IDS: readonly StructureId[] = STRUCTURE_IDS.filter((id) => STRUCTURES[id].cost !== undefined);

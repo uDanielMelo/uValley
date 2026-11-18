@@ -2,6 +2,7 @@ import { WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { GROWTH_STEP_MINUTES } from '../data/world';
 import { growTiles } from './growth';
 import { payFeed, stepAnimals } from './animals';
+import { queueShelterChores } from './shelters';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
 import type { GameState, StructureInstance, StructureWorkKind } from './types';
 import type { StructureId } from '../data/structures';
@@ -38,7 +39,8 @@ const finishedWorks = (before: readonly StructureInstance[], after: readonly Str
 
 /**
  * Advances the game by dtMinutes: crop growth (in GROWTH_STEP_MINUTES steps, so the tiles array
- * only changes on step boundaries or when a task finishes), workers (including construction) and animals. Then, for each
+ * only changes on step boundaries or when a task finishes), workers (including construction) and animals,
+ * then queues a collection at every shelter with products. Then, for each
  * full hour that ended: wages for the hours of the shift, day laborers leaving when it ends, and
  * at midnight the feed and a new hiring board.
  */
@@ -48,7 +50,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   const from = Math.floor(state.gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const to = Math.floor(gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const tiles = to > from ? growTiles(state.tiles, from, to) : state.tiles;
-  let next = stepAnimals(stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes), dtMinutes);
+  let next = queueShelterChores(stepAnimals(stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes), dtMinutes));
   const worksFinished = finishedWorks(state.structures, next.structures);
 
   const workersLeft: string[] = [];

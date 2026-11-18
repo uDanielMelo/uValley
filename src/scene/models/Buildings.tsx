@@ -10,7 +10,7 @@ type Vec3 = [number, number, number];
  * world units by <Meters>. Origin = footprint center, y = 0 on the ground, front faces +z.
  */
 
-function Meters({ children }: { children: ReactNode }) {
+export function Meters({ children }: { children: ReactNode }) {
   return <group scale={METER_SCALE}>{children}</group>;
 }
 
@@ -22,7 +22,7 @@ interface BlockProps {
   shadow?: boolean;
 }
 
-function Block({ position, size, color, rotation, shadow = true }: BlockProps) {
+export function Block({ position, size, color, rotation, shadow = true }: BlockProps) {
   return (
     <mesh position={position} rotation={rotation} castShadow={shadow} receiveShadow>
       <boxGeometry args={size} />
@@ -31,7 +31,7 @@ function Block({ position, size, color, rotation, shadow = true }: BlockProps) {
   );
 }
 
-function Glass({ position, size }: { position: Vec3; size: Vec3 }) {
+export function Glass({ position, size }: { position: Vec3; size: Vec3 }) {
   return (
     <mesh position={position} material={WINDOW_MATERIAL}>
       <boxGeometry args={size} />
@@ -52,7 +52,7 @@ interface RoofProps {
 }
 
 /** Triangular-prism roof: ridge along x, sitting on y = base, centered at position [x, z]. */
-function GableRoof({ length, span, rise, base, color, position = [0, 0] }: RoofProps) {
+export function GableRoof({ length, span, rise, base, color, position = [0, 0] }: RoofProps) {
   const geometry = useMemo(() => {
     const shape = new Shape();
     shape.moveTo(-span / 2, 0);
@@ -72,7 +72,7 @@ function GableRoof({ length, span, rise, base, color, position = [0, 0] }: RoofP
 }
 
 /** Thin see-through wire mesh panel (chicken wire). */
-function WirePanel({ position, size, rotationY = 0 }: { position: Vec3; size: [number, number]; rotationY?: number }) {
+export function WirePanel({ position, size, rotationY = 0 }: { position: Vec3; size: [number, number]; rotationY?: number }) {
   return (
     <mesh position={position} rotation={[0, rotationY, 0]}>
       <planeGeometry args={size} />
@@ -81,11 +81,11 @@ function WirePanel({ position, size, rotationY = 0 }: { position: Vec3; size: [n
   );
 }
 
-const WHITE = '#f4efe4';
-const WOOD = '#9c6b3c';
-const WOOD_DARK = '#6e4a2a';
-const CONCRETE = '#a29b8c';
-const HAY = '#d9b45a';
+export const WHITE = '#f4efe4';
+export const WOOD = '#9c6b3c';
+export const WOOD_DARK = '#6e4a2a';
+export const CONCRETE = '#a29b8c';
+export const HAY = '#d9b45a';
 
 // ---------- Chicken coop: 2×1 tiles = 7 × 3.5 m ----------
 

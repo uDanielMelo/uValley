@@ -55,11 +55,13 @@ branch própria, `npm run build` e `npm test` passando, migração de save quand
 ### Etapa 3: animais e abrigos (seção 4)
 Grande demais para uma entrega: dividida em sub-etapas, cada uma com branch e versão de save.
 
-- **3a, abrigos e lotação**: galinheiro (galinha e pata), aprisco (ovelha e cabra), curral (vaca e boi),
+- **3a, abrigos e lotação** ✅: galinheiro (galinha e pata), aprisco (ovelha e cabra), curral (vaca e boi),
   chiqueiro (porco) e estábulo (cavalo). O animal pertence a um abrigo (compra só com vaga), pasta perto
   dele e dorme dentro. Lotação por lote 4×4 em unidades animais (ex.: 4 vacas ou 12 galinhas). O produto
   fica no abrigo e a **coleta vira tarefa** da equipe (habilidade animais e especialidade); o clique
-  direto sai. O celeiro deixa de ser abrigo.
+  direto sai. O celeiro deixa de ser abrigo. Lotação: o pasto da fazenda soma 12 unidades por lote de
+  grama livre (galinha 1, ovelha e cabra 2, porco, vaca, boi e cavalo 3); comprar além disso é
+  bloqueado, e acima da capacidade a produção cai. Save v8.
 - **3b, níveis**: básico, reforçado, confortável e automatizado (conforto e segurança). O upgrade é obra
   (`work.kind = 'upgrade'`). Ordenhadeira no curral (nível 4 coleta sozinho), tela no galinheiro, esterco
   melhor no chiqueiro, estábulo sem automação (até o nível 3).

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCTS, MAX_ANIMALS } from '../../data/animals';
+import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCTS, LEASH_RADIUS, MAX_ANIMALS } from '../../data/animals';
 import { STARTING_MONEY } from '../../data/economy';
 import { MINUTES_PER_DAY } from '../../data/world';
 import {
   animalActivity,
   animalSalePrice,
   buyAnimal,
-  collectProduct,
+  homeOf,
+  isInside,
   isPasture,
   laborMultipliers,
   payFeed,
@@ -28,8 +29,10 @@ import {
 import { produceValue, sellAllProduce, sellAnimalProduct } from '../economy';
 import { tileIndex } from '../grid';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
+import { collectShelter } from '../shelters';
 import { advanceGame, tick } from '../simulation';
 import { createInitialState } from '../state';
+import { placeStructure } from '../structures';
 import type { ActionResult, GameState } from '../types';
 import { toggleTask, type QueueResult } from '../workers';
 
@@ -40,48 +43,63 @@ const unwrap = (result: ActionResult | QueueResult): GameState => {
 
 const rich = (): GameState => ({ ...createInitialState(), money: 100_000 });
 
+/** A farm with a finished coop at (12, 12), at 7:00, with lots of money. */
+const withCoop = (): GameState => setTimeOfDay(unwrap(placeStructure(rich(), 'chickenCoop', 12, 12)), 7);
+
+const coopOf = (s: GameState) => s.structures.find((x) => x.type === 'chickenCoop');
+
 describe('animals', () => {
-  it('can buy every kind; they spawn on pasture near the house', () => {
-    let s = rich();
+  it('can buy every kind once its shelter exists; they live in it', () => {
+    for (const kind of ANIMAL_IDS) expect(buyAnimal(rich(), kind)).toEqual({ ok: false, error: 'no-shelter' });
+    // Every shelter at once needs more pasture than the starting plots hold.
+    let s = unlockAll(rich());
+    for (const kind of ANIMAL_IDS) s = spawnAnimals(s, kind, 1);
+    const before = s.money;
     for (const kind of ANIMAL_IDS) s = unwrap(buyAnimal(s, kind));
-    expect(s.animals).toHaveLength(ANIMAL_IDS.length);
+    expect(s.animals).toHaveLength(ANIMAL_IDS.length * 2);
     const spent = ANIMAL_IDS.reduce((sum, k) => sum + ANIMALS[k].purchaseCost, 0);
-    expect(s.money).toBe(100_000 - spent);
-    for (const a of s.animals) expect(isPasture(s.tiles, Math.floor(a.x), Math.floor(a.y))).toBe(true);
+    expect(s.money).toBe(before - spent);
+    for (const a of s.animals) expect(homeOf(s, a)).not.toBeNull();
   });
 
   it('rejects purchases without money and beyond the limit', () => {
-    const poor = { ...createInitialState(), money: 10 };
-    expect(buyAnimal(poor, 'cow')).toEqual({ ok: false, error: 'not-enough-money' });
+    const poor = { ...withCoop(), money: 10 };
+    expect(buyAnimal(poor, 'chicken')).toEqual({ ok: false, error: 'not-enough-money' });
     const full = spawnAnimals(rich(), 'chicken', MAX_ANIMALS + 5);
     expect(full.animals).toHaveLength(MAX_ANIMALS);
     expect(buyAnimal(full, 'chicken')).toEqual({ ok: false, error: 'max-animals' });
   });
 
-  it('wander only over pasture while awake and sleep at night', () => {
-    let s = spawnAnimals(createInitialState(), 'sheep', 3);
+  it('wander over pasture near the shelter while awake and sleep inside at night', () => {
+    let s = spawnAnimals(withCoop(), 'chicken', 3);
     const start = s.animals.map((a) => [a.x, a.y]);
-    for (let m = 0; m < 240; m++) {
-      s = tick(s, 1);
-      for (const a of s.animals) expect(isPasture(s.tiles, Math.floor(a.x), Math.floor(a.y))).toBe(true);
-    }
+    for (let m = 0; m < 240; m++) s = tick(s, 1);
     expect(s.animals.map((a) => [a.x, a.y])).not.toEqual(start);
+    for (const a of s.animals) {
+      if (a.path.length > 0) continue;
+      expect(isPasture(s.tiles, Math.floor(a.x), Math.floor(a.y))).toBe(true);
+      const home = homeOf(s, a);
+      expect(home && Math.hypot(a.x - home.x, a.y - home.y)).toBeLessThanOrEqual(LEASH_RADIUS + 0.01);
+    }
 
-    s = setTimeOfDay(s, 23);
-    const asleep = s.animals.map((a) => [a.x, a.y]);
-    for (let m = 0; m < 60; m++) s = tick(s, 1);
-    expect(s.animals.map((a) => [a.x, a.y])).toEqual(asleep);
+    s = setTimeOfDay(s, 22);
+    for (let m = 0; m < 90; m++) s = tick(s, 1);
     expect(s.animals.every((a) => animalActivity(s, a) === 'sleeping')).toBe(true);
+    expect(s.animals.every((a) => isInside(s, a))).toBe(true);
   });
 
-  it('produce while fed and the product can be collected and sold', () => {
-    let s = spawnAnimals(createInitialState(), 'chicken', 1);
-    const id = s.animals[0]?.id ?? -1;
-    expect(collectProduct(s, id)).toEqual({ ok: false, error: 'no-product' });
-    s = skipMinutes(s, ANIMALS.chicken.productionHours * 60 + 15);
-    expect(s.animals[0]?.hasProduct).toBe(true);
-    s = unwrap(collectProduct(s, id));
+  it('lay products in the shelter, where they wait for the crew and can then be sold', () => {
+    const s0 = spawnAnimals(withCoop(), 'chicken', 1);
+    const coop = coopOf(s0);
+    if (!coop) throw new Error('no coop');
+    expect(collectShelter(s0, coop.id)).toEqual({ ok: false, error: 'no-product' });
+    // Nobody to tend: the egg waits in the coop and a chore is queued.
+    const laid = skipMinutes({ ...s0, workers: [] }, ANIMALS.chicken.productionHours * 60 + 15);
+    expect(coopOf(laid)?.stock).toEqual({ egg: 1 });
+    expect(laid.tasks.filter((t) => t.kind === 'tend')).toHaveLength(1);
+    const s = unwrap(collectShelter(laid, coop.id));
     expect(s.inventory.products.egg).toBe(1);
+    expect(coopOf(s)?.stock).toBeUndefined();
     expect(produceValue(s)).toBe(ANIMAL_PRODUCTS.egg.sellPrice);
     const sold = unwrap(sellAnimalProduct(s, 'egg', 1));
     expect(sold.money).toBe(s.money + ANIMAL_PRODUCTS.egg.sellPrice);
@@ -105,10 +123,10 @@ describe('animals', () => {
     expect(laborMultipliers(createInitialState())).toEqual({ hoe: 1, walk: 1 });
     const ox = spawnAnimals(createInitialState(), 'ox', 1);
     expect(laborMultipliers(ox).hoe).toBeCloseTo(1 + (ANIMALS.ox.labor.hoe ?? 0));
-    expect(laborMultipliers(spawnAnimals(createInitialState(), 'horse', 20)).walk).toBe(2);
+    expect(laborMultipliers(spawnAnimals(createInitialState(), 'horse', 6)).walk).toBe(2);
 
-    const tile = tileIndex(13, 13);
     const minutesToTill = (base: GameState) => {
+      const tile = tileIndex(19, 12);
       let s = unwrap(toggleTask(base, 'hoe', tile, 'wheat'));
       for (let m = 1; m < 200; m++) {
         s = tick(s, 1);
@@ -120,11 +138,10 @@ describe('animals', () => {
   });
 
   it('sells back at a discount', () => {
-    const s = unwrap(buyAnimal(rich(), 'horse'));
+    const s = unwrap(buyAnimal(spawnAnimals(rich(), 'horse', 1), 'horse'));
     const sold = unwrap(sellAnimal(s, 'horse'));
-    expect(sold.animals).toEqual([]);
-    expect(sold.money).toBe(100_000 - ANIMALS.horse.purchaseCost + animalSalePrice('horse'));
-    expect(sellAnimal(sold, 'horse')).toEqual({ ok: false, error: 'no-animal' });
+    expect(sold.animals).toHaveLength(1);
+    expect(sold.money).toBe(s.money + animalSalePrice('horse'));
   });
 
   it('round-trip in the save and migrate v2 saves', () => {
@@ -171,8 +188,9 @@ describe('dev tools', () => {
     expect(hired.workers).toHaveLength(4);
     expect(hired.money).toBe(s.money);
 
-    const ready = readyAllProducts(spawnAnimals(s, 'horse', 1));
-    expect(ready.animals[0]?.hasProduct).toBe(false);
-    expect(readyAllProducts(spawnAnimals(s, 'cow', 1)).animals[0]?.hasProduct).toBe(true);
+    const horse = readyAllProducts(spawnAnimals(s, 'horse', 1));
+    expect(horse.structures.find((x) => x.type === 'stable')?.stock).toBeUndefined();
+    const cow = readyAllProducts(spawnAnimals(s, 'cow', 1));
+    expect(cow.structures.find((x) => x.type === 'corral')?.stock).toEqual({ milk: 1 });
   });
 });

@@ -14,12 +14,13 @@ export const SKILLS: Record<SkillId, { label: string; icon: string }> = {
   construction: { label: 'Construção', icon: '🔨' },
 };
 
-/** The general skill each task uses. Animal care tasks come in a later stage. */
+/** The general skill each task uses. */
 export const TASK_SKILL: Record<TaskKind, SkillId> = {
   hoe: 'farming',
   seed: 'farming',
   water: 'farming',
   hand: 'farming',
+  tend: 'animals',
   build: 'construction',
 };
 
@@ -131,7 +132,7 @@ export const MAX_WORKERS = 12;
 export const MAX_TASKS = 300;
 
 /** Order in which a new worker picks tasks (editable per worker). */
-export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['water', 'hand', 'seed', 'hoe', 'build'];
+export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['water', 'hand', 'tend', 'seed', 'hoe', 'build'];
 
 /** Workers only work between these game hours; outside them they go home. Wages are paid per hour in between. */
 export const WORK_START_HOUR = 6;

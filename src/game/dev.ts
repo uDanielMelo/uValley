@@ -4,9 +4,12 @@
  */
 import { ANIMALS, ANIMAL_PRODUCT_IDS, type AnimalId } from '../data/animals';
 import { CROP_IDS } from '../data/crops';
-import { MAX_WORKERS } from '../data/workers';
+import { STRUCTURES } from '../data/structures';
+import { HOME_POSITION, MAX_WORKERS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { addAnimal } from './animals';
+import { addStock, sheltersFor } from './shelters';
+import { findFreeSpot, placeStructure } from './structures';
 import { growthMinutesNeeded } from './crops';
 import { PLOT_COUNT } from './grid';
 import { addCount } from './inventory';
@@ -113,23 +116,36 @@ export const finishAllTasks = (state: GameState): GameState => {
   };
 };
 
+/** A finished shelter for a species, placed for free near the house (null when nothing fits). */
+const freeShelter = (state: GameState, kind: AnimalId): GameState | null => {
+  const type = sheltersFor(kind)[0];
+  const spot = type ? findFreeSpot(state, type, HOME_POSITION) : null;
+  if (!type || !spot) return null;
+  const cost = STRUCTURES[type].cost ?? 0;
+  const placed = placeStructure({ ...state, money: state.money + cost }, type, spot.x, spot.y, spot.rotation);
+  return placed.ok ? { ...placed.state, money: state.money } : null;
+};
+
+/** Adds animals for free, ignoring the pasture limit and building free shelters when they run out of room. */
 export const spawnAnimals = (state: GameState, kind: AnimalId, count: number): GameState => {
   let s = state;
   for (let i = 0; i < count; i++) {
-    const result = addAnimal(s, kind);
+    let result = addAnimal(s, kind, { ignorePasture: true });
+    if (!result.ok && (result.error === 'no-shelter' || result.error === 'shelter-full')) {
+      const housed = freeShelter(s, kind);
+      if (housed) result = addAnimal(housed, kind, { ignorePasture: true });
+    }
     if (!result.ok) break;
     s = result.state;
   }
   return s;
 };
 
-/** Every producing animal gets its product ready; everyone is fed. */
-export const readyAllProducts = (state: GameState): GameState => ({
-  ...state,
-  animals: state.animals.map((a) => ({
-    ...a,
-    hasProduct: ANIMALS[a.kind].product !== null,
-    fed: true,
-    productMinutes: 0,
-  })),
-});
+/** Every producing animal leaves one product in its shelter; everyone is fed. */
+export const readyAllProducts = (state: GameState): GameState => {
+  const fed: GameState = { ...state, animals: state.animals.map((a) => ({ ...a, fed: true, productMinutes: 0 })) };
+  return state.animals.reduce((s, a) => {
+    const product = ANIMALS[a.kind].product;
+    return product ? addStock(s, a.shelterId, product) : s;
+  }, fed);
+};

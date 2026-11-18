@@ -33,7 +33,9 @@ function StructureRow({ id }: { id: StructureId }) {
           <Coins value={formatCoins(cost)} className={money < cost ? 'text-red-700' : ''} />
         </div>
         <p className="mt-0.5 text-xs font-bold text-wood/80">
-          {def.description} · {def.width}×{def.depth} tiles · obra de {workHours(buildMinutesFor(id))}
+          {def.description}
+          {def.shelter && ` ${def.shelter.capacity} vagas.`} · {def.width}×{def.depth} tiles · obra de{' '}
+          {workHours(buildMinutesFor(id))}
         </p>
       </button>
     </li>

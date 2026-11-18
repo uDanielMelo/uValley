@@ -19,6 +19,10 @@ const noRaycast = () => null;
 const SCAFFOLD_HEIGHT: Partial<Record<StructureId, number>> = {
   bunkhouse: 3.4,
   chickenCoop: 2.4,
+  pigsty: 2.0,
+  sheepfold: 2.6,
+  corral: 3.4,
+  stable: 3.4,
   silo: 6.5,
   warehouse: 5,
   barn: 6,

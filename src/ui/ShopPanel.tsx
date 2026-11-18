@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCTS, type AnimalId } from '../data/animals';
+import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCTS, PLOT_PASTURE_UNITS, type AnimalId } from '../data/animals';
+import { STRUCTURES } from '../data/structures';
 import { CROPS, CROP_IDS, type CropId } from '../data/crops';
 import { PLOT_SIZE } from '../data/world';
 import { animalSalePrice } from '../game/animals';
+import { freeSlots, housesKind, pastureCapacity, pastureUsed, sheltersFor } from '../game/shelters';
+import { isOperational } from '../game/structures';
 import { nextPlotCost } from '../game/economy';
-import { useGameStore } from '../store/gameStore';
+import { useGameStore, type GameStore } from '../store/gameStore';
 import { formatCoins, formatHours } from './format';
 import { Button, Coins, Panel } from './primitives';
 
@@ -55,10 +58,20 @@ const animalPurpose = (kind: AnimalId): string => {
   return '';
 };
 
+/** Room for one more animal of a kind: free slots in finished shelters, or null without any. */
+const shelterRoom = (kind: AnimalId) => (s: GameStore): number | null => {
+  const homes = s.game.structures.filter((x) => housesKind(x.type, kind) && isOperational(x));
+  return homes.length === 0 ? null : homes.reduce((sum, x) => sum + Math.max(0, freeSlots(s.game, x)), 0);
+};
+
 function AnimalRow({ kind }: { kind: AnimalId }) {
   const def = ANIMALS[kind];
   const money = useGameStore((s) => s.game.money);
   const owned = useGameStore((s) => s.game.animals.filter((a) => a.kind === kind).length);
+  const room = useGameStore(shelterRoom(kind));
+  const pastureLeft = useGameStore((s) => pastureCapacity(s.game) - pastureUsed(s.game));
+  const shelterName = STRUCTURES[sheltersFor(kind)[0] ?? 'chickenCoop'].label;
+  const blocked = room === null || room === 0 || pastureLeft < def.pastureUnits;
   const buy = useGameStore((s) => s.buyAnimal);
   const sell = useGameStore((s) => s.sellAnimal);
   const product = def.product ? ANIMAL_PRODUCTS[def.product] : null;
@@ -81,9 +94,21 @@ function AnimalRow({ kind }: { kind: AnimalId }) {
             {product.label} vale <Coins value={product.sellPrice} />
           </span>
         )}
+        <span>
+          Pasto: {def.pastureUnits} {def.pastureUnits === 1 ? 'unidade' : 'unidades'}
+        </span>
+      </p>
+      <p className={`text-xs font-bold ${blocked ? 'text-red-700' : 'text-wood/80'}`}>
+        {room === null
+          ? `Precisa de um ${shelterName.toLowerCase()} pronto.`
+          : room === 0
+            ? `${shelterName}: sem vaga. Construa outro.`
+            : pastureLeft < def.pastureUnits
+              ? 'Pasto lotado: compre um lote ou libere grama.'
+              : `${shelterName}: ${room} ${room === 1 ? 'vaga' : 'vagas'}.`}
       </p>
       <div className="mt-2 flex gap-2">
-        <Button className="flex-1 text-sm" disabled={money < def.purchaseCost} onClick={() => buy(kind)}>
+        <Button className="flex-1 text-sm" disabled={money < def.purchaseCost || blocked} onClick={() => buy(kind)}>
           Comprar <Coins value={formatCoins(def.purchaseCost)} />
         </Button>
         <Button variant="ghost" className="text-sm" disabled={owned === 0} onClick={() => sell(kind)}>
@@ -94,13 +119,36 @@ function AnimalRow({ kind }: { kind: AnimalId }) {
   );
 }
 
+function PastureSummary() {
+  const used = useGameStore((s) => pastureUsed(s.game));
+  const capacity = useGameStore((s) => pastureCapacity(s.game));
+  const share = capacity > 0 ? Math.min(100, (used / capacity) * 100) : 100;
+  return (
+    <div className="rounded-xl bg-parchment-dark/60 p-3 text-xs font-bold">
+      <div className="flex justify-between">
+        <span>🌿 Pasto</span>
+        <span className={`tabular-nums ${used > capacity ? 'text-red-700' : ''}`}>
+          {used}/{capacity} unidades
+        </span>
+      </div>
+      <div className="mt-1 h-2 overflow-hidden rounded-full bg-wood/20">
+        <div className={`h-full ${used > capacity ? 'bg-red-700' : 'bg-leaf'}`} style={{ width: `${share}%` }} />
+      </div>
+      <p className="mt-1 text-wood/80">
+        Cada lote de grama livre comporta {PLOT_PASTURE_UNITS} unidades. Acima disso a produção cai.
+      </p>
+    </div>
+  );
+}
+
 function AnimalsTab() {
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs font-bold text-wood/80">
-        Os animais pastam na grama da fazenda (não pisam na terra arada) e dormem à noite. A ração é cobrada à
-        meia-noite. Clique em um animal com produto pronto para coletar.
+        Cada animal mora num abrigo da sua espécie, pasta por perto e dorme lá dentro. Os produtos ficam no abrigo
+        até a equipe com 🧺 Tratar animais coletar. A ração é cobrada à meia-noite.
       </p>
+      <PastureSummary />
       <ul className="flex flex-col gap-2">
         {ANIMAL_IDS.map((kind) => (
           <AnimalRow key={kind} kind={kind} />
