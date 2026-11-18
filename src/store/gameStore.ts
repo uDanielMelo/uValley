@@ -6,7 +6,7 @@ import { STRUCTURES, type StructureId } from '../data/structures';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
 import { buyAnimal, collectProduct, sellAnimal } from '../game/animals';
 import { buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
-import { plotOfTile, tileCoords } from '../game/grid';
+import { plotOfTile, tileCoords, tilesInRect } from '../game/grid';
 import {
   DEFAULT_SETTINGS,
   clearStorage,
@@ -19,13 +19,20 @@ import { advanceGame } from '../game/simulation';
 import { buildRoad, removeRoad } from '../game/roads';
 import { createInitialState } from '../game/state';
 import { anchorFor, demolishStructure, placeStructure, refundFor, structureAt } from '../game/structures';
+import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/staff';
 import type { ActionError, ActionResult, GameState, Rotation, ToolId } from '../game/types';
-import { clearTasks, fireWorker, hireWorker, toggleTask } from '../game/workers';
+import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
 
 export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | null;
 
 /** Build mode: placing a structure type, painting roads, or demolishing (structures and roads). */
 export type BuildMode = StructureId | 'road' | 'demolish' | null;
+
+/** Area being dragged with a tool: from the tile where the press started to the one under the cursor. */
+export interface AreaDrag {
+  anchor: number;
+  current: number;
+}
 
 export interface Toast {
   id: number;
@@ -50,9 +57,17 @@ export interface GameStore {
   devTimeScale: number;
   buildMode: BuildMode;
   buildRotation: Rotation;
+  area: AreaDrag | null;
+  /** Worker whose card is open in the team hub. */
+  selectedWorker: number | null;
 
   advance: (realSeconds: number) => void;
   interactAt: (tile: number) => void;
+  /** Area orders: press on a tile, drag, release (a plain click is a 1×1 area). */
+  beginArea: (tile: number) => void;
+  extendArea: (tile: number) => void;
+  finishArea: () => void;
+  cancelArea: () => void;
   /** Road painting while dragging: builds silently (errors are not shown on every tile). */
   paintRoadAt: (tile: number) => void;
   setTool: (tool: ToolId) => void;
@@ -74,8 +89,12 @@ export interface GameStore {
   buySeeds: (crop: CropId, quantity: number) => void;
   sell: (crop: CropId, quantity: number) => void;
   sellAll: () => void;
-  hire: () => void;
-  fire: (workerId: number) => void;
+  hireCandidate: (candidateId: number) => void;
+  hireTemp: () => void;
+  dismiss: (workerId: number) => void;
+  setPriorities: (workerId: number, priorities: ToolId[]) => void;
+  /** Opens the team hub on a worker's card (null closes the card). */
+  selectWorker: (workerId: number | null) => void;
   clearTasks: () => void;
   buyAnimal: (kind: AnimalId) => void;
   sellAnimal: (kind: AnimalId) => void;
@@ -108,7 +127,12 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'invalid-quantity': 'Quantidade inválida.',
   'queue-full': 'A fila de tarefas está cheia.',
   'max-workers': 'A fazenda já tem o máximo de trabalhadores.',
-  'not-hired': 'Só é possível dispensar trabalhadores contratados.',
+  'no-worker': 'Trabalhador não encontrado.',
+  'no-candidate': 'Este candidato não está mais disponível.',
+  'no-bed': 'Sem cama livre no alojamento. Construa outro alojamento.',
+  'max-temps': 'Já há esporádicos demais hoje.',
+  'not-work-time': 'Esporádicos só são contratados durante o expediente.',
+  'beds-in-use': 'Há trabalhadores dormindo neste alojamento.',
   'max-animals': 'A fazenda já tem o máximo de animais.',
   'no-animal': 'Você não tem esse animal.',
   'no-product': 'Este animal ainda não tem nada para coletar.',
@@ -163,13 +187,16 @@ export const useGameStore = create<GameStore>()(
       devTimeScale: 1,
       buildMode: null,
       buildRotation: 0,
+      area: null,
+      selectedWorker: null,
 
       advance: (realSeconds) => {
         const { settings, game, devTimeScale } = get();
         if (settings.speed === 0 || realSeconds <= 0) return;
         const dt = realSeconds * GAME_MINUTES_PER_REAL_SECOND * settings.speed * devTimeScale;
-        const { state, workersLeft, hungryAnimals } = advanceGame(game, dt);
+        const { state, workersLeft, hungryAnimals, tempsLeft } = advanceGame(game, dt);
         set({ game: state });
+        if (tempsLeft > 0) get().showMessage('Fim do expediente: os esporádicos foram embora.', 'info');
         if (hungryAnimals > 0) {
           get().showMessage(`Sem dinheiro para a ração: ${hungryAnimals} animal(is) com fome hoje.`, 'error');
         }
@@ -179,7 +206,7 @@ export const useGameStore = create<GameStore>()(
       },
 
       interactAt: (tile) => {
-        const { game, tool, selectedCrop } = get();
+        const { game } = get();
         const target = game.tiles[tile];
         if (!target) return;
         const { buildMode, buildRotation } = get();
@@ -207,13 +234,40 @@ export const useGameStore = create<GameStore>()(
           get().requestPlot(plotOfTile(tile));
           return;
         }
-        if (target.structure === 'shippingBin') {
-          set({ panel: 'inventory' });
+        if (target.structure === 'shippingBin') set({ panel: 'inventory' });
+        // Tool orders are given through areas (beginArea / finishArea).
+      },
+
+      beginArea: (tile) => set({ area: { anchor: tile, current: tile } }),
+      extendArea: (tile) => {
+        const { area } = get();
+        if (area && area.current !== tile) set({ area: { ...area, current: tile } });
+      },
+      cancelArea: () => set({ area: null }),
+      finishArea: () => {
+        const { area, game, tool, selectedCrop } = get();
+        if (!area) return;
+        set({ area: null });
+        if (area.anchor === area.current) {
+          const result = toggleTask(game, tool, area.anchor, selectedCrop);
+          if (result.ok) set({ game: result.state });
+          else get().showMessage(ERROR_MESSAGES[result.error], 'error');
           return;
         }
-        const result = toggleTask(game, tool, tile, selectedCrop);
-        if (result.ok) set({ game: result.state });
-        else get().showMessage(ERROR_MESSAGES[result.error], 'error');
+        const tiles = tilesInRect(area.anchor, area.current);
+        const mode = areaMode(game, tool, area.anchor, selectedCrop);
+        const result = applyArea(game, tool, tiles, selectedCrop, mode);
+        const count = result.changed.length;
+        if (count === 0) {
+          get().showMessage(result.error ? ERROR_MESSAGES[result.error] : 'Nada para fazer nesta área.', 'error');
+          return;
+        }
+        set({ game: result.state });
+        const skipped = result.error ? ` (alguns ficaram de fora: ${ERROR_MESSAGES[result.error].toLowerCase()})` : '';
+        get().showMessage(
+          mode === 'cancel' ? `${count} ordem(ns) cancelada(s).` : `${count} ordem(ns) na fila${skipped}`,
+          'info',
+        );
       },
 
       paintRoadAt: (tile) => {
@@ -221,7 +275,7 @@ export const useGameStore = create<GameStore>()(
         if (result.ok) set({ game: result.state });
       },
 
-      setTool: (tool) => set({ tool, buildMode: null }),
+      setTool: (tool) => set({ tool, buildMode: null, area: null }),
       setBuildMode: (buildMode) => set({ buildMode }),
       rotateBuild: () => set((s) => ({ buildRotation: ((s.buildRotation + 1) % 4) as Rotation })),
       setSelectedCrop: (selectedCrop) => set({ selectedCrop, tool: 'seed' }),
@@ -256,12 +310,23 @@ export const useGameStore = create<GameStore>()(
       sellAll: () => {
         commit(sellAllProduce(get().game), 'Tudo vendido!');
       },
-      hire: () => {
-        commit(hireWorker(get().game), 'Novo trabalhador contratado!');
+      hireCandidate: (candidateId) => {
+        const name = get().game.candidates.find((c) => c.id === candidateId)?.name;
+        commit(hireCandidate(get().game, candidateId), name ? `${name} foi contratado(a)!` : undefined);
       },
-      fire: (workerId) => {
-        commit(fireWorker(get().game, workerId));
+      hireTemp: () => {
+        commit(hireTemp(get().game), 'Esporádico contratado até o fim do expediente.');
       },
+      dismiss: (workerId) => {
+        const name = get().game.workers.find((w) => w.id === workerId)?.name;
+        if (commit(dismissWorker(get().game, workerId), name ? `${name} foi dispensado(a).` : undefined)) {
+          if (get().selectedWorker === workerId) set({ selectedWorker: null });
+        }
+      },
+      setPriorities: (workerId, priorities) => {
+        commit(setPriorities(get().game, workerId, priorities));
+      },
+      selectWorker: (selectedWorker) => set(selectedWorker === null ? { selectedWorker } : { selectedWorker, panel: 'workers' }),
       clearTasks: () => set((s) => ({ game: clearTasks(s.game) })),
       buyAnimal: (kind) => {
         commit(buyAnimal(get().game, kind));
@@ -298,6 +363,8 @@ export const useGameStore = create<GameStore>()(
           panel: null,
           pendingPlot: null,
           buildMode: null,
+          area: null,
+          selectedWorker: null,
         });
         get().save();
         get().showMessage('Novo jogo iniciado.', 'info');

@@ -61,3 +61,14 @@ export const withTile = (tiles: readonly Tile[], index: number, tile: Tile): Til
   next[index] = tile;
   return next;
 };
+
+/** Tile indices of the axis-aligned rectangle with corners at tiles `a` and `b`, row by row. */
+export const tilesInRect = (a: number, b: number): number[] => {
+  const p = tileCoords(a);
+  const q = tileCoords(b);
+  const result: number[] = [];
+  for (let y = Math.min(p.y, q.y); y <= Math.max(p.y, q.y); y++) {
+    for (let x = Math.min(p.x, q.x); x <= Math.max(p.x, q.x); x++) result.push(tileIndex(x, y));
+  }
+  return result;
+};

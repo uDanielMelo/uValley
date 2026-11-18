@@ -1,15 +1,27 @@
 import { ANIMAL_IDS, ANIMAL_PRODUCT_IDS, type AnimalId, type AnimalProductId } from '../data/animals';
 import { CROP_IDS, type CropId } from '../data/crops';
+import { ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X } from '../data/roads';
 import { START_STRUCTURES, STRUCTURE_IDS, type StructureId } from '../data/structures';
-import { SPEED_OPTIONS, type GameSpeed } from '../data/world';
-import { PLOT_COUNT, TILE_COUNT, inBounds, isValidTileIndex } from './grid';
+import {
+  DEFAULT_PRIORITIES,
+  HOME_POSITION,
+  SKILL_IDS,
+  STARTING_WORKERS,
+  type SkillId,
+  type WorkerTemplate,
+} from '../data/workers';
+import { GRID_SIZE, MINUTES_PER_DAY, SPEED_OPTIONS, type GameSpeed } from '../data/world';
+import { PLOT_COUNT, TILE_COUNT, inBounds, isValidTileIndex, tileIndex } from './grid';
 import type {
   Animal,
+  Candidate,
   GameState,
   GridPoint,
   ItemCounts,
   ProductCounts,
   Rotation,
+  Specialty,
+  Stars,
   StructureInstance,
   Task,
   Tile,
@@ -17,12 +29,13 @@ import type {
   ToolId,
   Worker,
   WorkerKind,
+  WorkerProfile,
 } from './types';
 import { accessRoadTiles } from './roads';
-import { stampStructures } from './structures';
-import { createFamily } from './workers';
+import { hourlyWageFor, rollCandidates } from './staff';
+import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -37,16 +50,18 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
 
 /**
  * v2 added workers, the task queue and nextId; v3 added animals and animal products;
- * v4 added the list of placed structures; v5 added roads (`Tile.road`) and the access road.
+ * v4 added the list of placed structures; v5 added roads (`Tile.road`) and the access road;
+ * v6 moved the access road south, replaced the family with staff (age, stars, skills,
+ * priorities, hourly wage), added the bunkhouse and the hiring board.
  */
-export interface SaveDataV5 {
-  saveVersion: 5;
+export interface SaveDataV6 {
+  saveVersion: 6;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV5;
+export type SaveData = SaveDataV6;
 
 export interface LoadedSave {
   game: GameState;
@@ -58,10 +73,21 @@ export interface LoadedSave {
  * `migrations[1] = (v1) => v2`.
  */
 const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {
-  // v1 → v2: the family arrives; the queue starts empty.
+  // v1 → v2: the family arrives (in the v2 worker format); the queue starts empty.
   1: (data) => {
     const game = isRecord(data.game) ? data.game : {};
-    const family = createFamily(1);
+    const family = LEGACY_FAMILY.map((f, i) => ({
+      id: 1 + i,
+      name: f.name,
+      role: f.role,
+      kind: 'family',
+      efficiency: f.efficiency,
+      x: HOME_POSITION.x + (i - 1.5) * 0.3,
+      y: HOME_POSITION.y,
+      taskId: null,
+      path: [],
+      progress: 0,
+    }));
     return { ...data, game: { ...game, workers: family, tasks: [], nextId: family.length + 1 } };
   },
   // v2 → v3: no animals yet, empty product inventory.
@@ -74,7 +100,13 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
   3: (data) => {
     const game = isRecord(data.game) ? data.game : {};
     const firstId = isFiniteNumber(game.nextId) ? game.nextId : 1;
-    const structures = START_STRUCTURES.map((p, i) => ({ id: firstId + i, type: p.id, x: p.x, y: p.y, rotation: 0 }));
+    const structures = START_STRUCTURES.filter((p) => p.id === 'house' || p.id === 'shippingBin').map((p, i) => ({
+      id: firstId + i,
+      type: p.id,
+      x: p.x,
+      y: p.y,
+      rotation: 0,
+    }));
     return { ...data, game: { ...game, structures, nextId: firstId + structures.length } };
   },
   // v4 → v5: the access road appears, but only on free grass or land for sale (crops and
@@ -91,6 +123,102 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
     }
     return { ...data, game: { ...game, tiles } };
   },
+  // v5 → v6: the access road moves south, the family becomes staff in a new bunkhouse, and the
+  // hiring board opens.
+  5: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    if (!Array.isArray(game.tiles)) return data;
+    const tiles = moveAccessRoad(game.tiles);
+    let nextId = isFiniteNumber(game.nextId) ? game.nextId : 1;
+    const structures = Array.isArray(game.structures) ? game.structures.slice() : [];
+    const taskTiles = new Set(
+      (Array.isArray(game.tasks) ? game.tasks : []).flatMap((t) => (isRecord(t) && isFiniteNumber(t.tile) ? [t.tile] : [])),
+    );
+    const spot = findBunkhouseSpot(tiles, taskTiles);
+    if (spot) structures.push({ id: nextId++, type: 'bunkhouse', x: spot.x, y: spot.y, rotation: spot.rotation });
+    const workers = (Array.isArray(game.workers) ? game.workers : []).map((w, i) => (isRecord(w) ? migrateWorker(w, i) : w));
+    const names = workers.flatMap((w) => (isRecord(w) && typeof w.name === 'string' ? [w.name] : []));
+    const day = isFiniteNumber(game.gameMinutes) ? Math.floor(game.gameMinutes / MINUTES_PER_DAY) : 0;
+    const candidates = rollCandidates(day, nextId, names);
+    nextId += candidates.length;
+    return { ...data, game: { ...game, tiles, structures, workers, candidates, nextId } };
+  },
+};
+
+/** The v2–v5 family, as it was saved before v6. */
+const LEGACY_FAMILY = [
+  { name: 'Antônio', role: 'Pai', efficiency: 1 },
+  { name: 'Helena', role: 'Mãe', efficiency: 1 },
+  { name: 'Lucas', role: 'Filho', efficiency: 0.8 },
+] as const;
+
+/** v6: drops the old northward access road and lays the southward one on free land. */
+const moveAccessRoad = (raw: readonly unknown[]): unknown[] => {
+  const tiles = raw.slice();
+  for (let y = 0; y < ACCESS_ROAD_FARM_Y; y++) {
+    const index = tileIndex(ACCESS_ROAD_X, y);
+    const tile = tiles[index];
+    if (isRecord(tile) && tile.road === true) {
+      const { road: _road, ...rest } = tile;
+      tiles[index] = rest;
+    }
+  }
+  for (const index of accessRoadTiles()) {
+    const tile = tiles[index];
+    if (isRecord(tile) && (tile.state === 'grass' || tile.state === 'locked') && tile.structure === undefined) {
+      tiles[index] = { ...tile, road: true };
+    }
+  }
+  return tiles;
+};
+
+/** v6: where the new bunkhouse fits: its default spot, else the free owned grass nearest to it. */
+const findBunkhouseSpot = (
+  tiles: readonly unknown[],
+  taskTiles: ReadonlySet<number>,
+): { x: number; y: number; rotation: Rotation } | null => {
+  const free = (x: number, y: number): boolean => {
+    if (!inBounds(x, y)) return false;
+    const index = tileIndex(x, y);
+    const tile = tiles[index];
+    return (
+      isRecord(tile) && tile.state === 'grass' && tile.structure === undefined && tile.road !== true && !taskTiles.has(index)
+    );
+  };
+  const fits = (x: number, y: number, rotation: Rotation) =>
+    footprintCells(footprintOf('bunkhouse', x, y, rotation)).every((c) => free(c.x, c.y));
+  const home = START_STRUCTURES.find((p) => p.id === 'bunkhouse') ?? { x: 0, y: 0 };
+  let best: { x: number; y: number; rotation: Rotation } | null = null;
+  let bestDistance = Infinity;
+  for (const rotation of [0, 1] as const) {
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        const d = Math.hypot(x - home.x, y - home.y) + rotation * 0.01;
+        if (d < bestDistance && fits(x, y, rotation)) {
+          best = { x, y, rotation };
+          bestDistance = d;
+        }
+      }
+    }
+  }
+  return best;
+};
+
+/** v6: family and hired workers become staff with attributes (the family keeps the starting crew's). */
+const migrateWorker = (w: Record<string, unknown>, index: number): Record<string, unknown> => {
+  const template: WorkerTemplate | undefined =
+    w.kind === 'family' ? (STARTING_WORKERS.find((t) => t.name === w.name) ?? STARTING_WORKERS[index]) : undefined;
+  const profile: Omit<WorkerProfile, 'name'> = template
+    ? {
+        age: template.age,
+        stars: template.stars,
+        skills: template.skills.slice(),
+        specialty: template.specialty,
+        hourlyWage: hourlyWageFor(template.stars, template.specialty),
+      }
+    : { age: 30, stars: 2, skills: ['farming'], specialty: null, hourlyWage: hourlyWageFor(2, null) };
+  const { role: _role, efficiency: _efficiency, ...rest } = w;
+  return { ...rest, ...profile, kind: 'staff', priorities: DEFAULT_PRIORITIES.slice() };
 };
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {
@@ -159,7 +287,10 @@ const parseTile = (v: unknown): Tile | null => {
 };
 
 const TOOL_IDS: readonly ToolId[] = ['hoe', 'seed', 'water', 'hand'];
-const WORKER_KINDS: readonly WorkerKind[] = ['family', 'hired'];
+const WORKER_KINDS: readonly WorkerKind[] = ['staff', 'temp'];
+const STARS: readonly Stars[] = [1, 2, 3];
+const isStars = (v: unknown): v is Stars => STARS.some((s) => s === v);
+const isSkillId = (v: unknown): v is SkillId => SKILL_IDS.some((s) => s === v);
 const isToolId = (v: unknown): v is ToolId => TOOL_IDS.some((t) => t === v);
 const isWorkerKind = (v: unknown): v is WorkerKind => WORKER_KINDS.some((k) => k === v);
 const isId = (v: unknown): v is number => isFiniteNumber(v) && Number.isInteger(v) && v >= 0;
@@ -167,11 +298,31 @@ const isId = (v: unknown): v is number => isFiniteNumber(v) && Number.isInteger(
 const parsePoint = (v: unknown): GridPoint | null =>
   isRecord(v) && isFiniteNumber(v.x) && isFiniteNumber(v.y) ? { x: v.x, y: v.y } : null;
 
+const parseSpecialty = (v: unknown): Specialty | null | undefined => {
+  if (v === null) return null;
+  if (!isRecord(v)) return undefined;
+  if (v.kind === 'crop' && isCropId(v.id)) return { kind: 'crop', id: v.id };
+  if (v.kind === 'animal' && isAnimalId(v.id)) return { kind: 'animal', id: v.id };
+  return undefined;
+};
+
+/** Shared by workers and candidates. */
+const parseProfile = (v: Record<string, unknown>): WorkerProfile | null => {
+  const { name, age, stars, skills, hourlyWage } = v;
+  if (typeof name !== 'string' || !isFiniteNumber(age) || !isStars(stars)) return null;
+  if (!isFiniteNumber(hourlyWage) || hourlyWage < 0) return null;
+  if (!Array.isArray(skills) || !skills.every(isSkillId)) return null;
+  const specialty = parseSpecialty(v.specialty);
+  if (specialty === undefined) return null;
+  return { name, age: Math.floor(age), stars, skills: [...new Set(skills)], specialty, hourlyWage };
+};
+
 const parseWorker = (v: unknown): Worker | null => {
   if (!isRecord(v)) return null;
-  const { id, name, role, kind, efficiency, x, y, taskId, path, progress } = v;
-  if (!isId(id) || typeof name !== 'string' || typeof role !== 'string' || !isWorkerKind(kind)) return null;
-  if (!isFiniteNumber(efficiency) || efficiency <= 0) return null;
+  const profile = parseProfile(v);
+  const { id, kind, priorities, x, y, taskId, path, progress } = v;
+  if (!profile || !isId(id) || !isWorkerKind(kind)) return null;
+  if (!Array.isArray(priorities) || !priorities.every(isToolId)) return null;
   if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(progress)) return null;
   if (taskId !== null && !isId(taskId)) return null;
   if (!Array.isArray(path)) return null;
@@ -181,7 +332,24 @@ const parseWorker = (v: unknown): Worker | null => {
     if (!p) return null;
     points.push(p);
   }
-  return { id, name, role, kind, efficiency, x, y, taskId, path: points, progress: Math.max(0, progress) };
+  return {
+    id,
+    kind,
+    ...profile,
+    priorities: [...new Set(priorities)],
+    x,
+    y,
+    taskId,
+    path: points,
+    progress: Math.max(0, progress),
+  };
+};
+
+const parseCandidate = (v: unknown): Candidate | null => {
+  if (!isRecord(v)) return null;
+  const profile = parseProfile(v);
+  if (!profile || !isId(v.id) || !isFiniteNumber(v.hireCost) || v.hireCost < 0) return null;
+  return { ...profile, id: v.id, hireCost: v.hireCost };
 };
 
 const parseTask = (v: unknown): Task | null => {
@@ -265,10 +433,12 @@ const parseGame = (v: unknown): GameState | null => {
   const tasks = parseList(v.tasks, parseTask);
   const animals = parseList(v.animals, parseAnimal);
   const structures = parseList(v.structures, parseStructure);
-  if (!workers || !tasks || !animals || !structures || !isId(nextId)) return null;
+  const candidates = parseList(v.candidates, parseCandidate);
+  if (!workers || !candidates || !tasks || !animals || !structures || !isId(nextId)) return null;
   const maxId = Math.max(
     0,
     ...workers.map((w) => w.id),
+    ...candidates.map((c) => c.id),
     ...tasks.map((t) => t.id),
     ...animals.map((a) => a.id),
     ...structures.map((s) => s.id),
@@ -283,6 +453,7 @@ const parseGame = (v: unknown): GameState | null => {
     plotsPurchased: Math.floor(plotsPurchased),
     inventory: { seeds, produce, products },
     workers,
+    candidates,
     tasks,
     animals,
     structures,

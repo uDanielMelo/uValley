@@ -1,4 +1,5 @@
 import { BufferGeometry, Color, Float32BufferAttribute, PlaneGeometry } from 'three';
+import { PROP_SIZES, meters } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
 import { accessRoadExit } from '../game/roads';
 import { fbm, valueNoise } from './noise';
@@ -25,10 +26,26 @@ export const OFFMAP_ROAD_X = EXIT.border.x - HALF;
 /** World Z where the road crosses the map border, and the direction it heads (-1 north, +1 south). */
 export const OFFMAP_ROAD_Z = EXIT.border.y - HALF;
 export const OFFMAP_ROAD_DIR = EXIT.outward;
+/** World Z of the highway's center line (it runs along X, parallel to the map edge). */
+export const HIGHWAY_Z = EXIT.junction.y - HALF;
+/** Half of the paved width, in world units. */
+export const HIGHWAY_HALF_WIDTH = meters(PROP_SIZES.highwayWidth) / 2;
+/** How much wider the highway is than the dirt road on each side. */
+const HIGHWAY_EXTRA = HIGHWAY_HALF_WIDTH - meters(PROP_SIZES.roadWidth) / 2;
 
-/** Distance from the off-map road's center line (Infinity on the map side of the border). */
+/** Distance from the off-map access road between the map border and the highway (Infinity elsewhere). */
+const distanceFromAccess = (x: number, z: number): number => {
+  const along = (z - OFFMAP_ROAD_Z) * OFFMAP_ROAD_DIR;
+  const beyond = (z - HIGHWAY_Z) * OFFMAP_ROAD_DIR;
+  return along < -1 || beyond > 0 ? Infinity : Math.abs(x - OFFMAP_ROAD_X);
+};
+
+/**
+ * Distance from the roads outside the farm: the access road and the highway, measured so both
+ * have the same clearance from their edges (the highway is wider than the dirt road).
+ */
 export const distanceFromRoad = (x: number, z: number): number =>
-  (z - OFFMAP_ROAD_Z) * OFFMAP_ROAD_DIR < -1 ? Infinity : Math.abs(x - OFFMAP_ROAD_X);
+  Math.min(distanceFromAccess(x, z), Math.max(0, Math.abs(z - HIGHWAY_Z) - HIGHWAY_EXTRA));
 
 /** Ground height outside the farm: flat near the fence and along the road, rolling hills further away. */
 export const terrainHeight = (x: number, z: number): number => {

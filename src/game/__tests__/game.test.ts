@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CROPS } from '../../data/crops';
-import { PLOT_BASE_COST, STARTING_MONEY } from '../../data/economy';
+import { PLOT_BASE_COST, STARTING_MONEY, STARTING_SEEDS } from '../../data/economy';
 import { MINUTES_PER_DAY } from '../../data/world';
 import { applyTool, harvest, plant, till, water } from '../actions';
 import { cropStage, isMature } from '../crops';
@@ -38,7 +38,7 @@ describe('tile actions', () => {
     expect(s.tiles[FREE_TILE]?.state).toBe('tilled');
     s = unwrap(plant(s, FREE_TILE, 'wheat'));
     expect(s.tiles[FREE_TILE]?.state).toBe('planted');
-    expect(s.inventory.seeds.wheat).toBe(4);
+    expect(s.inventory.seeds.wheat).toBe(STARTING_SEEDS.wheat - 1);
     s = unwrap(water(s, FREE_TILE));
     expect(s.tiles[FREE_TILE]?.state).toBe('watered');
 

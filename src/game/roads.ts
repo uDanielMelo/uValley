@@ -1,4 +1,5 @@
-import { ACCESS_ROAD_EDGE, ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X, OFFMAP_ROAD_LENGTH, ROAD_COST } from '../data/roads';
+import { ACCESS_ROAD_EDGE, ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X, HIGHWAY, OFFMAP_ROAD_LENGTH, ROAD_COST } from '../data/roads';
+import { PROP_SIZES, meters } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
 import { isValidTileIndex, tileIndex } from './grid';
 import { fail, ok, type ActionError, type ActionResult, type GameState, type GridPoint, type Tile } from './types';
@@ -11,8 +12,13 @@ export interface RoadExit {
   outward: -1 | 1;
   /** Point on the map border where the road crosses it. */
   border: GridPoint;
-  /** Far end of the off-map road, where cars appear and vanish. */
-  far: GridPoint;
+  /** Where the access road meets the highway's center line. */
+  junction: GridPoint;
+  /** Where the car turns: the junction, in the highway lane nearer the farm. */
+  turn: GridPoint;
+  /** Highway ends, where cars appear (east) and vanish (west). */
+  highwayEast: GridPoint;
+  highwayWest: GridPoint;
 }
 
 export const accessRoadExit = (): RoadExit => {
@@ -20,11 +26,17 @@ export const accessRoadExit = (): RoadExit => {
   const x = ACCESS_ROAD_X + 0.5;
   const borderY = north ? 0 : GRID_SIZE;
   const outward = north ? -1 : 1;
+  const junctionY = borderY + outward * OFFMAP_ROAD_LENGTH;
+  // Traffic keeps right: heading west, that is the lane on the farm's side of the center line.
+  const laneY = junctionY - outward * (meters(PROP_SIZES.highwayWidth) / 4);
   return {
     edgeRow: north ? 0 : GRID_SIZE - 1,
     outward,
     border: { x, y: borderY },
-    far: { x, y: borderY + outward * OFFMAP_ROAD_LENGTH },
+    junction: { x, y: junctionY },
+    turn: { x, y: laneY },
+    highwayEast: { x: x + HIGHWAY.reach, y: laneY },
+    highwayWest: { x: x - HIGHWAY.reach, y: laneY },
   };
 };
 

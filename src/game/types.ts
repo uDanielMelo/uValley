@@ -1,6 +1,7 @@
 import type { AnimalId, AnimalProductId } from '../data/animals';
 import type { CropId } from '../data/crops';
 import type { StructureId } from '../data/structures';
+import type { SkillId } from '../data/workers';
 
 export type TileState = 'locked' | 'grass' | 'tilled' | 'planted' | 'watered';
 
@@ -56,7 +57,8 @@ export interface Task {
   workerId: number | null;
 }
 
-export type WorkerKind = 'family' | 'hired';
+/** Staff live in the bunkhouse and earn an hourly wage; day laborers ('temp') leave at the end of the shift. */
+export type WorkerKind = 'staff' | 'temp';
 
 /** A point in tile space: tile (x, y) spans [x, x + 1); its center is (x + 0.5, y + 0.5). */
 export interface GridPoint {
@@ -64,13 +66,28 @@ export interface GridPoint {
   y: number;
 }
 
-export interface Worker {
-  id: number;
+export type Stars = 1 | 2 | 3;
+
+/** What a worker knows best: one crop or one animal. */
+export type Specialty = { kind: 'crop'; id: CropId } | { kind: 'animal'; id: AnimalId };
+
+/** Who a person is: shared by workers and hiring candidates. */
+export interface WorkerProfile {
   name: string;
-  /** Short role label (pt-BR), e.g. "Pai" or "Contratado". */
-  role: string;
+  age: number;
+  stars: Stars;
+  /** General skills, without repeats. */
+  skills: SkillId[];
+  specialty: Specialty | null;
+  /** Coins per hour of shift (staff); day laborers pay up front instead. */
+  hourlyWage: number;
+}
+
+export interface Worker extends WorkerProfile {
+  id: number;
   kind: WorkerKind;
-  efficiency: number;
+  /** Tasks this worker does, most important first. Tasks of other kinds are left to others. */
+  priorities: ToolId[];
   /** Current position in tile space. */
   x: number;
   y: number;
@@ -79,6 +96,13 @@ export interface Worker {
   path: GridPoint[];
   /** Work minutes already spent on the current task. */
   progress: number;
+}
+
+/** Someone on the hiring board. */
+export interface Candidate extends WorkerProfile {
+  /** Becomes the worker's id when hired. */
+  id: number;
+  hireCost: number;
 }
 
 export type WorkerActivity = 'idle' | 'walking' | 'working' | 'resting';
@@ -115,12 +139,14 @@ export interface GameState {
   plotsPurchased: number;
   inventory: Inventory;
   workers: Worker[];
+  /** Hiring board, renewed every midnight. */
+  candidates: Candidate[];
   /** Work queue, oldest first. Tasks on the same tile run in queue order. */
   tasks: Task[];
   animals: Animal[];
   /** Placed structures, including the starting house and shipping bin. */
   structures: StructureInstance[];
-  /** Next id for tasks, workers, animals and structures. */
+  /** Next id for tasks, workers, candidates, animals and structures. */
   nextId: number;
 }
 
@@ -144,7 +170,12 @@ export type ActionError =
   | 'invalid-quantity'
   | 'queue-full'
   | 'max-workers'
-  | 'not-hired'
+  | 'no-worker'
+  | 'no-candidate'
+  | 'no-bed'
+  | 'max-temps'
+  | 'not-work-time'
+  | 'beds-in-use'
   | 'max-animals'
   | 'no-animal'
   | 'no-product'

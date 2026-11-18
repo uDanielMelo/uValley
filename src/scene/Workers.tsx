@@ -1,8 +1,7 @@
-import { useFrame } from '@react-three/fiber';
+import { useFrame, type ThreeEvent } from '@react-three/fiber';
 import { createRef, useMemo, useRef } from 'react';
 import { MathUtils, type Group } from 'three';
 import { PERSON_HEIGHT } from '../data/scale';
-import { FAMILY } from '../data/workers';
 import { GRID_SIZE } from '../data/world';
 import type { ToolId, Worker } from '../game/types';
 import { workerActivity } from '../game/workers';
@@ -14,13 +13,15 @@ const HALF = GRID_SIZE / 2;
 const TOOL_IDS: readonly ToolId[] = ['hoe', 'seed', 'water', 'hand'];
 const STRAW = '#e2c27a';
 
-/** Looks for the family, in FAMILY order. */
 const DEFAULT_LOOK: PersonLook = { shirt: '#3f6fb5', pants: '#4a5a7a', skin: '#e0ac85', hat: STRAW, hair: '#4a3324' };
-const FAMILY_LOOKS: readonly PersonLook[] = [
-  DEFAULT_LOOK,
-  { shirt: '#c8553d', pants: '#5a4a6a', skin: '#f0c8a0', hat: STRAW, hair: '#7a4a2a' },
-  { shirt: '#e3b23c', pants: '#3c5a8a', skin: '#d9a27a', hat: null, hair: '#3a2a1a' },
-];
+/** Fixed looks for the starting crew (by name). */
+const STARTING_LOOKS: Readonly<Record<string, PersonLook>> = {
+  Antônio: DEFAULT_LOOK,
+  Helena: { shirt: '#c8553d', pants: '#5a4a6a', skin: '#f0c8a0', hat: STRAW, hair: '#7a4a2a' },
+  Lucas: { shirt: '#e3b23c', pants: '#3c5a8a', skin: '#d9a27a', hat: null, hair: '#3a2a1a' },
+};
+/** Day laborers wear high-visibility orange. */
+const TEMP_SHIRT = '#e8762c';
 const SHIRTS = ['#6a9a4a', '#b85c8a', '#5a8ab0', '#d07a3a', '#8a6ab0', '#c0a040', '#4aa090', '#a04a4a'];
 const PANTS = ['#4a5a7a', '#5e4630', '#3c5a8a', '#6a6a5a'];
 const SKINS = ['#f0c8a0', '#e0ac85', '#c68a5e', '#8d5a3b', '#f3d2b5'];
@@ -29,14 +30,11 @@ const HAIR = ['#2b2118', '#4a3324', '#7a4a2a', '#c8a060', '#1a1a1a'];
 const pick = <T,>(list: readonly T[], r: number): T => list[Math.floor(r * list.length) % list.length] as T;
 
 const lookFor = (worker: Worker): PersonLook => {
-  if (worker.kind === 'family') {
-    const index = FAMILY.findIndex((f) => f.name === worker.name);
-    const look = FAMILY_LOOKS[index];
-    if (look) return look;
-  }
+  const fixed = worker.kind === 'staff' ? STARTING_LOOKS[worker.name] : undefined;
+  if (fixed) return fixed;
   const r = (k: number) => hash01(worker.id * 97 + k);
   return {
-    shirt: pick(SHIRTS, r(1)),
+    shirt: worker.kind === 'temp' ? TEMP_SHIRT : pick(SHIRTS, r(1)),
     pants: pick(PANTS, r(2)),
     skin: pick(SKINS, r(3)),
     hair: pick(HAIR, r(4)),
@@ -44,11 +42,20 @@ const lookFor = (worker: Worker): PersonLook => {
   };
 };
 
-/** Height in meters: the family's own, a random one around the adult default for hired hands. */
-const heightFor = (worker: Worker): number => {
-  const template = worker.kind === 'family' ? FAMILY.find((f) => f.name === worker.name) : undefined;
-  if (template?.height) return template.height;
-  return PERSON_HEIGHT.adult + (hash01(worker.id * 53 + 7) * 2 - 1) * PERSON_HEIGHT.variation;
+/** Height in meters: a random one around the adult default. */
+const heightFor = (worker: Worker): number =>
+  PERSON_HEIGHT.adult + (hash01(worker.id * 53 + 7) * 2 - 1) * PERSON_HEIGHT.variation;
+
+/** Clicking a worker opens their card in the team hub (and never starts an area drag). */
+const onDown = (e: ThreeEvent<PointerEvent>) => {
+  if (e.button === 0) e.stopPropagation();
+};
+const onOut = () => {
+  document.body.style.cursor = '';
+};
+const onOver = (e: ThreeEvent<PointerEvent>) => {
+  e.stopPropagation();
+  document.body.style.cursor = 'pointer';
 };
 
 /** Shortest signed angle from a to b. */
@@ -170,7 +177,16 @@ function WorkerFigure({ id }: { id: number }) {
     }
   });
 
-  return <Person look={look} rig={rig} height={height} />;
+  const onClick = (e: ThreeEvent<MouseEvent>) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    useGameStore.getState().selectWorker(id);
+  };
+  return (
+    <group onClick={onClick} onPointerDown={onDown} onPointerOver={onOver} onPointerOut={onOut}>
+      <Person look={look} rig={rig} height={height} />
+    </group>
+  );
 }
 
 /** All workers, animated from the game state every frame (no React re-renders while they move). */

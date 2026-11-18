@@ -1,110 +1,53 @@
-import { CROPS } from '../data/crops';
-import { DAILY_WAGE, HIRE_COST, MAX_WORKERS, TASK_MINUTES, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
-import { dailyWages, workerActivity } from '../game/workers';
-import type { GameState, Worker } from '../game/types';
+import { useState } from 'react';
+import { TEMP_WORKERS, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
+import { hourlyPayroll, staffCount, tempCount } from '../game/staff';
+import { bedCount } from '../game/structures';
+import { unstaffedKinds } from '../game/workers';
 import { useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
 import { Button, Coins, Panel } from './primitives';
-import { TASK_LABELS, TASK_VERBS } from './tools';
+import { HireBoard } from './team/HireBoard';
+import { WorkerList } from './team/WorkerList';
+import { TASK_LABELS, TOOLS } from './tools';
 
-/** One-line status of a worker, as a primitive so the row only re-renders when it changes. */
-const workerStatus = (game: GameState, worker: Worker): string => {
-  const task = worker.taskId === null ? undefined : game.tasks.find((t) => t.id === worker.taskId);
-  switch (workerActivity(game, worker)) {
-    case 'resting':
-      return 'Descansando em casa';
-    case 'idle':
-      return 'Sem tarefas';
-    case 'walking':
-      return task ? `A caminho: ${TASK_LABELS[task.kind].toLowerCase()}` : 'Voltando para casa';
-    case 'working': {
-      if (!task) return 'Trabalhando';
-      const crop = task.kind === 'seed' && task.cropId ? ` ${CROPS[task.cropId].label.toLowerCase()}` : '';
-      return `${TASK_VERBS[task.kind]}${crop}`;
-    }
-  }
-};
+type Tab = 'team' | 'hire';
 
-/** Progress of the current task in 10% buckets (null when not working). */
-const workerProgress = (game: GameState, worker: Worker): number | null => {
-  const task = worker.taskId === null ? undefined : game.tasks.find((t) => t.id === worker.taskId);
-  if (!task || worker.path.length > 0) return null;
-  return Math.min(10, Math.floor((worker.progress / TASK_MINUTES[task.kind]) * 10)) * 10;
-};
-
-function WorkerRow({ id }: { id: number }) {
-  const name = useGameStore((s) => s.game.workers.find((w) => w.id === id)?.name ?? '');
-  const role = useGameStore((s) => s.game.workers.find((w) => w.id === id)?.role ?? '');
-  const hired = useGameStore((s) => s.game.workers.find((w) => w.id === id)?.kind === 'hired');
-  const status = useGameStore((s) => {
-    const w = s.game.workers.find((x) => x.id === id);
-    return w ? workerStatus(s.game, w) : '';
-  });
-  const progress = useGameStore((s) => {
-    const w = s.game.workers.find((x) => x.id === id);
-    return w ? workerProgress(s.game, w) : null;
-  });
-  const fire = useGameStore((s) => s.fire);
-
+function Summary() {
+  const staff = useGameStore((s) => staffCount(s.game));
+  const beds = useGameStore((s) => bedCount(s.game));
+  const temps = useGameStore((s) => tempCount(s.game));
+  const payroll = useGameStore((s) => hourlyPayroll(s.game));
   return (
-    <li className="flex items-center gap-3 rounded-xl bg-parchment-dark/60 p-2 pl-3">
-      <span className="text-2xl" aria-hidden>
-        {hired ? '🧑‍🌾' : '👪'}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="font-black">
-          {name} <span className="text-xs font-bold text-wood/70">· {role}</span>
+    <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+      <div className="rounded-xl bg-parchment-dark/60 p-2">
+        <p className="text-wood/70">🛏️ Camas</p>
+        <p className={`text-base font-black tabular-nums ${staff >= beds ? 'text-red-700' : ''}`}>
+          {staff}/{beds}
         </p>
-        <p className="truncate text-xs font-bold text-wood/80">{status}</p>
-        {progress !== null && (
-          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-wood/20">
-            <div className="h-full bg-leaf transition-[width]" style={{ width: `${progress}%` }} />
-          </div>
-        )}
       </div>
-      {hired && (
-        <Button variant="ghost" className="text-xs" onClick={() => fire(id)} title="Dispensar">
-          Dispensar
-        </Button>
-      )}
-    </li>
-  );
-}
-
-function HireCard() {
-  const money = useGameStore((s) => s.game.money);
-  const count = useGameStore((s) => s.game.workers.length);
-  const hire = useGameStore((s) => s.hire);
-  const full = count >= MAX_WORKERS;
-  return (
-    <div className="rounded-xl border-2 border-dashed border-wood/30 p-3">
-      <p className="font-black">Contratar ajudante</p>
-      <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs font-bold text-wood/80">
-        <span className="flex items-center gap-1">
-          Contratação <Coins value={formatCoins(HIRE_COST)} />
-        </span>
-        <span className="flex items-center gap-1">
-          Salário <Coins value={formatCoins(DAILY_WAGE)} />
-          /dia
-        </span>
-      </p>
-      <Button className="mt-2 w-full" variant="leaf" disabled={full || money < HIRE_COST} onClick={hire}>
-        {full ? `Limite de ${MAX_WORKERS} trabalhadores` : 'Contratar'}
-      </Button>
+      <div className="rounded-xl bg-parchment-dark/60 p-2">
+        <p className="text-wood/70">🦺 Esporádicos</p>
+        <p className="text-base font-black tabular-nums">
+          {temps}/{TEMP_WORKERS.max}
+        </p>
+      </div>
+      <div className="rounded-xl bg-parchment-dark/60 p-2">
+        <p className="text-wood/70">Folha por hora</p>
+        <p className="flex justify-center text-base">
+          <Coins value={formatCoins(payroll)} />
+        </p>
+      </div>
     </div>
   );
 }
 
-export function WorkersPanel() {
-  const ids = useGameStore((s) => s.game.workers.map((w) => w.id).join(','));
+function QueueBar() {
   const taskCount = useGameStore((s) => s.game.tasks.length);
-  const wages = useGameStore((s) => dailyWages(s.game));
+  const orphans = useGameStore((s) => unstaffedKinds(s.game).join(','));
   const clear = useGameStore((s) => s.clearTasks);
-  const close = useGameStore((s) => s.closePanel);
-
   return (
-    <Panel title="👨‍🌾 Trabalhadores" onClose={close}>
-      <div className="mb-3 flex items-center justify-between rounded-xl bg-parchment-dark/60 p-3 text-sm font-bold">
+    <div className="rounded-xl bg-parchment-dark/60 p-3 text-sm font-bold">
+      <div className="flex items-center justify-between">
         <span>
           Tarefas na fila: <b className="tabular-nums">{taskCount}</b>
         </span>
@@ -112,22 +55,67 @@ export function WorkersPanel() {
           Cancelar todas
         </Button>
       </div>
-      <ul className="flex flex-col gap-2">
-        {ids
-          .split(',')
-          .filter(Boolean)
-          .map((id) => (
-            <WorkerRow key={id} id={Number(id)} />
+      {orphans && (
+        <p className="mt-1 text-xs text-red-700">
+          Ninguém faz:{' '}
+          {TOOLS.filter((t) => orphans.split(',').includes(t.id))
+            .map((t) => TASK_LABELS[t.id])
+            .join(', ')}
+          . Adicione a atividade na ficha de alguém.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Team hub: who works on the farm (cards with attributes and priorities) and the hiring board. */
+export function WorkersPanel() {
+  const [tab, setTab] = useState<Tab>('team');
+  const close = useGameStore((s) => s.closePanel);
+  const selected = useGameStore((s) => s.selectedWorker);
+  const current: Tab = selected !== null ? 'team' : tab;
+  const select = useGameStore((s) => s.selectWorker);
+  const show = (next: Tab) => {
+    if (next === 'hire') select(null);
+    setTab(next);
+  };
+
+  return (
+    <Panel title="👨‍🌾 Equipe" onClose={close} width="w-[26rem]">
+      <div className="flex flex-col gap-3">
+        <Summary />
+        <div className="flex gap-1 rounded-xl bg-wood/10 p-1" role="tablist">
+          {(
+            [
+              ['team', 'Trabalhadores'],
+              ['hire', 'Contratar'],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={current === id}
+              onClick={() => show(id)}
+              className={`flex-1 rounded-lg py-1 text-sm font-black ${current === id ? 'bg-parchment shadow' : 'text-wood/70 hover:bg-parchment/50'}`}
+            >
+              {label}
+            </button>
           ))}
-      </ul>
-      <div className="mt-3">
-        <HireCard />
+        </div>
+        {current === 'team' ? (
+          <>
+            <QueueBar />
+            <WorkerList />
+          </>
+        ) : (
+          <HireBoard />
+        )}
+        <p className="text-xs font-bold text-wood/70">
+          Expediente das {WORK_START_HOUR}h às {WORK_END_HOUR}h. Fixos recebem a cada hora de expediente; quem não
+          recebe vai embora. Cada um pega primeiro as atividades do topo da própria lista.
+        </p>
       </div>
-      <p className="mt-3 text-xs font-bold text-wood/70">
-        Trabalham das {WORK_START_HOUR}h às {WORK_END_HOUR}h. Os salários (
-        <Coins value={formatCoins(wages)} className="text-xs" /> por dia) são pagos à meia-noite; quem não recebe vai
-        embora. Mais gente na fazenda = tarefas concluídas mais rápido.
-      </p>
     </Panel>
   );
 }

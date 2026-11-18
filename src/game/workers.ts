@@ -1,66 +1,30 @@
 import { CROP_IDS, type CropId } from '../data/crops';
 import { ROAD_WALK_BONUS } from '../data/roads';
 import { MINUTES_PER_DAY } from '../data/world';
-import {
-  DAILY_WAGE,
-  FAMILY,
-  HIRED_EFFICIENCY,
-  HIRED_NAMES,
-  HIRE_COST,
-  HOME_POSITION,
-  MAX_TASKS,
-  MAX_WORKERS,
-  TASK_MINUTES,
-  WALK_SPEED,
-  WORK_END_HOUR,
-  WORK_START_HOUR,
-  type WorkerTemplate,
-} from '../data/workers';
+import { MAX_TASKS, TASK_MINUTES, WALK_SPEED, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { applyTool, plant } from './actions';
 import { laborMultipliers } from './animals';
 import { inBounds, tileCoords, tileIndex } from './grid';
+import { homeSpot } from './home';
+import { addCount } from './inventory';
 import { findPath } from './path';
+import { hash01 } from './random';
+import { harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
 import {
-  fail,
-  ok,
   type ActionError,
   type ActionResult,
+  fail,
   type GameState,
   type GridPoint,
   type Task,
   type ToolId,
   type Worker,
   type WorkerActivity,
-  type WorkerKind,
 } from './types';
 
+export { homeSpot };
+
 // ---------- workers ----------
-
-/** Resting spot for the n-th worker: a small cluster in front of the house door. */
-export const homeSpot = (slot: number): GridPoint => ({
-  x: HOME_POSITION.x + ((slot % 4) - 1.5) * 0.3,
-  y: HOME_POSITION.y + Math.floor(slot / 4) * 0.25,
-});
-
-const makeWorker = (id: number, slot: number, template: WorkerTemplate, kind: WorkerKind): Worker => {
-  const home = homeSpot(slot);
-  return {
-    id,
-    name: template.name,
-    role: template.role,
-    kind,
-    efficiency: template.efficiency,
-    x: home.x,
-    y: home.y,
-    taskId: null,
-    path: [],
-    progress: 0,
-  };
-};
-
-/** The starting family, with ids starting at `firstId`. */
-export const createFamily = (firstId: number): Worker[] =>
-  FAMILY.map((template, i) => makeWorker(firstId + i, i, template, 'family'));
 
 export const isWorkTime = (gameMinutes: number): boolean => {
   const hour = (((gameMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY) / 60;
@@ -72,67 +36,6 @@ export const workerActivity = (state: GameState, worker: Worker): WorkerActivity
   if (worker.taskId !== null) return 'working';
   return isWorkTime(state.gameMinutes) ? 'idle' : 'resting';
 };
-
-const nextHiredName = (workers: readonly Worker[]): string => {
-  const used = new Set(workers.map((w) => w.name));
-  const free = HIRED_NAMES.find((name) => !used.has(name));
-  if (free) return free;
-  const hired = workers.filter((w) => w.kind === 'hired').length;
-  return `${HIRED_NAMES[hired % HIRED_NAMES.length] ?? 'Ajudante'} ${hired + 1}`;
-};
-
-export const hireWorker = (state: GameState): ActionResult => {
-  if (state.workers.length >= MAX_WORKERS) return fail('max-workers');
-  if (state.money < HIRE_COST) return fail('not-enough-money');
-  const template: WorkerTemplate = {
-    name: nextHiredName(state.workers),
-    role: 'Contratado',
-    efficiency: HIRED_EFFICIENCY,
-  };
-  const worker = makeWorker(state.nextId, state.workers.length, template, 'hired');
-  return ok({
-    ...state,
-    money: state.money - HIRE_COST,
-    workers: [...state.workers, worker],
-    nextId: state.nextId + 1,
-  });
-};
-
-/** Releases a worker's task back to the queue. */
-const unassign = (tasks: readonly Task[], workerId: number): Task[] =>
-  tasks.map((t) => (t.workerId === workerId ? { ...t, workerId: null } : t));
-
-export const fireWorker = (state: GameState, workerId: number): ActionResult => {
-  const worker = state.workers.find((w) => w.id === workerId);
-  if (!worker || worker.kind !== 'hired') return fail('not-hired');
-  return ok({
-    ...state,
-    workers: state.workers.filter((w) => w.id !== workerId),
-    tasks: unassign(state.tasks, workerId),
-  });
-};
-
-/** Pays every hired worker; those who can't be paid leave. Returns the names of who left. */
-export const payWages = (state: GameState): { state: GameState; left: string[] } => {
-  let money = state.money;
-  let tasks = state.tasks;
-  const left: string[] = [];
-  const workers = state.workers.filter((w) => {
-    if (w.kind !== 'hired') return true;
-    if (money >= DAILY_WAGE) {
-      money -= DAILY_WAGE;
-      return true;
-    }
-    left.push(w.name);
-    tasks = unassign(tasks, w.id);
-    return false;
-  });
-  if (left.length === 0 && money === state.money) return { state, left };
-  return { state: { ...state, money, workers, tasks }, left };
-};
-
-export const dailyWages = (state: GameState): number =>
-  state.workers.filter((w) => w.kind === 'hired').length * DAILY_WAGE;
 
 // ---------- tasks ----------
 
@@ -157,6 +60,15 @@ const removeTask = (state: GameState, taskId: number): GameState => ({
   ),
 });
 
+const lastTaskOn = (tasks: readonly Task[], tile: number): Task | undefined => {
+  let last: Task | undefined;
+  for (const t of tasks) if (t.tile === tile) last = t;
+  return last;
+};
+
+const sameOrder = (task: Task, kind: ToolId, cropId: CropId): boolean =>
+  task.kind === kind && (kind !== 'seed' || task.cropId === cropId);
+
 export type QueueResult =
   | { ok: true; state: GameState; change: 'queued' | 'cancelled' }
   | { ok: false; error: ActionError };
@@ -171,9 +83,8 @@ export const toggleTask = (
   tile: number,
   cropId: CropId,
 ): QueueResult => {
-  let last: Task | undefined;
-  for (const t of state.tasks) if (t.tile === tile) last = t;
-  if (last && last.kind === kind && (kind !== 'seed' || last.cropId === cropId)) {
+  const last = lastTaskOn(state.tasks, tile);
+  if (last && sameOrder(last, kind, cropId)) {
     return { ok: true, state: removeTask(state, last.id), change: 'cancelled' };
   }
   if (state.tasks.length >= MAX_TASKS) return { ok: false, error: 'queue-full' };
@@ -187,11 +98,95 @@ export const toggleTask = (
   };
 };
 
+/** Dragging over an area queues the order everywhere, or cancels it when it starts on a tile that already has it. */
+export type AreaMode = 'queue' | 'cancel';
+
+export const areaMode = (state: GameState, kind: ToolId, anchor: number, cropId: CropId): AreaMode => {
+  const last = lastTaskOn(state.tasks, anchor);
+  return last && sameOrder(last, kind, cropId) ? 'cancel' : 'queue';
+};
+
+export interface AreaResult {
+  state: GameState;
+  mode: AreaMode;
+  /** Tiles that got the order (queue) or lost it (cancel). */
+  changed: number[];
+  /** First reason a tile was left out, for the message when nothing changed. */
+  error: ActionError | null;
+}
+
+/**
+ * Applies an order to many tiles at once. Queue mode validates each tile against the queued
+ * future (with the tiles before it in the area already applied, so seeds run out as expected) and
+ * skips tiles that already have the order or would fail. Cancel mode removes the order from the
+ * tiles where it is the last one queued.
+ */
+export const applyArea = (
+  state: GameState,
+  kind: ToolId,
+  tiles: readonly number[],
+  cropId: CropId,
+  mode: AreaMode,
+): AreaResult => {
+  if (mode === 'cancel') {
+    const removed = new Set<number>();
+    const changed: number[] = [];
+    for (const tile of tiles) {
+      const last = lastTaskOn(state.tasks, tile);
+      if (last && sameOrder(last, kind, cropId)) {
+        removed.add(last.id);
+        changed.push(tile);
+      }
+    }
+    if (removed.size === 0) return { state, mode, changed, error: null };
+    const next: GameState = {
+      ...state,
+      tasks: state.tasks.filter((t) => !removed.has(t.id)),
+      workers: state.workers.map((w) =>
+        w.taskId !== null && removed.has(w.taskId) ? { ...w, taskId: null, path: [], progress: 0 } : w,
+      ),
+    };
+    return { state: next, mode, changed, error: null };
+  }
+
+  let projected = projectTasks(state);
+  let nextId = state.nextId;
+  let error: ActionError | null = null;
+  const added: Task[] = [];
+  const changed: number[] = [];
+  for (const tile of tiles) {
+    const last = lastTaskOn(state.tasks, tile);
+    if (last && sameOrder(last, kind, cropId)) continue;
+    if (state.tasks.length + added.length >= MAX_TASKS) {
+      error = 'queue-full';
+      break;
+    }
+    const task: Task = { id: nextId, kind, tile, cropId: kind === 'seed' ? cropId : null, workerId: null };
+    const result = applyTask(projected, task);
+    if (!result.ok) {
+      error ??= result.error;
+      continue;
+    }
+    projected = result.state;
+    added.push(task);
+    changed.push(tile);
+    nextId++;
+  }
+  if (added.length === 0) return { state, mode, changed, error };
+  return { state: { ...state, tasks: [...state.tasks, ...added], nextId }, mode, changed, error };
+};
+
 export const clearTasks = (state: GameState): GameState => ({
   ...state,
   tasks: [],
   workers: state.workers.map((w) => (w.taskId === null ? w : { ...w, taskId: null, path: [], progress: 0 })),
 });
+
+/** Queued task kinds that no worker has in their list (they would wait forever). */
+export const unstaffedKinds = (state: GameState): ToolId[] => {
+  const covered = new Set(state.workers.flatMap((w) => w.priorities));
+  return [...new Set(state.tasks.map((t) => t.kind))].filter((k) => !covered.has(k));
+};
 
 // ---------- simulation ----------
 
@@ -212,18 +207,38 @@ const availableTasks = (tasks: readonly Task[]): Task[] => {
   return result;
 };
 
-const nearestTask = (worker: Worker, tasks: readonly Task[]): Task | undefined => {
+/** The task a free worker takes: the first kind in their priority list that has work, then the nearest. */
+const bestTask = (worker: Worker, tasks: readonly Task[]): Task | undefined => {
   let best: Task | undefined;
+  let bestRank = Infinity;
   let bestDistance = Infinity;
   for (const task of availableTasks(tasks)) {
+    const rank = worker.priorities.indexOf(task.kind);
+    if (rank < 0 || rank > bestRank) continue;
     const c = tileCenter(task.tile);
     const d = Math.hypot(c.x - worker.x, c.y - worker.y);
-    if (d < bestDistance) {
+    if (rank < bestRank || d < bestDistance) {
       best = task;
+      bestRank = rank;
       bestDistance = d;
     }
   }
   return best;
+};
+
+/** What a task works on: the crop being planted, or the one on the tile (none for tilling). */
+export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' | 'cropId'>): TaskContext => {
+  if (task.kind === 'seed') return { kind: task.kind, cropId: task.cropId };
+  if (task.kind === 'hoe') return { kind: task.kind, cropId: null };
+  return { kind: task.kind, cropId: state.tiles[task.tile]?.crop?.cropId ?? null };
+};
+
+/** Effective harvests can give one extra unit (rolled deterministically from the task id). */
+const harvestBonus = (state: GameState, worker: Worker, task: Task, cropId: CropId | null): GameState => {
+  if (task.kind !== 'hand' || cropId === null) return state;
+  const chance = harvestBonusChance(workEffectiveness(worker, { kind: 'hand', cropId }));
+  if (hash01(task.id * 7 + 3) >= chance) return state;
+  return { ...state, inventory: { ...state.inventory, produce: addCount(state.inventory.produce, cropId, 1) } };
 };
 
 /** Walks along the path for up to `minutes`. Returns the moved worker and unused minutes. */
@@ -260,8 +275,9 @@ const groundSpeed = (state: GameState, worker: Worker): number => {
 };
 
 /**
- * Moves every worker for `minutes` of game time: picks tasks, walks, works and applies finished
- * tasks to the farm. Outside work hours (and when idle) workers head home.
+ * Moves every worker for `minutes` of game time: picks tasks (by each worker's priorities),
+ * walks, works at a speed set by their attributes and applies finished tasks to the farm.
+ * Outside work hours (and when idle) workers head home.
  */
 export const stepWorkers = (state: GameState, minutes: number): GameState => {
   if (minutes <= 0 || state.workers.length === 0) return state;
@@ -284,7 +300,7 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
       w = { ...w, taskId: null, path: [], progress: 0 };
     }
     if (workTime && w.taskId === null) {
-      const task = nearestTask(w, tasks);
+      const task = bestTask(w, tasks);
       if (task) {
         const workerId = w.id;
         tasks = tasks.map((t) => (t.id === task.id ? { ...t, workerId } : t));
@@ -292,7 +308,7 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
       }
     }
     if (w.taskId === null && w.path.length === 0) {
-      const home = homeSpot(i);
+      const home = homeSpot(world, i);
       if (Math.hypot(home.x - w.x, home.y - w.y) > HOME_EPSILON) {
         w = { ...w, path: findPath(world.tiles, w, home) };
       }
@@ -305,10 +321,11 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
     const task = taskId === null ? undefined : tasks.find((t) => t.id === taskId);
     if (task && w.path.length === 0 && moved.leftover > 0) {
       const boost = task.kind === 'hoe' ? labor.hoe : 1;
-      const progress = w.progress + moved.leftover * w.efficiency * boost;
+      const context = taskContext(world, task);
+      const progress = w.progress + moved.leftover * workSpeed(w, context) * boost;
       if (progress >= TASK_MINUTES[task.kind]) {
         const result = applyTask({ ...world, tasks, workers }, task);
-        if (result.ok) world = result.state;
+        if (result.ok) world = harvestBonus(result.state, w, task, context.cropId);
         tasks = tasks.filter((t) => t.id !== task.id);
         w = { ...w, taskId: null, progress: 0 };
       } else {

@@ -38,16 +38,25 @@ const simplify = (points: GridPoint[]): GridPoint[] =>
     return (p.x - a.x) * (b.y - p.y) - (p.y - a.y) * (b.x - p.x) !== 0;
   });
 
+/** The car's two drives: in from the highway's east end, and back out to its west end. */
+export interface CarRoutes {
+  arrive: GridPoint[];
+  leave: GridPoint[];
+}
+
 /**
- * The car's route in tile space: from the far end of the off-map road to the parking spot,
- * following road tiles (4-connected) from the access road's map entry. The parking spot is the
- * reachable road tile closest to the shipping bin (ties: the shorter drive).
+ * The car's routes in tile space. It comes along the highway, turns into the access road at the
+ * junction and follows road tiles (4-connected) from the map entry to the parking spot: the
+ * reachable road tile closest to the shipping bin (ties: the shorter drive). It leaves the same
+ * way back and turns the other way on the highway, so both drives have the same length.
  */
-export const carRoute = (tiles: readonly Tile[]): GridPoint[] => {
+export const carRoutes = (tiles: readonly Tile[]): CarRoutes => {
   const exit = accessRoadExit();
   const entry = tileIndex(ACCESS_ROAD_X, exit.edgeRow);
-  const { far, border: edge } = exit;
-  if (!tiles[entry]?.road) return [far, edge];
+  const { border: edge, turn: junction, highwayEast, highwayWest } = exit;
+  if (!tiles[entry]?.road) {
+    return { arrive: [highwayEast, junction, edge], leave: [edge, junction, highwayWest] };
+  }
 
   const goal = parkingGoal();
   const parent = new Map<number, number>([[entry, -1]]);
@@ -79,7 +88,10 @@ export const carRoute = (tiles: readonly Tile[]): GridPoint[] => {
     path.push({ x: x + 0.5, y: y + 0.5 });
   }
   path.reverse();
-  return simplify([far, edge, ...path]);
+  return {
+    arrive: simplify([highwayEast, junction, edge, ...path]),
+    leave: simplify([...path.slice().reverse(), edge, junction, highwayWest]),
+  };
 };
 
 export const routeLength = (route: readonly GridPoint[]): number => {
@@ -140,7 +152,8 @@ export interface CarState {
 }
 
 /** Where the car is at a given game time. */
-export const carState = (gameMinutes: number, route: readonly GridPoint[]): CarState => {
+export const carState = (gameMinutes: number, routes: CarRoutes): CarState => {
+  const route = routes.arrive;
   const length = routeLength(route);
   const drive = driveMinutes(length);
   const minute = ((gameMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
@@ -153,9 +166,10 @@ export const carState = (gameMinutes: number, route: readonly GridPoint[]): CarS
     const back = t - drive - CAR.waitMinutes;
     if (back < drive) {
       // Leaving mirrors arriving in time: speed up from the parking spot, then cruise away.
-      const p = pointAt(route, arrivalDistance(length, drive - back));
-      return { phase: 'leaving', visit, x: p.x, y: p.y, heading: p.heading + Math.PI };
+      const leaveLength = routeLength(routes.leave);
+      const p = pointAt(routes.leave, leaveLength - arrivalDistance(leaveLength, drive - back));
+      return { phase: 'leaving', visit, x: p.x, y: p.y, heading: p.heading };
     }
   }
-  return { phase: 'away', visit: 0, x: start.x, y: start.y, heading: Math.PI };
+  return { phase: 'away', visit: 0, x: start.x, y: start.y, heading: -Math.PI / 2 };
 };

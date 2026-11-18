@@ -15,6 +15,10 @@ export const PALETTE = {
   structureGround: '#b08a5c',
   /** Packed dirt road. */
   road: '#a88d66',
+  /** Paved highway beyond the farm and its painted lines. */
+  asphalt: '#4a4a4f',
+  highwayEdgeLine: '#e8e6df',
+  highwayCenterLine: '#e9c03a',
   // Outside the farm
   ground: '#6f9a3e',
   groundDark: '#557f33',
@@ -39,6 +43,8 @@ export const PALETTE = {
   // Interaction overlays
   hoverValid: '#fff6c2',
   hoverInvalid: '#ff6b5a',
+  /** Area selection that will cancel the queued orders under it. */
+  hoverCancel: '#ffa53a',
   plotAvailable: '#ffd75e',
   plotBlocked: '#ff6b5a',
   // Task markers, by tool

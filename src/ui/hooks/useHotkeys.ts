@@ -48,7 +48,8 @@ export function useHotkeys(): void {
           break;
         }
         case 'escape':
-          if (store.pendingPlot !== null) store.requestPlot(null);
+          if (store.area) store.cancelArea();
+          else if (store.pendingPlot !== null) store.requestPlot(null);
           else if (store.buildMode) store.setBuildMode(null);
           else store.closePanel();
           break;

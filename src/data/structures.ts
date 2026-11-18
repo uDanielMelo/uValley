@@ -1,13 +1,13 @@
 /** Structures placed on the grid. */
 
-export const STRUCTURE_IDS = ['house', 'shippingBin', 'chickenCoop', 'silo', 'warehouse', 'barn'] as const;
+export const STRUCTURE_IDS = ['house', 'shippingBin', 'bunkhouse', 'chickenCoop', 'silo', 'warehouse', 'barn'] as const;
 export type StructureId = (typeof STRUCTURE_IDS)[number];
 
-export type StructureCategory = 'animals' | 'storage';
+export type StructureCategory = 'housing' | 'animals' | 'storage';
 
 /**
  * Footprints are in tiles of TILE_METERS (3.5 m, see data/scale.ts) and the models are built to
- * match real sizes: coop 7 × 3.5 m, silo Ø 5 m × 12 m, warehouse 10.5 × 7 m, barn 10.5 × 10.5 m.
+ * match real sizes: bunkhouse 7 × 3.5 m, coop 7 × 3.5 m, silo Ø 5 m × 12 m, warehouse 10.5 × 7 m, barn 10.5 × 10.5 m.
  */
 export interface StructureDef {
   id: StructureId;
@@ -31,6 +31,16 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     width: 1,
     depth: 1,
     description: 'Venda sua colheita aqui.',
+  },
+  bunkhouse: {
+    id: 'bunkhouse',
+    label: 'Alojamento',
+    icon: '🛏️',
+    width: 2,
+    depth: 1,
+    cost: 300,
+    category: 'housing',
+    description: 'Casa dos trabalhadores fixos: 3 camas.',
   },
   chickenCoop: {
     id: 'chickenCoop',
@@ -78,6 +88,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
 export const BUILDABLE_IDS: readonly StructureId[] = STRUCTURE_IDS.filter((id) => STRUCTURES[id].cost !== undefined);
 
 export const CATEGORY_LABELS: Record<StructureCategory, string> = {
+  housing: 'Moradia',
   animals: 'Animais',
   storage: 'Armazenamento',
 };
@@ -96,4 +107,5 @@ export interface StructurePlacement {
 export const START_STRUCTURES: readonly StructurePlacement[] = [
   { id: 'house', x: 15, y: 15 },
   { id: 'shippingBin', x: 17, y: 16 },
+  { id: 'bunkhouse', x: 12, y: 16 },
 ];

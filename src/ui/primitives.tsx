@@ -38,11 +38,13 @@ interface PanelProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Tailwind width class. */
+  width?: string;
 }
 
-export function Panel({ title, onClose, children }: PanelProps) {
+export function Panel({ title, onClose, children, width = 'w-[22rem]' }: PanelProps) {
   return (
-    <Card className="flex max-h-[70vh] w-[22rem] flex-col">
+    <Card className={`flex max-h-[70vh] flex-col ${width}`}>
       <header className="flex items-center justify-between border-b-2 border-wood/20 px-4 py-2">
         <h2 className="text-lg font-black">{title}</h2>
         <button
@@ -66,4 +68,20 @@ export function Coins({ value, className = '' }: { value: string | number; class
       {value}
     </span>
   );
+}
+
+/** 1–3 stars, filled up to `value`. */
+export function Stars({ value, max = 3 }: { value: number; max?: number }) {
+  return (
+    <span className="tracking-tight text-amber-600" aria-label={`${value} de ${max} estrelas`}>
+      {'★'.repeat(value)}
+      <span className="text-wood/25">{'★'.repeat(Math.max(0, max - value))}</span>
+    </span>
+  );
+}
+
+/** Small rounded label. */
+export function Chip({ children, tone = 'wood' }: { children: ReactNode; tone?: 'wood' | 'leaf' | 'coin' }) {
+  const tones = { wood: 'bg-wood/15 text-wood-dark', leaf: 'bg-leaf/20 text-green-900', coin: 'bg-coin/35 text-wood-dark' };
+  return <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-extrabold ${tones[tone]}`}>{children}</span>;
 }

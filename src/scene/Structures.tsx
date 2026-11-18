@@ -5,13 +5,14 @@ import { footprintOf } from '../game/structures';
 import type { Rotation } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { cornerToWorld } from './coords';
-import { Barn, ChickenCoop, Silo, Warehouse } from './models/Buildings';
+import { Barn, Bunkhouse, ChickenCoop, Silo, Warehouse } from './models/Buildings';
 import { House } from './models/House';
 import { ShippingBin } from './models/ShippingBin';
 
 export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   house: House,
   shippingBin: ShippingBin,
+  bunkhouse: Bunkhouse,
   chickenCoop: ChickenCoop,
   silo: Silo,
   warehouse: Warehouse,
@@ -21,6 +22,7 @@ export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
 /** Click handlers per structure (structures without one let clicks fall through to tiles). */
 const ON_CLICK: Partial<Record<StructureId, () => void>> = {
   shippingBin: () => useGameStore.getState().showPanel('inventory'),
+  bunkhouse: () => useGameStore.getState().showPanel('workers'),
 };
 
 interface PlacedProps {
@@ -41,6 +43,10 @@ export function StructureTransform({ type, x, y, rotation, children }: PlacedPro
   );
 }
 
+const stopDown = (e: ThreeEvent<PointerEvent>) => {
+  if (e.button === 0 && !useGameStore.getState().buildMode) e.stopPropagation();
+};
+
 function PlacedStructure({ type, x, y, rotation }: PlacedProps) {
   const Model = STRUCTURE_MODELS[type];
   const handler = ON_CLICK[type];
@@ -55,6 +61,7 @@ function PlacedStructure({ type, x, y, rotation }: PlacedProps) {
   return (
     <group
       onClick={onClick}
+      onPointerDown={handler ? stopDown : undefined}
       onPointerOver={handler ? () => (document.body.style.cursor = 'pointer') : undefined}
       onPointerOut={handler ? () => (document.body.style.cursor = '') : undefined}
     >

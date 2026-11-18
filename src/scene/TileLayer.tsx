@@ -1,5 +1,5 @@
 import type { ThreeEvent } from '@react-three/fiber';
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { BoxGeometry, Color, Matrix4, type InstancedMesh } from 'three';
 import { TILE_COUNT, tileCoords } from '../game/grid';
 import type { Tile } from '../game/types';
@@ -79,20 +79,40 @@ export function TileLayer() {
   const painting = useRef(false);
   const roadMode = () => useGameStore.getState().buildMode === 'road';
 
+  // Tool mode drags an area: press starts it, moving extends it, releasing anywhere queues it.
+  useEffect(() => {
+    const onRelease = (e: PointerEvent) => {
+      if (e.button === 0) useGameStore.getState().finishArea();
+    };
+    window.addEventListener('pointerup', onRelease);
+    return () => window.removeEventListener('pointerup', onRelease);
+  }, []);
+
   const onMove = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     if (e.instanceId === undefined) return;
     const store = useGameStore.getState();
     const changed = store.hoveredTile !== e.instanceId;
     store.setHoveredTile(e.instanceId);
+    if (store.area) store.extendArea(e.instanceId);
     if (painting.current && changed && (e.buttons & 1) === 1 && roadMode()) store.paintRoadAt(e.instanceId);
   };
   const onLeave = () => useGameStore.getState().setHoveredTile(null);
   const onDown = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button !== 0 || e.instanceId === undefined || !roadMode()) return;
+    if (e.button !== 0 || e.instanceId === undefined) return;
+    const store = useGameStore.getState();
+    if (roadMode()) {
+      e.stopPropagation();
+      painting.current = true;
+      store.interactAt(e.instanceId);
+      return;
+    }
+    if (store.buildMode) return;
+    // Land for sale and the shipping bin answer to plain clicks instead.
+    const tile = store.game.tiles[e.instanceId];
+    if (!tile || tile.state === 'locked' || tile.structure === 'shippingBin') return;
     e.stopPropagation();
-    painting.current = true;
-    useGameStore.getState().interactAt(e.instanceId);
+    store.beginArea(e.instanceId);
   };
   const onUp = () => {
     painting.current = false;

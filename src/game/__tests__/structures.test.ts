@@ -26,9 +26,9 @@ const FREE_X = 12;
 const FREE_Y = 12;
 
 describe('structure placement', () => {
-  it('starts with the house and shipping bin as placed instances', () => {
+  it('starts with the house, shipping bin and bunkhouse as placed instances', () => {
     const s = createInitialState();
-    expect(s.structures.map((x) => x.type)).toEqual(['house', 'shippingBin']);
+    expect(s.structures.map((x) => x.type)).toEqual(['house', 'shippingBin', 'bunkhouse']);
     expect(new Set([...s.workers.map((w) => w.id), ...s.structures.map((x) => x.id)]).size).toBe(
       s.workers.length + s.structures.length,
     );
@@ -39,7 +39,7 @@ describe('structure placement', () => {
     const s0 = createInitialState();
     const s = unwrap(placeStructure(s0, 'chickenCoop', FREE_X, FREE_Y));
     expect(s.money).toBe(s0.money - (STRUCTURES.chickenCoop.cost ?? 0));
-    expect(s.structures).toHaveLength(3);
+    expect(s.structures).toHaveLength(s0.structures.length + 1);
     // The coop is 2×1 tiles (7 × 3.5 m).
     for (const [x, y] of [[12, 12], [13, 12]] as const) {
       expect(s.tiles[tileIndex(x, y)]?.structure).toBe('chickenCoop');
@@ -130,7 +130,7 @@ describe('structure saves', () => {
     expect(loaded?.game.tiles[tileIndex(13, 12)]?.structure).toBe('chickenCoop');
   });
 
-  it('migrates a v3 save by adding the starting structures', () => {
+  it('migrates a v3 save by adding the starting structures (and the bunkhouse in v6)', () => {
     const s = createInitialState();
     const { structures: _omit, ...v3game } = s;
     const raw = JSON.stringify({ saveVersion: 3, savedAt: 0, game: { ...v3game, nextId: 10 }, settings: DEFAULT_SETTINGS });
@@ -138,7 +138,10 @@ describe('structure saves', () => {
     expect(loaded?.game.structures.map((x) => [x.type, x.id])).toEqual([
       ['house', 10],
       ['shippingBin', 11],
+      ['bunkhouse', 12],
     ]);
-    expect(loaded?.game.nextId).toBe(12);
+    // Then the v6 hiring board takes the next ids.
+    expect(loaded?.game.candidates.map((c) => c.id)).toEqual([13, 14, 15, 16]);
+    expect(loaded?.game.nextId).toBe(17);
   });
 });

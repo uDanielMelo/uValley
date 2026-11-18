@@ -1,4 +1,5 @@
 import { DEMOLISH_REFUND, STRUCTURES, type StructureId } from '../data/structures';
+import { BUNKHOUSE_BEDS } from '../data/workers';
 import { inBounds, tileIndex } from './grid';
 import { findPath, isWalkable } from './path';
 import {
@@ -64,6 +65,10 @@ export const stampStructures = (tiles: readonly Tile[], structures: readonly Str
   }
   return result;
 };
+
+/** Beds for staff workers: one set per bunkhouse. */
+export const bedCount = (state: Pick<GameState, 'structures'>): number =>
+  state.structures.filter((s) => s.type === 'bunkhouse').length * BUNKHOUSE_BEDS;
 
 export const buildCost = (type: StructureId): number => STRUCTURES[type].cost ?? 0;
 
@@ -168,6 +173,10 @@ export const demolishStructure = (state: GameState, tile: number): ActionResult 
   const found = structureAt(state, tile);
   if (!found) return fail('no-structure');
   if (STRUCTURES[found.type].cost === undefined) return fail('not-demolishable');
+  if (found.type === 'bunkhouse') {
+    const staff = state.workers.filter((w) => w.kind === 'staff').length;
+    if (bedCount(state) - BUNKHOUSE_BEDS < staff) return fail('beds-in-use');
+  }
   const tiles = state.tiles.slice();
   for (const c of footprintCells(footprintOf(found.type, found.x, found.y, found.rotation))) {
     const index = tileIndex(c.x, c.y);

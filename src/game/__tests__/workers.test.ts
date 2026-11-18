@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { STARTING_MONEY } from '../../data/economy';
-import { DAILY_WAGE, FAMILY, HIRE_COST, MAX_WORKERS, TASK_MINUTES, WORK_END_HOUR } from '../../data/workers';
+import { STARTING_WORKERS, TASK_MINUTES, WORK_END_HOUR } from '../../data/workers';
 import { DAY_LENGTH_REAL_MINUTES, GAME_MINUTES_PER_REAL_SECOND, MINUTES_PER_DAY } from '../../data/world';
-import { tileIndex } from '../grid';
+import { till } from '../actions';
+import { tileIndex, tilesInRect } from '../grid';
 import { findPath, lineClear } from '../path';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
-import { advanceGame, tick } from '../simulation';
+import { hireTemp } from '../staff';
+import { tick } from '../simulation';
 import { createInitialState } from '../state';
 import type { ActionResult, GameState } from '../types';
 import {
+  applyArea,
+  areaMode,
   clearTasks,
-  fireWorker,
-  hireWorker,
   isWorkTime,
-  payWages,
   toggleTask,
   workerActivity,
   type QueueResult,
@@ -25,7 +25,6 @@ const unwrap = (result: ActionResult | QueueResult): GameState => {
 };
 
 const TILE = tileIndex(13, 13);
-// Column 18 north of the bin is the access road, so the second tile sits just past it.
 const OTHER = tileIndex(19, 13);
 
 /** Runs the simulation in small steps, like the render loop does. */
@@ -42,12 +41,11 @@ describe('time', () => {
   });
 });
 
-describe('family', () => {
-  it('starts with the three family members at home', () => {
+describe('starting crew', () => {
+  it('starts with three staff workers (no family) and an empty queue', () => {
     const s = createInitialState();
-    expect(FAMILY).toHaveLength(3);
-    expect(s.workers).toHaveLength(3);
-    expect(s.workers.every((w) => w.kind === 'family')).toBe(true);
+    expect(s.workers.map((w) => w.name)).toEqual(STARTING_WORKERS.map((t) => t.name));
+    expect(s.workers.every((w) => w.kind === 'staff')).toBe(true);
     expect(new Set(s.workers.map((w) => w.id)).size).toBe(3);
     expect(s.tasks).toEqual([]);
   });
@@ -55,7 +53,8 @@ describe('family', () => {
 
 describe('task queue', () => {
   it('validates against the queued future, so till then plant can be queued at once', () => {
-    let s = createInitialState();
+    const base = createInitialState();
+    let s: GameState = { ...base, inventory: { ...base.inventory, seeds: { wheat: 5 } } };
     expect(toggleTask(s, 'seed', TILE, 'wheat')).toEqual({ ok: false, error: 'not-tilled' });
     s = unwrap(toggleTask(s, 'hoe', TILE, 'wheat'));
     s = unwrap(toggleTask(s, 'seed', TILE, 'wheat'));
@@ -149,36 +148,6 @@ describe('workers', () => {
   });
 });
 
-describe('hiring', () => {
-  it('hires, pays wages daily, and loses workers it cannot pay', () => {
-    const s = unwrap(hireWorker(createInitialState()));
-    expect(s.workers).toHaveLength(4);
-    expect(s.money).toBe(STARTING_MONEY - HIRE_COST);
-    const hired = s.workers[3];
-    expect(hired?.kind).toBe('hired');
-
-    const paid = payWages(s);
-    expect(paid.state.money).toBe(s.money - DAILY_WAGE);
-    expect(paid.left).toEqual([]);
-
-    const broke = payWages({ ...s, money: DAILY_WAGE - 1 });
-    expect(broke.left).toEqual([hired?.name]);
-    expect(broke.state.workers).toHaveLength(3);
-
-    const nextDay = advanceGame({ ...s, gameMinutes: MINUTES_PER_DAY - 1 }, 2);
-    expect(nextDay.state.money).toBe(s.money - DAILY_WAGE);
-  });
-
-  it('cannot fire family or exceed the limit', () => {
-    let s: GameState = { ...createInitialState(), money: 1_000_000 };
-    expect(fireWorker(s, s.workers[0]?.id ?? -1)).toEqual({ ok: false, error: 'not-hired' });
-    while (s.workers.length < MAX_WORKERS) s = unwrap(hireWorker(s));
-    expect(hireWorker(s)).toEqual({ ok: false, error: 'max-workers' });
-    s = unwrap(fireWorker(s, s.workers.at(-1)?.id ?? -1));
-    expect(s.workers).toHaveLength(MAX_WORKERS - 1);
-  });
-});
-
 describe('paths', () => {
   it('go around the house instead of through it', () => {
     const s = createInitialState();
@@ -198,16 +167,72 @@ describe('paths', () => {
 describe('save v2', () => {
   it('round-trips workers and tasks', () => {
     let s = unwrap(toggleTask(createInitialState(), 'hoe', TILE, 'wheat'));
-    s = unwrap(hireWorker(s));
+    s = unwrap(hireTemp(s));
     s = tick(s, 1);
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates v1 saves by adding the family', () => {
-    const { workers: _w, tasks: _t, nextId: _n, ...v1Game } = createInitialState();
+  it('migrates v1 saves by adding the family, who become the starting crew in v6', () => {
+    const { workers: _w, tasks: _t, nextId: _n, candidates: _c, structures: _s, ...v1Game } = createInitialState();
     const loaded = deserialize(JSON.stringify({ saveVersion: 1, savedAt: 0, game: v1Game, settings: {} }));
-    expect(loaded?.game.workers).toHaveLength(3);
+    expect(loaded?.game.workers.map((w) => [w.name, w.kind])).toEqual(STARTING_WORKERS.map((t) => [t.name, 'staff']));
     expect(loaded?.game.tasks).toEqual([]);
     expect(loaded?.settings).toEqual(DEFAULT_SETTINGS);
+  });
+});
+
+describe('area orders', () => {
+  it('lists the tiles of a rectangle whatever corner the drag starts from', () => {
+    expect(tilesInRect(tileIndex(13, 13), tileIndex(12, 12))).toEqual([
+      tileIndex(12, 12),
+      tileIndex(13, 12),
+      tileIndex(12, 13),
+      tileIndex(13, 13),
+    ]);
+  });
+
+  it('queues the order on every valid tile and skips the rest', () => {
+    const s = createInitialState();
+    // 12..15 × 12..13 is free grass; row 15 crosses the house (15–16, 15).
+    const field = applyArea(s, 'hoe', tilesInRect(tileIndex(12, 12), tileIndex(15, 13)), 'wheat', 'queue');
+    expect(field.changed).toHaveLength(8);
+    expect(field.state.tasks).toHaveLength(8);
+    expect(field.error).toBeNull();
+
+    const row = applyArea(s, 'hoe', tilesInRect(tileIndex(14, 15), tileIndex(19, 15)), 'wheat', 'queue');
+    expect(row.changed).toEqual([tileIndex(14, 15), tileIndex(17, 15), tileIndex(18, 15), tileIndex(19, 15)]);
+    expect(row.error).toBe('structure');
+  });
+
+  it('reserves seeds across the area and stops planting when they run out', () => {
+    let s = createInitialState();
+    s = { ...s, inventory: { ...s.inventory, seeds: { wheat: 3 } } };
+    const tiles = tilesInRect(tileIndex(12, 12), tileIndex(16, 12));
+    s = applyArea(s, 'hoe', tiles, 'wheat', 'queue').state;
+    const planted = applyArea(s, 'seed', tiles, 'wheat', 'queue');
+    expect(planted.changed).toEqual(tiles.slice(0, 3));
+    expect(planted.error).toBe('no-seeds');
+  });
+
+  it('does not queue twice, and cancels when the drag starts on the same order', () => {
+    const tiles = tilesInRect(tileIndex(12, 12), tileIndex(14, 12));
+    let s = applyArea(createInitialState(), 'hoe', tiles.slice(0, 2), 'wheat', 'queue').state;
+    const again = applyArea(s, 'hoe', tiles, 'wheat', 'queue');
+    expect(again.changed).toEqual([tiles[2]]);
+    s = again.state;
+
+    expect(areaMode(s, 'hoe', tileIndex(12, 12), 'wheat')).toBe('cancel');
+    expect(areaMode(s, 'water', tileIndex(12, 12), 'wheat')).toBe('queue');
+    const cancelled = applyArea(s, 'hoe', tiles.slice(1), 'wheat', 'cancel');
+    expect(cancelled.changed).toEqual(tiles.slice(1));
+    expect(cancelled.state.tasks.map((t) => t.tile)).toEqual([tiles[0]]);
+  });
+
+  it('only waters tiles that will have a crop', () => {
+    let s = unwrap(till(createInitialState(), TILE));
+    s = { ...s, tiles: s.tiles.map((t, i) => (i === TILE ? { state: 'planted', crop: { cropId: 'wheat', growthMinutes: 0 } } : t)) };
+    const result = applyArea(s, 'water', tilesInRect(TILE, TILE + 1), 'wheat', 'queue');
+    expect(result.changed).toEqual([TILE]);
+    expect(result.error).toBe('no-crop');
   });
 });

@@ -301,3 +301,71 @@ export function Barn() {
     </Meters>
   );
 }
+
+// ---------- Bunkhouse: 2×1 tiles = 7 × 3.5 m ----------
+
+const BUNK_WALL = '#b88a5a';
+const BUNK_TRIM = '#efe6d2';
+const BUNK_ROOF = '#5d6a78';
+/** Cabin: 6.2 × 2.7 m on a 25 cm concrete base, eaves at 2.75 m. */
+const BUNK_W = 6.2;
+const BUNK_D = 2.7;
+const BUNK_BASE = 0.25;
+const BUNK_TOP = 2.75;
+
+/** Workers' bunkhouse: plank cabin with a front door, three windows and a stove pipe. */
+export function Bunkhouse() {
+  const front = BUNK_D / 2;
+  const wallH = BUNK_TOP - BUNK_BASE;
+  return (
+    <Meters>
+      <Block position={[0, BUNK_BASE / 2, 0]} size={[BUNK_W + 0.3, BUNK_BASE, BUNK_D + 0.3]} color={CONCRETE} />
+      <Block position={[0, BUNK_BASE + wallH / 2, 0]} size={[BUNK_W, wallH, BUNK_D]} color={BUNK_WALL} />
+      {/* Plank seams on the front and back walls */}
+      {[0.8, 1.4, 2.0].flatMap((y) =>
+        [-1, 1].map((side) => (
+          <Block
+            key={`${y}${side}`}
+            position={[0, BUNK_BASE + y, side * (front + 0.01)]}
+            size={[BUNK_W, 0.03, 0.02]}
+            color={WOOD_DARK}
+            shadow={false}
+          />
+        )),
+      )}
+      {/* Corner trims */}
+      {[-1, 1].flatMap((sx) =>
+        [-1, 1].map((sz) => (
+          <Block
+            key={`c${sx}${sz}`}
+            position={[sx * (BUNK_W / 2), BUNK_BASE + wallH / 2, sz * front]}
+            size={[0.12, wallH, 0.12]}
+            color={BUNK_TRIM}
+            shadow={false}
+          />
+        )),
+      )}
+      <GableRoof length={BUNK_W + 0.6} span={BUNK_D + 0.7} rise={1.2} base={BUNK_TOP} color={BUNK_ROOF} />
+      {/* Door (0.9 × 2.1 m) with frame and a step */}
+      <Block position={[-1.9, BUNK_BASE + 1.1, front + 0.03]} size={[1.08, 2.24, 0.04]} color={BUNK_TRIM} shadow={false} />
+      <Block position={[-1.9, BUNK_BASE + 1.05, front + 0.05]} size={[0.9, 2.1, 0.04]} color={WOOD_DARK} />
+      <Block position={[-1.65, BUNK_BASE + 1.0, front + 0.09]} size={[0.06, 0.06, 0.04]} color="#d8b84a" shadow={false} />
+      <Block position={[-1.9, 0.08, front + 0.45]} size={[1.2, 0.16, 0.5]} color={CONCRETE} />
+      {/* Windows (0.9 × 0.8 m) with white frames */}
+      {[-0.4, 1.0, 2.3].map((x) => (
+        <group key={x}>
+          <Block position={[x, BUNK_BASE + 1.6, front + 0.02]} size={[1.0, 0.9, 0.04]} color={BUNK_TRIM} shadow={false} />
+          <Glass position={[x, BUNK_BASE + 1.6, front + 0.05]} size={[0.86, 0.76, 0.03]} />
+          <Block position={[x, BUNK_BASE + 1.12, front + 0.08]} size={[1.06, 0.06, 0.12]} color={BUNK_TRIM} shadow={false} />
+        </group>
+      ))}
+      {/* Side window */}
+      <Glass position={[BUNK_W / 2 + 0.02, BUNK_BASE + 1.6, 0]} size={[0.03, 0.7, 0.8]} />
+      {/* Wood stove pipe */}
+      <mesh position={[1.6, BUNK_TOP + 1.1, -0.5]} castShadow>
+        <cylinderGeometry args={[0.1, 0.1, 1.4, 8]} />
+        <meshStandardMaterial color="#555b60" flatShading metalness={0.3} roughness={0.6} />
+      </mesh>
+    </Meters>
+  );
+}

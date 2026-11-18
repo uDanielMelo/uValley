@@ -88,6 +88,10 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
     e.stopPropagation();
     useGameStore.getState().collectAnimal(id);
   };
+  // Pressing on an animal collects it instead of starting an area drag on the tile below.
+  const stopDown = (e: ThreeEvent<PointerEvent>) => {
+    if (e.button === 0) e.stopPropagation();
+  };
   const onOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     useGameStore.getState().setHoveredAnimal(id);
@@ -99,7 +103,7 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
   };
 
   return (
-    <group ref={root} onClick={onClick} onPointerOver={onOver} onPointerOut={onOut}>
+    <group ref={root} onClick={onClick} onPointerDown={stopDown} onPointerOver={onOver} onPointerOut={onOut}>
       <group scale={model.fit}>
       <mesh position={model.hitboxCenter} material={HITBOX_MATERIAL}>
         <boxGeometry args={model.hitbox} />

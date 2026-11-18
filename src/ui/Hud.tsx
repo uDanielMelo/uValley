@@ -18,7 +18,7 @@ function ControlsHint() {
   return (
     <Card className="px-3 py-2 text-xs leading-relaxed font-bold text-wood/80">
       <p>
-        <b>Clique</b>: dar uma ordem (de novo cancela)
+        <b>Clique</b> ou <b>arraste</b>: dar ordens numa área (começar numa ordem igual cancela)
       </p>
       <p>
         <b>Botão direito</b> + arrastar: mover câmera

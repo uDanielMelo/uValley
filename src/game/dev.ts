@@ -4,7 +4,7 @@
  */
 import { ANIMALS, ANIMAL_PRODUCT_IDS, type AnimalId } from '../data/animals';
 import { CROP_IDS } from '../data/crops';
-import { HIRE_COST } from '../data/workers';
+import { MAX_WORKERS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { addAnimal } from './animals';
 import { growthMinutesNeeded } from './crops';
@@ -13,7 +13,9 @@ import { addCount } from './inventory';
 import { advanceGame } from './simulation';
 import { startOfNextDay } from './time';
 import type { GameState } from './types';
-import { applyTask, hireWorker } from './workers';
+import { homeSpot } from './home';
+import { makeWorker, rollProfile } from './staff';
+import { applyTask } from './workers';
 
 export const addMoney = (state: GameState, amount: number): GameState => ({
   ...state,
@@ -85,9 +87,12 @@ export const unlockAll = (state: GameState): GameState => ({
   unlockedPlots: Array.from({ length: PLOT_COUNT }, (_, i) => i),
 });
 
+/** Adds a random staff worker for free, even without a bed. */
 export const hireFree = (state: GameState): GameState => {
-  const result = hireWorker({ ...state, money: state.money + HIRE_COST });
-  return result.ok ? { ...result.state, money: state.money } : state;
+  if (state.workers.length >= MAX_WORKERS) return state;
+  const profile = rollProfile(state.nextId * 13 + 5, new Set(state.workers.map((w) => w.name)));
+  const worker = makeWorker(state.nextId, 'staff', profile, homeSpot(state, state.workers.length));
+  return { ...state, workers: [...state.workers, worker], nextId: state.nextId + 1 };
 };
 
 /** Completes the whole queue instantly, in order. Tasks that turn out invalid are dropped. */

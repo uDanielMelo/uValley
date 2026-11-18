@@ -1,13 +1,13 @@
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { BoxGeometry, Color, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
-import { OFFMAP_ROAD_LENGTH } from '../data/roads';
+import { HIGHWAY, OFFMAP_ROAD_LENGTH } from '../data/roads';
 import { PROP_SIZES, meters } from '../data/scale';
 import { TILE_COUNT, inBounds, tileCoords, tileIndex } from '../game/grid';
 import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { hash01, tileToWorld } from './coords';
 import { PALETTE } from './palette';
-import { OFFMAP_ROAD_DIR, OFFMAP_ROAD_X, OFFMAP_ROAD_Z } from './terrain';
+import { HIGHWAY_HALF_WIDTH, HIGHWAY_Z, OFFMAP_ROAD_DIR, OFFMAP_ROAD_X, OFFMAP_ROAD_Z } from './terrain';
 
 const noRaycast = () => null;
 const WIDTH = meters(PROP_SIZES.roadWidth);
@@ -16,8 +16,14 @@ const THICKNESS = 0.024;
 const ARM = (1 - WIDTH) / 2;
 /** Center patch + up to 4 arms per road tile. */
 const MAX_PIECES = TILE_COUNT * 5;
-/** Extra length past the far end, hidden by the fog. */
-const OFFMAP_EXTRA = 30;
+/** Terrain height of the graded corridor outside the farm. */
+const CORRIDOR_Y = -0.02;
+/** Highway length on each side of the junction, running on past the fog. */
+const HIGHWAY_HALF_LENGTH = HIGHWAY.reach + 40;
+const LINE = meters(PROP_SIZES.highwayLine);
+const DASH = meters(PROP_SIZES.highwayDash);
+const DASH_PERIOD = DASH + meters(PROP_SIZES.highwayDashGap);
+const DASH_COUNT = Math.ceil((2 * HIGHWAY_HALF_LENGTH) / DASH_PERIOD);
 
 const NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [
   [0, -1],
@@ -34,7 +40,8 @@ export function RoadLayer() {
   const meshRef = useRef<InstancedMesh>(null);
   const tiles = useGameStore((s) => s.game.tiles);
   const geometry = useMemo(() => new BoxGeometry(1, THICKNESS, 1), []);
-  const offMapLength = OFFMAP_ROAD_LENGTH + OFFMAP_EXTRA;
+  // The dirt road runs from the map border into the highway's edge.
+  const offMapLength = OFFMAP_ROAD_LENGTH - HIGHWAY_HALF_WIDTH + 0.05;
 
   useLayoutEffect(() => {
     const mesh = meshRef.current;
@@ -80,15 +87,55 @@ export function RoadLayer() {
       <instancedMesh ref={meshRef} args={[geometry, undefined, MAX_PIECES]} receiveShadow raycast={noRaycast}>
         <meshStandardMaterial roughness={1} />
       </instancedMesh>
-      {/* The road beyond the map edge, on the graded corridor (terrain there sits at -0.02). */}
+      {/* The road beyond the map edge, on the graded corridor. */}
       <mesh
-        position={[OFFMAP_ROAD_X, -0.02 + THICKNESS / 2 - 0.006, OFFMAP_ROAD_Z + (OFFMAP_ROAD_DIR * offMapLength) / 2]}
+        position={[OFFMAP_ROAD_X, CORRIDOR_Y + THICKNESS / 2 - 0.006, OFFMAP_ROAD_Z + (OFFMAP_ROAD_DIR * offMapLength) / 2]}
         receiveShadow
         raycast={noRaycast}
       >
         <boxGeometry args={[WIDTH, THICKNESS, offMapLength]} />
         <meshStandardMaterial color={PALETTE.road} roughness={1} />
       </mesh>
+      <Highway />
+    </group>
+  );
+}
+
+/** The paved two-lane highway the access road meets, running along X beyond the farm edge. */
+function Highway() {
+  const dashRef = useRef<InstancedMesh>(null);
+  const top = CORRIDOR_Y + THICKNESS;
+  const length = 2 * HIGHWAY_HALF_LENGTH;
+  const edgeOffset = HIGHWAY_HALF_WIDTH - LINE * 2.5;
+
+  useLayoutEffect(() => {
+    const mesh = dashRef.current;
+    if (!mesh) return;
+    const m = new Matrix4();
+    for (let i = 0; i < DASH_COUNT; i++) {
+      m.makeTranslation(OFFMAP_ROAD_X - HIGHWAY_HALF_LENGTH + (i + 0.5) * DASH_PERIOD, top + 0.002, HIGHWAY_Z);
+      mesh.setMatrixAt(i, m);
+    }
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [top]);
+
+  return (
+    <group>
+      <mesh position={[OFFMAP_ROAD_X, top - THICKNESS / 2, HIGHWAY_Z]} receiveShadow raycast={noRaycast}>
+        <boxGeometry args={[length, THICKNESS, HIGHWAY_HALF_WIDTH * 2]} />
+        <meshStandardMaterial color={PALETTE.asphalt} roughness={0.95} />
+      </mesh>
+      {[-1, 1].map((side) => (
+        <mesh key={side} position={[OFFMAP_ROAD_X, top + 0.002, HIGHWAY_Z + side * edgeOffset]} raycast={noRaycast}>
+          <boxGeometry args={[length, 0.004, LINE]} />
+          <meshStandardMaterial color={PALETTE.highwayEdgeLine} roughness={0.9} />
+        </mesh>
+      ))}
+      <instancedMesh ref={dashRef} args={[undefined, undefined, DASH_COUNT]} raycast={noRaycast}>
+        <boxGeometry args={[DASH, 0.004, LINE]} />
+        <meshStandardMaterial color={PALETTE.highwayCenterLine} roughness={0.9} />
+      </instancedMesh>
     </group>
   );
 }

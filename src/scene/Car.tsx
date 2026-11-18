@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { Group } from 'three';
 import { meters } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
-import { carRoute, carState } from '../game/visitors';
+import { carRoutes, carState } from '../game/visitors';
 import { useGameStore } from '../store/gameStore';
 import { Pickup, WHEEL_RADIUS } from './models/Car';
 
@@ -19,7 +19,7 @@ const angleDelta = (a: number, b: number): number => Math.atan2(Math.sin(b - a),
  */
 export function Car() {
   const tiles = useGameStore((s) => s.game.tiles);
-  const route = useMemo(() => carRoute(tiles), [tiles]);
+  const routes = useMemo(() => carRoutes(tiles), [tiles]);
   const root = useRef<Group>(null);
   const wheels = useRef<Array<Group | null>>([]);
   const last = useRef({ x: NaN, z: NaN, heading: NaN });
@@ -28,7 +28,7 @@ export function Car() {
   useFrame((_, delta) => {
     const r = root.current;
     if (!r) return;
-    const car = carState(useGameStore.getState().game.gameMinutes, route);
+    const car = carState(useGameStore.getState().game.gameMinutes, routes);
     r.visible = car.phase !== 'away';
     if (car.visit !== visit) setVisit(car.visit);
     if (!r.visible) {
