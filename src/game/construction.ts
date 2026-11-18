@@ -4,12 +4,12 @@
  * reserved by the queue) and returned in full when the order is cancelled.
  */
 import { ROAD_COST, ROAD_WORK_MINUTES } from '../data/roads';
-import { BUILD_CREW_MAX, type StructureId } from '../data/structures';
+import { BUILD_CREW_MAX, type ShelterLevel, type StructureId } from '../data/structures';
 import { MAX_TASKS } from '../data/workers';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { isWalkable } from './path';
 import { roadError } from './roads';
-import { collectShelter, shelterDef } from './shelters';
+import { collectShelter, nextShelterLevel, shelterDef } from './shelters';
 import {
   buildCost,
   buildMinutesFor,
@@ -21,6 +21,8 @@ import {
   refundFor,
   removeStructure,
   structureAt,
+  upgradeCost,
+  upgradeMinutes,
 } from './structures';
 import { dropTasks, lastTaskOn, projectTasks } from './tasks';
 import {
@@ -163,26 +165,62 @@ export const orderDemolish = (state: GameState, tile: number): ActionResult => {
   return ok(startWork(state, found.id, { kind: 'demolish', done: 0, total: demolishMinutesFor(found.type) }));
 };
 
-/** Cancels a structure's work: a site is cleared with a full refund; a demolition is called off. */
+/** Why a shelter cannot be upgraded now, or the level it would reach. */
+export const checkUpgrade = (state: GameState, structureId: number): ShelterLevel | ActionError => {
+  const s = state.structures.find((x) => x.id === structureId);
+  if (!s || !shelterDef(s.type)) return 'no-structure';
+  if (s.work) return 'under-construction';
+  const toLevel = nextShelterLevel(s);
+  if (!toLevel) return 'max-level';
+  if (state.money < upgradeCost(s.type, toLevel)) return 'not-enough-money';
+  return checkStructureOrder(state) ?? toLevel;
+};
+
+/** Queues upgrading a shelter to its next level, paying for it now. The shelter keeps working meanwhile. */
+export const orderUpgrade = (state: GameState, structureId: number): ActionResult => {
+  const toLevel = checkUpgrade(state, structureId);
+  if (typeof toLevel === 'string') return fail(toLevel);
+  const s = state.structures.find((x) => x.id === structureId);
+  if (!s) return fail('no-structure');
+  const paid = { ...state, money: state.money - upgradeCost(s.type, toLevel) };
+  return ok(startWork(paid, structureId, { kind: 'upgrade', done: 0, total: upgradeMinutes(s.type, toLevel), toLevel }));
+};
+
+/**
+ * Cancels a structure's work: a site is cleared with a full refund, a demolition is called off and
+ * an upgrade is called off with a full refund.
+ */
 export const cancelWork = (state: GameState, structureId: number): ActionResult => {
   const s = state.structures.find((x) => x.id === structureId);
   if (!s?.work) return fail('no-structure');
   if (s.work.kind === 'demolish') return ok(withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined));
+  if (s.work.kind === 'upgrade') {
+    const refund = s.work.toLevel ? upgradeCost(s.type, s.work.toLevel) : 0;
+    const called = withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined);
+    return ok({ ...called, money: called.money + refund });
+  }
   const removed = removeStructure(dropTasks(state, isTaskOn(structureId)), structureId);
   return ok({ ...removed, money: removed.money + buildCost(s.type) });
 };
 
 /**
- * Finishes a structure's work: the building is ready, or it is gone, part of its cost comes back
- * and whatever products were left in it go to the inventory.
+ * Finishes a structure's work: the building is ready, the shelter reaches its new level, or it is
+ * gone, part of what it cost comes back and whatever products were left in it go to the inventory.
  */
 export const completeWork = (state: GameState, structureId: number): GameState => {
   const s = state.structures.find((x) => x.id === structureId);
   if (!s?.work) return state;
   if (s.work.kind === 'build') return withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined);
+  if (s.work.kind === 'upgrade') {
+    const toLevel = s.work.toLevel;
+    const done = withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined);
+    return toLevel
+      ? { ...done, structures: done.structures.map((x) => (x.id === structureId ? { ...x, level: toLevel } : x)) }
+      : done;
+  }
   const emptied = collectShelter(state, structureId);
   const removed = removeStructure(dropTasks(emptied.ok ? emptied.state : state, isTaskOn(structureId)), structureId);
-  return { ...removed, money: removed.money + refundFor(s.type) };
+  return { ...removed, money: removed.money + refundFor(s.type, s.level) };
 };
 
 /** Adds work minutes to a site; finishes it when the work is complete. */
@@ -275,7 +313,8 @@ export const roadClick = (state: GameState, tile: number): RoadClick => {
 
 export type DemolishChange =
   | { kind: 'build-cancelled'; type: StructureId; refund: number }
-  | { kind: 'demolish-queued'; type: StructureId }
+  | { kind: 'upgrade-cancelled'; type: StructureId; refund: number }
+  | { kind: 'demolish-queued'; type: StructureId; refund: number }
   | { kind: 'demolish-cancelled'; type: StructureId }
   | { kind: 'road-cancelled'; refund: number }
   | { kind: 'road-removal-queued' };
@@ -283,8 +322,8 @@ export type DemolishChange =
 export type DemolishClick = { ok: true; state: GameState; change: DemolishChange } | { ok: false; error: ActionError };
 
 /**
- * Demolish tool on a tile. It undoes what is pending there (a queued road, a site, a demolition)
- * and otherwise queues tearing down the structure or the road.
+ * Demolish tool on a tile. It undoes what is pending there (a queued road, a site, an upgrade, a
+ * demolition) and otherwise queues tearing down the structure or the road.
  */
 export const demolishClick = (state: GameState, tile: number): DemolishClick => {
   const pending = pendingRoadTask(state, tile);
@@ -296,15 +335,19 @@ export const demolishClick = (state: GameState, tile: number): DemolishClick => 
   if (found?.work) {
     const result = cancelWork(state, found.id);
     if (!result.ok) return result;
+    const { kind, toLevel } = found.work;
     const change: DemolishChange =
-      found.work.kind === 'build'
+      kind === 'build'
         ? { kind: 'build-cancelled', type: found.type, refund: buildCost(found.type) }
-        : { kind: 'demolish-cancelled', type: found.type };
+        : kind === 'upgrade'
+          ? { kind: 'upgrade-cancelled', type: found.type, refund: toLevel ? upgradeCost(found.type, toLevel) : 0 }
+          : { kind: 'demolish-cancelled', type: found.type };
     return { ok: true, state: result.state, change };
   }
   if (found) {
     const result = orderDemolish(state, tile);
-    return result.ok ? { ok: true, state: result.state, change: { kind: 'demolish-queued', type: found.type } } : result;
+    const refund = refundFor(found.type, found.level);
+    return result.ok ? { ok: true, state: result.state, change: { kind: 'demolish-queued', type: found.type, refund } } : result;
   }
   if (state.tiles[tile]?.road) {
     const result = orderRoadRemoval(state, tile);

@@ -19,10 +19,44 @@ export type StructureId = (typeof STRUCTURE_IDS)[number];
 
 export type StructureCategory = 'housing' | 'animals' | 'storage';
 
-/** An animal shelter: which species live there and how many heads fit. */
+/** Shelter levels: basic, reinforced, comfortable, automated. */
+export type ShelterLevel = 1 | 2 | 3 | 4;
+export const SHELTER_LEVEL_IDS: readonly ShelterLevel[] = [1, 2, 3, 4];
+
+export interface ShelterLevelDef {
+  label: string;
+  /** 0–1: how pleasant the shelter is (shown to the player; drives production). */
+  comfort: number;
+  /** 0–1: protection against predators and disease (takes effect in stage 3d). */
+  safety: number;
+  /** Multiplies how fast the animals produce. */
+  production: number;
+  /** Multiplies the shelter's base capacity (heads); the product stock follows. */
+  capacity: number;
+  /** Upgrade price and work, as a share of the shelter's build cost and minutes (level 1: none). */
+  upgradeShare: number;
+}
+
+export const SHELTER_LEVELS: Record<ShelterLevel, ShelterLevelDef> = {
+  1: { label: 'Básico', comfort: 0.4, safety: 0.4, production: 1, capacity: 1, upgradeShare: 0 },
+  2: { label: 'Reforçado', comfort: 0.55, safety: 0.7, production: 1.1, capacity: 4 / 3, upgradeShare: 0.6 },
+  3: { label: 'Confortável', comfort: 0.8, safety: 0.75, production: 1.25, capacity: 5 / 3, upgradeShare: 1 },
+  4: { label: 'Automatizado', comfort: 0.9, safety: 0.85, production: 1.3, capacity: 2, upgradeShare: 1.6 },
+};
+
+/** Highest level that can be reached for now (the automated level comes in a later stage). */
+export const SHELTER_LEVEL_LIMIT: ShelterLevel = 3;
+
+/** An animal shelter: which species live there and how many heads fit at level 1. */
 export interface ShelterDef {
   species: readonly AnimalId[];
   capacity: number;
+  /** Highest level this shelter type can have (the stable has no automation). Default 4. */
+  maxLevel?: ShelterLevel;
+  /** Extra safety from level 2 on (the coop's wire mesh). */
+  safetyBonus?: number;
+  /** What each level adds to this shelter (pt-BR), shown in its card. */
+  perks: Partial<Record<ShelterLevel, string>>;
 }
 
 /**
@@ -77,7 +111,12 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 150,
     buildMinutes: 300,
     category: 'animals',
-    shelter: { species: ['chicken', 'duck'], capacity: 12 },
+    shelter: {
+      species: ['chicken', 'duck'],
+      capacity: 12,
+      safetyBonus: 0.1,
+      perks: { 2: 'Tela no cercado contra predadores', 3: 'Ninhos forrados e poleiros', 4: 'Coletor automático de ovos' },
+    },
     description: 'Casinha e cercado telado para galinhas e patas.',
   },
   pigsty: {
@@ -89,7 +128,11 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 250,
     buildMinutes: 360,
     category: 'animals',
-    shelter: { species: ['pig'], capacity: 4 },
+    shelter: {
+      species: ['pig'],
+      capacity: 4,
+      perks: { 2: 'Piso de concreto na baia', 3: 'Esterqueira: esterco melhor para adubo', 4: 'Comedouro automático' },
+    },
     description: 'Abrigo coberto e baia de lama para porcos.',
   },
   sheepfold: {
@@ -101,7 +144,11 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 300,
     buildMinutes: 420,
     category: 'animals',
-    shelter: { species: ['sheep', 'goat'], capacity: 6 },
+    shelter: {
+      species: ['sheep', 'goat'],
+      capacity: 6,
+      perks: { 2: 'Cerca alta e porteira', 3: 'Cama de palha e cocho coberto', 4: 'Tosquia e ordenha mecânicas' },
+    },
     description: 'Galpão baixo e cercado para ovelhas e cabras.',
   },
   corral: {
@@ -113,7 +160,11 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 400,
     buildMinutes: 540,
     category: 'animals',
-    shelter: { species: ['cow', 'ox'], capacity: 4 },
+    shelter: {
+      species: ['cow', 'ox'],
+      capacity: 4,
+      perks: { 2: 'Porteira de metal', 3: 'Cocho coberto e bebedouro', 4: 'Ordenhadeira' },
+    },
     description: 'Cobertura aberta e cerca de tábuas para vacas e bois.',
   },
   stable: {
@@ -125,7 +176,12 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 450,
     buildMinutes: 600,
     category: 'animals',
-    shelter: { species: ['horse'], capacity: 3 },
+    shelter: {
+      species: ['horse'],
+      capacity: 3,
+      maxLevel: 3,
+      perks: { 2: 'Baias forradas', 3: 'Selaria e cocheira' },
+    },
     description: 'Baias individuais para cavalos.',
   },
   silo: {

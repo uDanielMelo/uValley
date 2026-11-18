@@ -1,7 +1,7 @@
 import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCT_IDS, type AnimalId, type AnimalProductId } from '../data/animals';
 import { CROP_IDS, type CropId } from '../data/crops';
 import { ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X } from '../data/roads';
-import { START_STRUCTURES, STRUCTURE_IDS, type StructureId } from '../data/structures';
+import { SHELTER_LEVEL_IDS, START_STRUCTURES, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
 import {
   DEFAULT_PRIORITIES,
   HOME_POSITION,
@@ -40,7 +40,7 @@ import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -60,16 +60,17 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * priorities, hourly wage), added the bunkhouse and the hiring board; v7 made construction
  * work for the crew (`StructureInstance.work`, 'build' tasks with a `job`, 'build' in priorities);
  * v8 housed animals in shelters (`Animal.shelterId`, `path` instead of `target`, products in
- * `StructureInstance.stock`) and added the 'tend' activity.
+ * `StructureInstance.stock`) and added the 'tend' activity; v9 added shelter levels
+ * (`StructureInstance.level`, 'upgrade' work with `toLevel`).
  */
-export interface SaveDataV8 {
-  saveVersion: 8;
+export interface SaveDataV9 {
+  saveVersion: 9;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV8;
+export type SaveData = SaveDataV9;
 
 export interface LoadedSave {
   game: GameState;
@@ -185,6 +186,8 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
     });
     return { ...data, game: { ...game, workers, animals } };
   },
+  // v8 → v9: shelter levels. Absent level means level 1, so the data needs no change.
+  8: (data) => data,
 };
 
 /** The v2–v5 family, as it was saved before v6. */
@@ -449,14 +452,17 @@ const parseAnimal = (v: unknown): Animal | null => {
 const ROTATIONS: readonly Rotation[] = [0, 1, 2, 3];
 const isRotation = (v: unknown): v is Rotation => ROTATIONS.some((r) => r === v);
 
-const WORK_KINDS: readonly StructureWorkKind[] = ['build', 'demolish'];
+const WORK_KINDS: readonly StructureWorkKind[] = ['build', 'demolish', 'upgrade'];
 const isWorkKind = (v: unknown): v is StructureWorkKind => WORK_KINDS.some((k) => k === v);
+const isShelterLevel = (v: unknown): v is ShelterLevel => SHELTER_LEVEL_IDS.some((l) => l === v);
 
 /** Structure work, or undefined when the field is absent (null when it is invalid). */
 const parseWork = (v: unknown): StructureWork | undefined | null => {
   if (v === undefined) return undefined;
   if (!isRecord(v) || !isWorkKind(v.kind) || !isFiniteNumber(v.done) || !isFiniteNumber(v.total)) return null;
-  return { kind: v.kind, done: Math.max(0, v.done), total: Math.max(0, v.total) };
+  const work: StructureWork = { kind: v.kind, done: Math.max(0, v.done), total: Math.max(0, v.total) };
+  if (v.kind !== 'upgrade') return work;
+  return isShelterLevel(v.toLevel) ? { ...work, toLevel: v.toLevel } : null;
 };
 
 const parseStructure = (v: unknown): StructureInstance | null => {
@@ -468,6 +474,8 @@ const parseStructure = (v: unknown): StructureInstance | null => {
   if (work === null) return null;
   const stock = v.stock === undefined ? undefined : parseProducts(v.stock);
   if (stock === null) return null;
+  if (v.level !== undefined && !isShelterLevel(v.level)) return null;
+  const level = v.level !== undefined && v.level > 1 ? v.level : undefined;
   return {
     id,
     type,
@@ -475,6 +483,7 @@ const parseStructure = (v: unknown): StructureInstance | null => {
     y,
     rotation,
     ...(work ? { work } : {}),
+    ...(level ? { level } : {}),
     ...(stock && Object.keys(stock).length > 0 ? { stock } : {}),
   };
 };

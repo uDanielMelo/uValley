@@ -107,10 +107,11 @@ export function TileLayer() {
       store.interactAt(e.instanceId);
       return;
     }
-    if (store.buildMode) return;
-    // Land for sale and the shipping bin answer to plain clicks instead.
+    // Building and the hand (camera drag, selection) answer to plain clicks instead of areas.
+    if (store.buildMode || store.tool === null) return;
+    // Land for sale answers to plain clicks.
     const tile = store.game.tiles[e.instanceId];
-    if (!tile || tile.state === 'locked' || tile.structure === 'shippingBin') return;
+    if (!tile || tile.state === 'locked') return;
     e.stopPropagation();
     store.beginArea(e.instanceId);
   };

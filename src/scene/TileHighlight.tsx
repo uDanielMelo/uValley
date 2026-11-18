@@ -17,7 +17,7 @@ interface Highlight {
 
 const noRaycast = () => null;
 
-/** Hover feedback: a tile overlay (light/red by tool validity) or a whole locked plot. */
+/** Hover feedback: a tile overlay (light/red by tool validity) or a whole locked plot. The hand only marks plots. */
 function HoverHighlight() {
   const hovered = useGameStore((s) => s.hoveredTile);
   const tool = useGameStore((s) => s.tool);
@@ -44,8 +44,9 @@ function HoverHighlight() {
         color: plotStatus(game, plot) === 'available' ? PALETTE.plotAvailable : PALETTE.plotBlocked,
       };
     }
+    if (tool === null) return null;
     const [x, z] = indexToWorld(hovered);
-    const valid = tile.structure === 'shippingBin' || toggleTask(game, tool, hovered, crop).ok;
+    const valid = toggleTask(game, tool, hovered, crop).ok;
     return { x, z, size: 1, color: valid ? PALETTE.hoverValid : PALETTE.hoverInvalid };
   }, [hovered, tool, crop, tiles, inventory, unlockedPlots, tasks]);
 
@@ -78,7 +79,7 @@ function AreaHighlight() {
     if (!mesh) return;
     // Create the color buffer before the first render so the material compiles with it.
     if (!mesh.instanceColor) mesh.setColorAt(0, VALID);
-    if (!area) {
+    if (!area || tool === null) {
       mesh.count = 0;
       return;
     }

@@ -14,7 +14,7 @@ export const TOOLS: readonly ToolInfo[] = [
   { id: 'hoe', label: 'Enxada', hint: 'Mandar arar a grama', icon: '⛏️', key: '1' },
   { id: 'seed', label: 'Semente', hint: 'Mandar plantar em terra arada', icon: '🌱', key: '2' },
   { id: 'water', label: 'Regador', hint: 'Mandar regar (dura até o fim do dia)', icon: '💧', key: '3' },
-  { id: 'hand', label: 'Colher', hint: 'Mandar colher plantas maduras', icon: '✋', key: '4' },
+  { id: 'hand', label: 'Colher', hint: 'Mandar colher plantas maduras', icon: '🧺', key: '4' },
 ];
 
 /** Activity names (pt-BR), e.g. for priorities and the queue. */
@@ -31,8 +31,8 @@ export const TASK_ICONS: Record<TaskKind, string> = {
   hoe: '⛏️',
   seed: '🌱',
   water: '💧',
-  hand: '✋',
-  tend: '🧺',
+  hand: '🧺',
+  tend: '🪣',
   build: '🔨',
 };
 
@@ -54,6 +54,7 @@ const jobWords = (game: GameState, task: Task): [string, string] => {
   if (!target) return [TASK_LABELS[task.kind], TASK_VERBS[task.kind]];
   const name = STRUCTURES[target.type].label.toLowerCase();
   if (job?.type === 'shelter') return [`Coletar no ${name}`, `Coletando no ${name}`];
+  if (target.work?.kind === 'upgrade') return [`Reformar ${name}`, `Reformando ${name}`];
   return target.work?.kind === 'demolish' ? [`Demolir ${name}`, `Demolindo ${name}`] : [`Construir ${name}`, `Construindo ${name}`];
 };
 

@@ -179,7 +179,7 @@ describe('demolition', () => {
     expect(site(queued).work).toEqual({ kind: 'demolish', done: 0, total: demolishMinutesFor('chickenCoop') });
     expect(queued.money).toBe(ready.money);
     const { state, finished } = run(queued, 300);
-    expect(finished).toEqual([{ type: 'chickenCoop', kind: 'demolish' }]);
+    expect(finished).toEqual([{ type: 'chickenCoop', kind: 'demolish', refund: refundFor('chickenCoop') }]);
     expect(state.structures.some((x) => x.type === 'chickenCoop')).toBe(false);
     expect(state.tiles[FREE]?.structure).toBeUndefined();
     expect(state.money).toBeGreaterThan(ready.money);

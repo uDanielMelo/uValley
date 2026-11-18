@@ -2,7 +2,7 @@ import { ANIMALS, ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
 import { CROPS } from '../data/crops';
 import { STRUCTURES } from '../data/structures';
 import { animalActivity } from '../game/animals';
-import { residents, shelterDef, stockCap, stockTotal } from '../game/shelters';
+import { levelDef, residents, shelterCapacity, shelterDef, stockCap, stockTotal } from '../game/shelters';
 import { growthProgress, isMature } from '../game/crops';
 import { nextPlotCost, plotStatus } from '../game/economy';
 import { workProgress } from '../game/construction';
@@ -78,11 +78,11 @@ function WorkDetails({ tileIndex }: { tileIndex: number }) {
   return (
     <div className="mt-1">
       <div className="flex items-center justify-between text-sm font-extrabold">
-        <span>{kind === 'build' ? '🚧 Em obra' : '🧨 Em demolição'}</span>
+        <span>{kind === 'build' ? '🚧 Em obra' : kind === 'upgrade' ? '🛠️ Em reforma' : '🧨 Em demolição'}</span>
         <span className="tabular-nums">{percent}%</span>
       </div>
       <div className="mt-1 h-2 overflow-hidden rounded-full bg-wood/20">
-        <div className={`h-full ${kind === 'build' ? 'bg-leaf' : 'bg-red-700'}`} style={{ width: `${percent}%` }} />
+        <div className={`h-full ${kind === 'demolish' ? 'bg-red-700' : 'bg-leaf'}`} style={{ width: `${percent}%` }} />
       </div>
       <p className="mt-1 text-xs font-bold text-wood/80">
         {crew > 0 ? `${crew} trabalhando agora` : 'Esperando alguém com Obras nas atividades'}
@@ -97,8 +97,8 @@ function ShelterDetails({ tileIndex }: { tileIndex: number }) {
   const summary = useGameStore((s) => {
     const found = structureAt(s.game, tileIndex);
     const def = found ? shelterDef(found.type) : undefined;
-    if (!found || !def || found.work) return null;
-    return `${residents(s.game, found.id)}/${def.capacity}`;
+    if (!found || !def || found.work?.kind === 'build') return null;
+    return `${residents(s.game, found.id)}/${shelterCapacity(found)} · ${levelDef(found).label}`;
   });
   const stock = useGameStore((s) => {
     const found = structureAt(s.game, tileIndex);
@@ -110,7 +110,7 @@ function ShelterDetails({ tileIndex }: { tileIndex: number }) {
   });
   const full = useGameStore((s) => {
     const found = structureAt(s.game, tileIndex);
-    return !!found && stockTotal(found.stock) >= stockCap(found.type) && stockCap(found.type) > 0;
+    return !!found && stockCap(found) > 0 && stockTotal(found.stock) >= stockCap(found);
   });
   if (summary === null) return null;
   return (
@@ -190,8 +190,12 @@ export function HoverInfo() {
   const hoveredAnimal = useGameStore((s) => s.hoveredAnimal);
   const hovered = useGameStore((s) => s.hoveredTile);
   const tile = useGameStore((s) => (s.hoveredTile === null ? undefined : s.game.tiles[s.hoveredTile]));
+  // The selected structure already has its card open.
+  const onSelected = useGameStore(
+    (s) => s.selectedStructure !== null && s.hoveredTile !== null && structureAt(s.game, s.hoveredTile)?.id === s.selectedStructure,
+  );
   if (hoveredAnimal !== null) return <AnimalInfo id={hoveredAnimal} />;
-  if (hovered === null || !tile) return null;
+  if (hovered === null || !tile || onSelected) return null;
   const title = tile.structure
     ? STRUCTURES[tile.structure].label
     : tile.road

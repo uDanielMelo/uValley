@@ -62,9 +62,12 @@ Grande demais para uma entrega: dividida em sub-etapas, cada uma com branch e ve
   direto sai. O celeiro deixa de ser abrigo. Lotação: o pasto da fazenda soma 12 unidades por lote de
   grama livre (galinha 1, ovelha e cabra 2, porco, vaca, boi e cavalo 3); comprar além disso é
   bloqueado, e acima da capacidade a produção cai. Save v8.
-- **3b, níveis**: básico, reforçado, confortável e automatizado (conforto e segurança). O upgrade é obra
-  (`work.kind = 'upgrade'`). Ordenhadeira no curral (nível 4 coleta sozinho), tela no galinheiro, esterco
-  melhor no chiqueiro, estábulo sem automação (até o nível 3).
+- **3b, níveis** ✅: básico, reforçado e confortável (conforto e segurança); cada nível dá mais vagas e
+  estoque, e o conforto acelera a produção. O upgrade é obra (`work.kind = 'upgrade'`), pago na ordem
+  (60% / 100% do custo do abrigo) e o abrigo segue funcionando. Tela no galinheiro (+segurança), esterco
+  melhor no chiqueiro (texto; efeito na 3e). **O automatizado (nível 4, ordenhadeira etc.) ficou para
+  depois**; o estábulo vai só até o 3. Junto: HUD minimalista, modo Mão (arrastar com o esquerdo move a
+  câmera, clique seleciona estrutura e abre o card), hub de atividades. Save v9.
 - **3c, raças, estrelas e ciclo de vida**: fase derivada da idade (nunca salva). Curva de produção por
   fase. **O animal morre de velhice** no fim do ciclo. Sem reprodução por enquanto.
 - **3d, saúde e predadores**: doença por hora (conforto, lotação, fome, idade), incubação percebida antes

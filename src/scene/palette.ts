@@ -62,6 +62,8 @@ export const PALETTE = {
   progressBack: '#3b2a1a',
   progressBuild: '#7fd35a',
   progressDemolish: '#ff6b5a',
+  /** Outline of the selected structure. */
+  selection: '#ffd23f',
   // Product badge over shelters
   badgeFill: '#f6ecd2',
   badgeBorder: '#8a6a48',

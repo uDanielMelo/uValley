@@ -10,9 +10,9 @@ const SPEED_LABELS: Record<GameSpeed, string> = { 0: '⏸', 1: '1×', 2: '2×', 
 function Money() {
   const money = useGameStore((s) => s.game.money);
   return (
-    <Card className="px-4 py-2 text-xl">
+    <div className="px-3 text-lg">
       <Coins value={formatCoins(money)} />
-    </Card>
+    </div>
   );
 }
 
@@ -23,10 +23,10 @@ function Clock() {
   const clock = toClock(minutes);
   const isDay = daylight(minutes) > 0.5;
   return (
-    <div className="flex items-center gap-2 px-3 text-lg font-black tabular-nums">
+    <div className="flex items-center gap-1.5 border-l-2 border-wood/20 px-3 text-base font-black tabular-nums">
       <span aria-hidden>{isDay ? '☀️' : '🌙'}</span>
       <span>Dia {clock.day}</span>
-      <span className="text-wood/70">·</span>
+      <span className="text-wood/50">·</span>
       <span>{formatClock(clock)}</span>
     </div>
   );
@@ -43,7 +43,7 @@ function SpeedControls() {
           type="button"
           onClick={() => setSpeed(option)}
           title={option === 0 ? 'Pausar (Espaço)' : `Velocidade ${option}×`}
-          className={`min-w-9 rounded-md px-2 py-1 text-sm font-black ${
+          className={`min-w-8 rounded-md px-1.5 py-0.5 text-xs font-black ${
             speed === option ? 'bg-wood text-parchment' : 'hover:bg-parchment-dark'
           }`}
         >
@@ -65,9 +65,7 @@ function GameMenu() {
 
   return (
     <div className="relative">
-      <Button variant="ghost" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        ☰ Menu
-      </Button>
+      <IconButton icon="☰" label="Menu" onClick={() => setOpen((v) => !v)} expanded={open} />
       {open && (
         <Card className="absolute top-full right-0 mt-2 flex w-64 flex-col gap-2 p-3 text-sm">
           <label className="flex cursor-pointer items-center justify-between gap-2 font-bold">
@@ -135,44 +133,69 @@ function GraphicsToggle() {
   );
 }
 
-function WorkersButton() {
+interface IconButtonProps {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  active?: boolean;
+  expanded?: boolean;
+  /** Small text after the icon (e.g. a count). */
+  badge?: string;
+}
+
+/** Square icon button for the top bar; the label shows as a tooltip. */
+function IconButton({ icon, label, onClick, active = false, expanded, badge }: IconButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      aria-expanded={expanded}
+      className={`flex h-10 min-w-10 items-center justify-center gap-1 rounded-xl px-2 text-lg font-black transition ${
+        active ? 'bg-coin/50 ring-2 ring-wood/60' : 'hover:bg-parchment-dark'
+      }`}
+    >
+      <span aria-hidden>{icon}</span>
+      {badge && <span className="text-xs tabular-nums">{badge}</span>}
+    </button>
+  );
+}
+
+function PanelButtons() {
+  const panel = useGameStore((s) => s.panel);
   const workers = useGameStore((s) => s.game.workers.length);
   const tasks = useGameStore((s) => s.game.tasks.length);
   const openPanel = useGameStore((s) => s.openPanel);
   return (
-    <Button variant="ghost" onClick={() => openPanel('workers')} title="Trabalhadores (T)">
-      👨‍🌾 {workers}
-      <span className="ml-2 rounded bg-wood/15 px-1.5 text-sm tabular-nums" title="Tarefas na fila">
-        📋 {tasks}
-      </span>
-    </Button>
+    <>
+      <IconButton
+        icon="👨‍🌾"
+        label={`Equipe (T): ${workers} trabalhadores, ${tasks} tarefas na fila`}
+        badge={`${workers} · 📋${tasks}`}
+        active={panel === 'workers'}
+        onClick={() => openPanel('workers')}
+      />
+      <IconButton icon="🛒" label="Loja (L)" active={panel === 'shop'} onClick={() => openPanel('shop')} />
+      <IconButton icon="🎒" label="Inventário (I)" active={panel === 'inventory'} onClick={() => openPanel('inventory')} />
+    </>
   );
 }
 
+/** Minimal top bar: money, day and speed on the left; panels and menu as icons on the right. */
 export function TopBar() {
-  const openPanel = useGameStore((s) => s.openPanel);
   return (
     <div className="flex items-start justify-between gap-3 p-3">
-      <div className="flex items-center gap-3">
+      <Card className="flex items-center py-1 pr-1">
         <Money />
-        <Card className="flex items-center py-1 pr-1">
-          <Clock />
-          <SpeedControls />
-        </Card>
-      </div>
-      <div className="pointer-events-auto flex gap-2">
-        <WorkersButton />
-        <Button variant="ghost" onClick={() => openPanel('build')} title="Construir (B)">
-          🔨 Construir
-        </Button>
-        <Button variant="leaf" onClick={() => openPanel('shop')} title="Loja (L)">
-          🛒 Loja
-        </Button>
-        <Button onClick={() => openPanel('inventory')} title="Inventário (I)">
-          🎒 Inventário
-        </Button>
+        <Clock />
+        <SpeedControls />
+      </Card>
+      <Card className="flex items-center gap-0.5 p-1">
+        <PanelButtons />
+        <span className="mx-0.5 h-6 w-px bg-wood/20" aria-hidden />
         <GameMenu />
-      </div>
+      </Card>
     </div>
   );
 }

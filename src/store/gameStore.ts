@@ -2,11 +2,11 @@ import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { ANIMALS, type AnimalId, type AnimalProductId } from '../data/animals';
 import type { CropId } from '../data/crops';
-import { STRUCTURES, type StructureId } from '../data/structures';
+import { SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
 import { buyAnimal, sellAnimal } from '../game/animals';
 import { buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
-import { plotOfTile, tileCoords, tilesInRect } from '../game/grid';
+import { plotOfTile, tileCoords, tileIndex, tilesInRect } from '../game/grid';
 import {
   DEFAULT_SETTINGS,
   clearStorage,
@@ -15,10 +15,10 @@ import {
   type GraphicsQuality,
   type SaveSettings,
 } from '../game/save';
-import { demolishClick, orderRoad, orderStructure, roadClick, type DemolishChange } from '../game/construction';
+import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type DemolishChange } from '../game/construction';
 import { advanceGame, type FinishedWork } from '../game/simulation';
 import { createInitialState } from '../game/state';
-import { anchorFor, refundFor } from '../game/structures';
+import { anchorFor, structureAt, upgradeCost } from '../game/structures';
 import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/staff';
 import type { ActionError, ActionResult, GameState, Rotation, TaskKind, ToolId } from '../game/types';
 import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
@@ -43,7 +43,12 @@ export interface Toast {
 export interface GameStore {
   game: GameState;
   settings: SaveSettings;
-  tool: ToolId;
+  /** Active order tool, or null for the hand: left drag moves the camera and clicks select. */
+  tool: ToolId | null;
+  /** Structure selected with the hand (its card is open). */
+  selectedStructure: number | null;
+  /** The activities hub (order tools and seeds) is open above the dock. */
+  activitiesOpen: boolean;
   selectedCrop: CropId;
   hoveredTile: number | null;
   /** Animal under the mouse (takes priority over the tile in the hover card). */
@@ -70,7 +75,15 @@ export interface GameStore {
   cancelArea: () => void;
   /** Road painting while dragging: queues road work silently (errors are not shown on every tile). */
   paintRoadAt: (tile: number) => void;
-  setTool: (tool: ToolId) => void;
+  /** Picks an order tool; null (or the active one again) goes back to the hand. */
+  setTool: (tool: ToolId | null) => void;
+  selectStructure: (id: number | null) => void;
+  /** Opens or closes the activities hub (toggles without an argument). */
+  setActivitiesOpen: (open?: boolean) => void;
+  /** Queues upgrading a shelter to its next level. */
+  upgradeShelter: (id: number) => void;
+  /** Demolish tool on a structure from its card: queues the tear-down, or cancels the work under way. */
+  demolishOrCancel: (id: number) => void;
   setBuildMode: (mode: BuildMode) => void;
   rotateBuild: () => void;
   setSelectedCrop: (crop: CropId) => void;
@@ -147,6 +160,7 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'shelter-full': 'Os abrigos desta espécie estão cheios. Construa outro.',
   'pasture-full': 'O pasto está lotado. Compre um lote ou deixe mais grama livre.',
   'shelter-in-use': 'Há animais morando neste abrigo. Venda-os antes de demolir.',
+  'max-level': 'Este abrigo já está no nível mais alto disponível.',
 };
 
 const label = (type: StructureId): string => STRUCTURES[type].label;
@@ -156,8 +170,10 @@ const demolishText = (change: DemolishChange): string => {
   switch (change.kind) {
     case 'build-cancelled':
       return `Obra de ${label(change.type).toLowerCase()} cancelada: +${change.refund} moedas.`;
+    case 'upgrade-cancelled':
+      return `Reforma de ${label(change.type).toLowerCase()} cancelada: +${change.refund} moedas.`;
     case 'demolish-queued':
-      return `Demolição de ${label(change.type).toLowerCase()} na fila: devolve ${refundFor(change.type)} moedas ao terminar.`;
+      return `Demolição de ${label(change.type).toLowerCase()} na fila: devolve ${change.refund} moedas ao terminar.`;
     case 'demolish-cancelled':
       return `Demolição de ${label(change.type).toLowerCase()} cancelada.`;
     case 'road-cancelled':
@@ -167,11 +183,14 @@ const demolishText = (change: DemolishChange): string => {
   }
 };
 
-/** Toast text for a site or demolition the crew finished. */
-const finishedText = (work: FinishedWork): string =>
-  work.kind === 'build'
-    ? `${label(work.type)} pronto(a)!`
-    : `${label(work.type)} demolido(a): +${refundFor(work.type)} moedas.`;
+/** Toast text for a site, upgrade or demolition the crew finished. */
+const finishedText = (work: FinishedWork): string => {
+  if (work.kind === 'build') return `${label(work.type)} pronto(a)!`;
+  if (work.kind === 'upgrade') {
+    return `${label(work.type)} reformado(a): agora é ${work.level ? SHELTER_LEVELS[work.level].label.toLowerCase() : 'melhor'}.`;
+  }
+  return `${label(work.type)} demolido(a): +${work.refund ?? 0} moedas.`;
+};
 
 const storage = (): Storage | null => {
   try {
@@ -204,7 +223,9 @@ export const useGameStore = create<GameStore>()(
     return {
       game: loaded?.game ?? createInitialState(),
       settings: loaded?.settings ?? DEFAULT_SETTINGS,
-      tool: 'hoe',
+      tool: null,
+      selectedStructure: null,
+      activitiesOpen: false,
       selectedCrop: 'wheat',
       hoveredTile: null,
       hoveredAnimal: null,
@@ -268,8 +289,9 @@ export const useGameStore = create<GameStore>()(
           get().requestPlot(plotOfTile(tile));
           return;
         }
-        if (target.structure === 'shippingBin') set({ panel: 'inventory' });
-        // Tool orders are given through areas (beginArea / finishArea).
+        // Tool orders are given through areas (beginArea / finishArea). With the hand, a click
+        // selects the structure on the tile (sites too), and open ground clears the selection.
+        if (get().tool === null) set({ selectedStructure: target.structure ? (structureAt(game, tile)?.id ?? null) : null });
       },
 
       beginArea: (tile) => set({ area: { anchor: tile, current: tile } }),
@@ -282,6 +304,7 @@ export const useGameStore = create<GameStore>()(
         const { area, game, tool, selectedCrop } = get();
         if (!area) return;
         set({ area: null });
+        if (tool === null) return;
         if (area.anchor === area.current) {
           const result = toggleTask(game, tool, area.anchor, selectedCrop);
           if (result.ok) set({ game: result.state });
@@ -309,10 +332,44 @@ export const useGameStore = create<GameStore>()(
         if (result.ok) set({ game: result.state });
       },
 
-      setTool: (tool) => set({ tool, buildMode: null, area: null }),
-      setBuildMode: (buildMode) => set({ buildMode }),
+      setTool: (tool) =>
+        set((s) => ({
+          tool: tool === s.tool ? null : tool,
+          buildMode: null,
+          area: null,
+          selectedStructure: null,
+          activitiesOpen: false,
+        })),
+      selectStructure: (selectedStructure) => set({ selectedStructure }),
+      setActivitiesOpen: (open) => set((s) => ({ activitiesOpen: open ?? !s.activitiesOpen })),
+      upgradeShelter: (id) => {
+        const game = get().game;
+        const target = game.structures.find((s) => s.id === id);
+        const result = orderUpgrade(game, id);
+        const toLevel = result.ok ? result.state.structures.find((s) => s.id === id)?.work?.toLevel : undefined;
+        if (!target || !toLevel) {
+          commit(result);
+          return;
+        }
+        commit(
+          result,
+          `Reforma na fila: ${label(target.type).toLowerCase()} ${SHELTER_LEVELS[toLevel].label.toLowerCase()} (${upgradeCost(target.type, toLevel)} moedas).`,
+        );
+      },
+      demolishOrCancel: (id) => {
+        const target = get().game.structures.find((s) => s.id === id);
+        if (!target) return;
+        const result = demolishClick(get().game, tileIndex(target.x, target.y));
+        if (!result.ok) {
+          get().showMessage(ERROR_MESSAGES[result.error], 'error');
+          return;
+        }
+        set({ game: result.state });
+        get().showMessage(demolishText(result.change), 'info');
+      },
+      setBuildMode: (buildMode) => set({ buildMode, selectedStructure: null, activitiesOpen: false }),
       rotateBuild: () => set((s) => ({ buildRotation: ((s.buildRotation + 1) % 4) as Rotation })),
-      setSelectedCrop: (selectedCrop) => set({ selectedCrop, tool: 'seed' }),
+      setSelectedCrop: (selectedCrop) => set({ selectedCrop, tool: 'seed', buildMode: null, selectedStructure: null }),
       setHoveredTile: (hoveredTile) => {
         if (get().hoveredTile !== hoveredTile) set({ hoveredTile });
       },
@@ -393,7 +450,8 @@ export const useGameStore = create<GameStore>()(
         if (s) clearStorage(s);
         set({
           game: createInitialState(),
-          tool: 'hoe',
+          tool: null,
+          selectedStructure: null,
           selectedCrop: 'wheat',
           panel: null,
           pendingPlot: null,

@@ -5,7 +5,9 @@ import { Fog, MathUtils, Vector3, type PerspectiveCamera as PerspCam } from 'thr
 import { CAMERA } from '../data/camera';
 import { GRID_SIZE } from '../data/world';
 import { useGameStore } from '../store/gameStore';
+import { refreshCursor, setDragCursor } from './cursor';
 
+const BUTTON_LEFT = 0;
 const BUTTON_MIDDLE = 1;
 const BUTTON_RIGHT = 2;
 const LIMIT = GRID_SIZE / 2 + 2;
@@ -30,9 +32,15 @@ const initialOrbit = (): Orbit => ({
 
 type DragMode = 'pan' | 'rotate' | null;
 
+/** With the hand (no order tool, not building) the left button drags the camera too. */
+const handMode = (): boolean => {
+  const { tool, buildMode } = useGameStore.getState();
+  return tool === null && buildMode === null;
+};
+
 /**
- * Orbiting perspective camera. Right drag pans, middle drag (or Shift + right drag)
- * rotates and tilts, wheel zooms, Z/X or arrow keys rotate, optional edge panning.
+ * Orbiting perspective camera. Right drag (or left drag with the hand) pans, middle drag (or
+ * Shift + right drag) rotates and tilts, wheel zooms, Z/X or arrow keys rotate, optional edge panning.
  * Input goes to refs via DOM listeners and the camera eases toward the goal: no React re-renders.
  */
 export function CameraRig() {
@@ -43,7 +51,7 @@ export function CameraRig() {
   const goal = useRef<Orbit>(initialOrbit());
   /** Smoothed values actually rendered. */
   const current = useRef<Orbit>(initialOrbit());
-  const pointer = useRef({ x: 0, y: 0, inside: false, drag: null as DragMode });
+  const pointer = useRef({ x: 0, y: 0, inside: false, drag: null as DragMode, button: -1 });
   const keys = useRef(new Set<string>());
   const panRef = useRef<((dx: number, dy: number, viewHeight: number) => void) | null>(null);
 
@@ -76,14 +84,16 @@ export function CameraRig() {
       const mode: DragMode =
         e.button === BUTTON_MIDDLE || (e.button === BUTTON_RIGHT && e.shiftKey)
           ? 'rotate'
-          : e.button === BUTTON_RIGHT
+          : e.button === BUTTON_RIGHT || (e.button === BUTTON_LEFT && handMode())
             ? 'pan'
             : null;
       if (!mode) return;
-      e.preventDefault();
+      // The left button keeps its click (selection) and must not lose the event to capture.
+      if (e.button !== BUTTON_LEFT) e.preventDefault();
       pointer.current.drag = mode;
+      pointer.current.button = e.button;
       last = { x: e.clientX, y: e.clientY };
-      el.setPointerCapture(e.pointerId);
+      if (e.button !== BUTTON_LEFT) el.setPointerCapture(e.pointerId);
     };
     const onMove = (e: PointerEvent) => {
       pointer.current.x = e.clientX;
@@ -96,10 +106,13 @@ export function CameraRig() {
       last = { x: e.clientX, y: e.clientY };
       if (mode === 'rotate') rotate(dx, dy);
       else pan(dx, dy, el.clientHeight);
+      if (pointer.current.button === BUTTON_LEFT && (dx !== 0 || dy !== 0)) setDragCursor(true);
     };
     const onUp = (e: PointerEvent) => {
-      if (e.button !== BUTTON_MIDDLE && e.button !== BUTTON_RIGHT) return;
+      if (!pointer.current.drag || e.button !== pointer.current.button) return;
       pointer.current.drag = null;
+      pointer.current.button = -1;
+      setDragCursor(false);
       if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
     };
     const onWheel = (e: WheelEvent) => {
@@ -136,6 +149,7 @@ export function CameraRig() {
     window.addEventListener('blur', onBlur);
     document.addEventListener('mouseleave', onLeaveWindow);
     panRef.current = pan;
+    refreshCursor();
     return () => {
       el.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);

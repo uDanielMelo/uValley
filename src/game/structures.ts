@@ -1,4 +1,11 @@
-import { DEMOLISH_REFUND, DEMOLISH_WORK, STRUCTURES, type StructureId } from '../data/structures';
+import {
+  DEMOLISH_REFUND,
+  DEMOLISH_WORK,
+  SHELTER_LEVELS,
+  STRUCTURES,
+  type ShelterLevel,
+  type StructureId,
+} from '../data/structures';
 import { BUNKHOUSE_BEDS } from '../data/workers';
 import { GRID_SIZE } from '../data/world';
 import { inBounds, tileIndex } from './grid';
@@ -95,8 +102,11 @@ export const stampStructures = (tiles: readonly Tile[], structures: readonly Str
   return result;
 };
 
-/** A structure works (beds, a door to rest at…) only when no construction or demolition is under way. */
-export const isOperational = (s: StructureInstance): boolean => s.work === undefined;
+/**
+ * A structure works (beds, a door to rest at, room for animals) unless it is being built or torn
+ * down. Shelters keep working while they are upgraded.
+ */
+export const isOperational = (s: StructureInstance): boolean => s.work === undefined || s.work.kind === 'upgrade';
 
 /** Beds for staff workers: one set per finished bunkhouse (not one being built or torn down). */
 export const bedCount = (state: Pick<GameState, 'structures'>): number =>
@@ -104,10 +114,27 @@ export const bedCount = (state: Pick<GameState, 'structures'>): number =>
 
 export const buildCost = (type: StructureId): number => STRUCTURES[type].cost ?? 0;
 
-export const refundFor = (type: StructureId): number => Math.floor(buildCost(type) * DEMOLISH_REFUND);
-
 /** Work minutes (at speed 1) to raise a structure. */
 export const buildMinutesFor = (type: StructureId): number => STRUCTURES[type].buildMinutes ?? 0;
+
+/** Price of upgrading a shelter to a level: a share of its build cost. */
+export const upgradeCost = (type: StructureId, toLevel: ShelterLevel): number =>
+  Math.round(buildCost(type) * SHELTER_LEVELS[toLevel].upgradeShare);
+
+/** Work minutes (at speed 1) of upgrading a shelter to a level: a share of its build work. */
+export const upgradeMinutes = (type: StructureId, toLevel: ShelterLevel): number =>
+  Math.round(buildMinutesFor(type) * SHELTER_LEVELS[toLevel].upgradeShare);
+
+/** Everything paid for a structure: building it and every upgrade up to its level. */
+export const investedIn = (type: StructureId, level: ShelterLevel = 1): number => {
+  let total = buildCost(type);
+  for (let l = 2; l <= level; l++) total += upgradeCost(type, l as ShelterLevel);
+  return total;
+};
+
+/** What a finished demolition gives back: a share of everything invested. */
+export const refundFor = (type: StructureId, level: ShelterLevel = 1): number =>
+  Math.floor(investedIn(type, level) * DEMOLISH_REFUND);
 
 /** Work minutes (at speed 1) to tear a structure down. */
 export const demolishMinutesFor = (type: StructureId): number => Math.round(buildMinutesFor(type) * DEMOLISH_WORK);
@@ -285,5 +312,5 @@ export const demolishStructure = (state: GameState, tile: number): ActionResult 
   const found = checkDemolish(state, tile);
   if (typeof found === 'string') return fail(found);
   const removed = removeStructure(state, found.id);
-  return ok({ ...removed, money: removed.money + refundFor(found.type) });
+  return ok({ ...removed, money: removed.money + refundFor(found.type, found.level) });
 };

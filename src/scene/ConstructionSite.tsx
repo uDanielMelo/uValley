@@ -3,12 +3,13 @@ import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import type { Mesh } from 'three';
 import { meters } from '../data/scale';
-import type { StructureId } from '../data/structures';
+import type { ShelterLevel, StructureId } from '../data/structures';
 import { workProgress } from '../game/construction';
 import { footprintOf } from '../game/structures';
 import type { StructureWorkKind } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { cornerToWorld } from './coords';
+import { ShelterUpgrades } from './models/ShelterUpgrades';
 import { PALETTE } from './palette';
 import { STRUCTURE_MODELS, StructureTransform, type PlacedProps } from './structureModels';
 import { TranslucentModel } from './TranslucentModel';
@@ -119,7 +120,7 @@ function ProgressBar({ id, height, kind }: { id: number; height: number; kind: S
       <mesh ref={fill} position={[0, 0, 0.001]} raycast={noRaycast} renderOrder={4}>
         <planeGeometry args={[BAR_WIDTH, BAR_HEIGHT]} />
         <meshBasicMaterial
-          color={kind === 'build' ? PALETTE.progressBuild : PALETTE.progressDemolish}
+          color={kind === 'demolish' ? PALETTE.progressDemolish : PALETTE.progressBuild}
           toneMapped={false}
           depthTest={false}
           transparent
@@ -131,10 +132,18 @@ function ProgressBar({ id, height, kind }: { id: number; height: number; kind: S
 
 /**
  * A structure with work under way. A site shows bare ground, scaffolding, boards and the building
- * as a see-through shape that firms up as the work goes on; a demolition shows the real building
- * inside scaffolding. Both get a progress bar.
+ * as a see-through shape that firms up as the work goes on; a demolition or an upgrade shows the
+ * real building inside scaffolding. All get a progress bar.
  */
-export function ConstructionSite({ id, type, x, y, rotation, kind }: PlacedProps & { id: number; kind: StructureWorkKind }) {
+export function ConstructionSite({
+  id,
+  type,
+  x,
+  y,
+  rotation,
+  kind,
+  level = 1,
+}: PlacedProps & { id: number; kind: StructureWorkKind; level?: ShelterLevel }) {
   const fp = footprintOf(type, x, y, rotation);
   const [x0, z0] = cornerToWorld(fp.x, fp.y);
   const height = meters(SCAFFOLD_HEIGHT[type] ?? DEFAULT_SCAFFOLD);
@@ -159,6 +168,7 @@ export function ConstructionSite({ id, type, x, y, rotation, kind }: PlacedProps
       ) : (
         <StructureTransform type={type} x={x} y={y} rotation={rotation}>
           <Model />
+          <ShelterUpgrades type={type} level={level} />
         </StructureTransform>
       )}
     </group>

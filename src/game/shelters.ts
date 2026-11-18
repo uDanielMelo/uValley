@@ -3,7 +3,15 @@
  * each shelter for the crew to collect ('tend' tasks).
  */
 import { ANIMALS, PLOT_PASTURE_UNITS, SHELTER_STOCK_PER_HEAD, type AnimalId, type AnimalProductId } from '../data/animals';
-import { STRUCTURES, type ShelterDef, type StructureId } from '../data/structures';
+import {
+  SHELTER_LEVELS,
+  SHELTER_LEVEL_LIMIT,
+  STRUCTURES,
+  type ShelterDef,
+  type ShelterLevel,
+  type ShelterLevelDef,
+  type StructureId,
+} from '../data/structures';
 import { HOME_POSITION, MAX_TASKS } from '../data/workers';
 import { PLOT_SIZE } from '../data/world';
 import { inBounds, tileCoords, tileIndex, tilesInPlot } from './grid';
@@ -35,11 +43,46 @@ export const sheltersFor = (kind: AnimalId): StructureId[] =>
 /** Where a shelter's animals go in and out: just outside the door. */
 export const shelterDoor = (s: StructureInstance): GridPoint => frontPoint(s, 0.35);
 
+// ---------- levels ----------
+
+export const shelterLevel = (s: Pick<StructureInstance, 'level'>): ShelterLevel => s.level ?? 1;
+
+export const levelDef = (s: Pick<StructureInstance, 'level'>): ShelterLevelDef => SHELTER_LEVELS[shelterLevel(s)];
+
+/** Highest level a shelter type can reach now (its own limit, and the game's for this stage). */
+export const maxShelterLevel = (type: StructureId): ShelterLevel => {
+  const own = shelterDef(type)?.maxLevel ?? 4;
+  return own < SHELTER_LEVEL_LIMIT ? own : SHELTER_LEVEL_LIMIT;
+};
+
+/** The level an upgrade would reach, or null at the top (or for non-shelters). */
+export const nextShelterLevel = (s: Pick<StructureInstance, 'type' | 'level'>): ShelterLevel | null => {
+  if (!shelterDef(s.type)) return null;
+  const level = shelterLevel(s);
+  return level < maxShelterLevel(s.type) ? ((level + 1) as ShelterLevel) : null;
+};
+
+/** Heads a shelter holds at its level. */
+export const shelterCapacity = (s: Pick<StructureInstance, 'type' | 'level'>): number =>
+  Math.round((shelterDef(s.type)?.capacity ?? 0) * levelDef(s).capacity);
+
+/** 0–1 comfort of a shelter at its level. */
+export const shelterComfort = (s: Pick<StructureInstance, 'level'>): number => levelDef(s).comfort;
+
+/** 0–1 safety of a shelter at its level (plus the coop's wire mesh from level 2). */
+export const shelterSafety = (s: Pick<StructureInstance, 'type' | 'level'>): number => {
+  const bonus = shelterLevel(s) >= 2 ? (shelterDef(s.type)?.safetyBonus ?? 0) : 0;
+  return Math.min(1, levelDef(s).safety + bonus);
+};
+
+/** How fast the animals of a shelter produce, from its level (comfort). */
+export const productionMultiplier = (s: Pick<StructureInstance, 'level'>): number => levelDef(s).production;
+
 export const residents = (state: Pick<GameState, 'animals'>, shelterId: number): number =>
   state.animals.reduce((n, a) => (a.shelterId === shelterId ? n + 1 : n), 0);
 
 export const freeSlots = (state: Pick<GameState, 'animals'>, s: StructureInstance): number =>
-  (shelterDef(s.type)?.capacity ?? 0) - residents(state, s.id);
+  shelterCapacity(s) - residents(state, s.id);
 
 /** The shelter a new animal moves into (finished, with room, the emptiest), or why there is none. */
 export const shelterFor = (state: GameState, kind: AnimalId): StructureInstance | ActionError => {
@@ -96,15 +139,16 @@ export const crowdingFactor = (state: Pick<GameState, 'tiles' | 'unlockedPlots' 
 export const stockTotal = (stock: ProductCounts | undefined): number =>
   stock ? Object.values(stock).reduce((sum, n) => sum + (n ?? 0), 0) : 0;
 
-/** Products a shelter holds before production pauses. */
-export const stockCap = (type: StructureId): number => (shelterDef(type)?.capacity ?? 0) * SHELTER_STOCK_PER_HEAD;
+/** Products a shelter holds before production pauses (grows with its capacity). */
+export const stockCap = (s: Pick<StructureInstance, 'type' | 'level'>): number =>
+  shelterCapacity(s) * SHELTER_STOCK_PER_HEAD;
 
 /** Adds products to a shelter's stock (up to its cap). */
 export const addStock = (state: GameState, shelterId: number, product: AnimalProductId, amount = 1): GameState => ({
   ...state,
   structures: state.structures.map((s) => {
     if (s.id !== shelterId) return s;
-    const room = stockCap(s.type) - stockTotal(s.stock);
+    const room = stockCap(s) - stockTotal(s.stock);
     const added = Math.min(room, amount);
     return added > 0 ? { ...s, stock: addCount(s.stock ?? {}, product, added) } : s;
   }),

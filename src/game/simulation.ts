@@ -5,7 +5,8 @@ import { payFeed, stepAnimals } from './animals';
 import { queueShelterChores } from './shelters';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
 import type { GameState, StructureInstance, StructureWorkKind } from './types';
-import type { StructureId } from '../data/structures';
+import type { ShelterLevel, StructureId } from '../data/structures';
+import { refundFor } from './structures';
 import { stepWorkers } from './workers';
 
 export interface TickResult {
@@ -23,6 +24,10 @@ export interface TickResult {
 export interface FinishedWork {
   type: StructureId;
   kind: StructureWorkKind;
+  /** Upgrades: the level reached. */
+  level?: ShelterLevel;
+  /** Demolitions: what came back. */
+  refund?: number;
 }
 
 /** Works under way before that are no longer (only the crew finishes work while time passes). */
@@ -32,7 +37,10 @@ const finishedWorks = (before: readonly StructureInstance[], after: readonly Str
   for (const s of before) {
     if (!s.work) continue;
     const now = after.find((x) => x.id === s.id);
-    if (!now?.work) result.push({ type: s.type, kind: s.work.kind });
+    if (now?.work) continue;
+    if (s.work.kind === 'upgrade') result.push({ type: s.type, kind: 'upgrade', level: now?.level ?? s.work.toLevel });
+    else if (s.work.kind === 'demolish') result.push({ type: s.type, kind: 'demolish', refund: refundFor(s.type, s.level) });
+    else result.push({ type: s.type, kind: 'build' });
   }
   return result;
 };

@@ -1,6 +1,6 @@
 import type { AnimalId, AnimalProductId } from '../data/animals';
 import type { CropId } from '../data/crops';
-import type { StructureId } from '../data/structures';
+import type { ShelterLevel, StructureId } from '../data/structures';
 import type { SkillId } from '../data/workers';
 
 export type TileState = 'locked' | 'grass' | 'tilled' | 'planted' | 'watered';
@@ -26,8 +26,8 @@ export interface Tile {
 /** Quarter turns applied to a placed structure. */
 export type Rotation = 0 | 1 | 2 | 3;
 
-/** Work the crew still has to do on a structure: raising it or tearing it down. */
-export type StructureWorkKind = 'build' | 'demolish';
+/** Work the crew still has to do on a structure: raising it, tearing it down or upgrading it. */
+export type StructureWorkKind = 'build' | 'demolish' | 'upgrade';
 
 export interface StructureWork {
   kind: StructureWorkKind;
@@ -35,6 +35,8 @@ export interface StructureWork {
   done: number;
   /** Work minutes needed. */
   total: number;
+  /** Level reached when an upgrade is finished. */
+  toLevel?: ShelterLevel;
 }
 
 /** A structure placed on the grid (the tiles it covers also carry `Tile.structure`). */
@@ -46,10 +48,12 @@ export interface StructureInstance {
   y: number;
   rotation: Rotation;
   /**
-   * Construction site or demolition in progress. Absent: the structure is finished and working.
-   * The footprint is reserved (Tile.structure) for the whole time.
+   * Construction site, demolition or upgrade in progress. Absent: the structure is finished. The
+   * footprint is reserved (Tile.structure) for the whole time; a shelter keeps working while upgraded.
    */
   work?: StructureWork;
+  /** Shelter level (absent: 1). */
+  level?: ShelterLevel;
   /** Animal products waiting in a shelter for the crew to collect. */
   stock?: ProductCounts;
 }
@@ -221,7 +225,8 @@ export type ActionError =
   | 'no-shelter'
   | 'shelter-full'
   | 'pasture-full'
-  | 'shelter-in-use';
+  | 'shelter-in-use'
+  | 'max-level';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 

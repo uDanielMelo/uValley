@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { BuildBanner, BuildPanel } from './BuildPanel';
 import { DevPanel } from './DevPanel';
 import { DEV_ENABLED } from './devTools';
+import { Dock } from './Dock';
 import { useAutosave } from './hooks/useAutosave';
 import { useHotkeys } from './hooks/useHotkeys';
 import { HoverInfo } from './HoverInfo';
@@ -9,27 +11,46 @@ import { InventoryPanel } from './InventoryPanel';
 import { PlotDialog } from './PlotDialog';
 import { Card } from './primitives';
 import { ShopPanel } from './ShopPanel';
+import { StructureCard } from './StructureCard';
 import { Toast } from './Toast';
-import { Toolbar } from './Toolbar';
-import { WorkersPanel } from './WorkersPanel';
 import { TopBar } from './TopBar';
+import { WorkersPanel } from './WorkersPanel';
 
+const CONTROLS: readonly [string, string][] = [
+  ['✋ Mão', 'arraste para mover a câmera, clique para selecionar'],
+  ['Atividade', 'clique ou arraste uma área para dar ordens'],
+  ['Botão direito', 'arrastar move a câmera'],
+  ['Meio ou Shift + direito', 'girar (ou Z/X)'],
+  ['Roda', 'zoom'],
+  ['Atalhos', 'H mão · 1–4 atividades · B construir · T equipe · L loja · I inventário · Espaço pausa'],
+];
+
+/** Controls help, folded into a small "?" button. */
 function ControlsHint() {
+  const [open, setOpen] = useState(false);
   return (
-    <Card className="px-3 py-2 text-xs leading-relaxed font-bold text-wood/80">
-      <p>
-        <b>Clique</b> ou <b>arraste</b>: dar ordens numa área (começar numa ordem igual cancela)
-      </p>
-      <p>
-        <b>Botão direito</b> + arrastar: mover câmera
-      </p>
-      <p>
-        <b>Botão do meio</b> (ou <b>Shift</b> + direito) + arrastar: girar · <b>Z/X</b>: girar
-      </p>
-      <p>
-        <b>Roda</b>: zoom · <b>Espaço</b>: pausar · <b>T</b>: equipe · <b>B</b>: construir
-      </p>
-    </Card>
+    <div className="flex flex-col items-end gap-2">
+      {open && (
+        <Card className="w-72 px-3 py-2 text-xs leading-relaxed font-bold text-wood/80">
+          {CONTROLS.map(([key, text]) => (
+            <p key={key}>
+              <b className="text-wood-dark">{key}</b>: {text}
+            </p>
+          ))}
+        </Card>
+      )}
+      <Card className="p-0.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          title="Controles"
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-base font-black hover:bg-parchment-dark"
+        >
+          ?
+        </button>
+      </Card>
+    </div>
   );
 }
 
@@ -51,14 +72,15 @@ export function Hud() {
         {panel === 'build' && <BuildPanel />}
       </div>
       <div className="flex items-end justify-between gap-3 p-3">
-        <div className="w-64">
+        <div className="flex w-72 flex-col justify-end gap-2">
           <HoverInfo />
+          <StructureCard />
         </div>
         <div className="flex flex-col items-center gap-2">
           <BuildBanner />
-          <Toolbar />
+          <Dock />
         </div>
-        <div className="flex w-64 justify-end">
+        <div className="flex w-72 justify-end">
           <ControlsHint />
         </div>
       </div>

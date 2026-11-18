@@ -4,8 +4,9 @@ import { useGameStore } from '../../store/gameStore';
 import { TOOLS } from '../tools';
 
 /**
- * Global keyboard shortcuts: 1–4 tools, Q/E cycle seeds, Space pause, L shop, I inventory, T workers,
- * B build menu, R rotate the structure being placed, Esc leave build mode / close.
+ * Global keyboard shortcuts: H hand, 1–4 order tools (again: back to the hand), Q/E cycle seeds,
+ * Space pause, L shop, I inventory, T workers, B build menu, R rotate the structure being placed,
+ * Esc steps back (area, plot, build mode, hub, selection, panel, tool).
  */
 export function useHotkeys(): void {
   useEffect(() => {
@@ -20,6 +21,10 @@ export function useHotkeys(): void {
         return;
       }
       switch (e.key.toLowerCase()) {
+        case 'h':
+          store.setTool(null);
+          store.setBuildMode(null);
+          break;
         case ' ':
           e.preventDefault();
           store.togglePause();
@@ -51,7 +56,10 @@ export function useHotkeys(): void {
           if (store.area) store.cancelArea();
           else if (store.pendingPlot !== null) store.requestPlot(null);
           else if (store.buildMode) store.setBuildMode(null);
-          else store.closePanel();
+          else if (store.activitiesOpen) store.setActivitiesOpen(false);
+          else if (store.selectedStructure !== null) store.selectStructure(null);
+          else if (store.panel) store.closePanel();
+          else if (store.tool !== null) store.setTool(null);
           break;
       }
     };

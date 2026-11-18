@@ -2,13 +2,11 @@ import { BUILDABLE_IDS, CATEGORY_LABELS, DEMOLISH_REFUND, STRUCTURES, type Struc
 import { ROAD_COST, ROAD_WALK_BONUS } from '../data/roads';
 import { buildMinutesFor } from '../game/structures';
 import { useGameStore } from '../store/gameStore';
-import { formatCoins } from './format';
+import { formatCoins, formatWorkTime } from './format';
 import { Button, Card, Coins, Panel } from './primitives';
 
 const CATEGORIES: readonly StructureCategory[] = ['housing', 'animals', 'storage'];
 
-/** Work time for one worker at normal speed, e.g. "5 h" or "1,5 h". */
-const workHours = (minutes: number): string => `${(Math.round(minutes / 30) / 2).toLocaleString('pt-BR')} h`;
 
 function StructureRow({ id }: { id: StructureId }) {
   const def = STRUCTURES[id];
@@ -35,7 +33,7 @@ function StructureRow({ id }: { id: StructureId }) {
         <p className="mt-0.5 text-xs font-bold text-wood/80">
           {def.description}
           {def.shelter && ` ${def.shelter.capacity} vagas.`} · {def.width}×{def.depth} tiles · obra de{' '}
-          {workHours(buildMinutesFor(id))}
+          {formatWorkTime(buildMinutesFor(id))}
         </p>
       </button>
     </li>

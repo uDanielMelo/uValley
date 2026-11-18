@@ -1,0 +1,207 @@
+import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
+import { SHELTER_LEVELS, SHELTER_LEVEL_IDS, STRUCTURES, type ShelterLevel, type StructureId } from '../data/structures';
+import { BUNKHOUSE_BEDS } from '../data/workers';
+import { workProgress } from '../game/construction';
+import {
+  maxShelterLevel,
+  nextShelterLevel,
+  residents,
+  shelterCapacity,
+  shelterComfort,
+  shelterDef,
+  shelterSafety,
+  stockTotal,
+} from '../game/shelters';
+import { staffCount } from '../game/staff';
+import { bedCount, refundFor, upgradeCost, upgradeMinutes } from '../game/structures';
+import type { GameState, StructureInstance } from '../game/types';
+import { useGameStore, type GameStore } from '../store/gameStore';
+import { formatCoins, formatWorkTime } from './format';
+import { Button, Card, Coins } from './primitives';
+
+const find = (s: GameStore): StructureInstance | undefined =>
+  s.selectedStructure === null ? undefined : s.game.structures.find((x) => x.id === s.selectedStructure);
+
+/** Selects a primitive from the selected structure, so the card only re-renders when it changes. */
+const useSelected = <T,>(pick: (s: StructureInstance, game: GameState) => T, fallback: T): T =>
+  useGameStore((s) => {
+    const found = find(s);
+    return found ? pick(found, s.game) : fallback;
+  });
+
+const WORK_LABELS = { build: '🚧 Em obra', upgrade: '🛠️ Em reforma', demolish: '🧨 Em demolição' } as const;
+
+function Meter({ label, value }: { label: string; value: number }) {
+  const percent = Math.round(value * 100);
+  return (
+    <div className="flex items-center gap-2 text-xs font-bold">
+      <span className="w-16 text-wood/70">{label}</span>
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-wood/15">
+        <div className="h-full bg-leaf" style={{ width: `${percent}%` }} />
+      </div>
+      <span className="w-8 text-right tabular-nums">{percent}%</span>
+    </div>
+  );
+}
+
+/** Progress of the work under way, with a way to call it off. */
+function WorkSection() {
+  const kind = useSelected((s) => s.work?.kind ?? null, null);
+  const percent = useSelected((s) => Math.floor((workProgress(s) ?? 0) * 100), 0);
+  const id = useGameStore((s) => s.selectedStructure);
+  const cancel = useGameStore((s) => s.demolishOrCancel);
+  if (!kind || id === null) return null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex justify-between text-xs font-extrabold">
+        <span>{WORK_LABELS[kind]}</span>
+        <span className="tabular-nums">{percent}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-wood/15">
+        <div className={`h-full ${kind === 'demolish' ? 'bg-red-700' : 'bg-leaf'}`} style={{ width: `${percent}%` }} />
+      </div>
+      <Button variant="ghost" className="self-start text-xs" onClick={() => cancel(id)}>
+        {kind === 'build' ? 'Cancelar obra (devolve tudo)' : kind === 'upgrade' ? 'Cancelar reforma (devolve tudo)' : 'Cancelar demolição'}
+      </Button>
+    </div>
+  );
+}
+
+/** Level, comfort, safety, residents, stock and the upgrade of an animal shelter. */
+function ShelterSection({ type }: { type: StructureId }) {
+  const level = useSelected((s) => s.level ?? 1, 1 as ShelterLevel);
+  const upgrading = useSelected((s) => s.work?.kind === 'upgrade', false);
+  const building = useSelected((s) => s.work?.kind === 'build', false);
+  const heads = useSelected((s, game) => `${residents(game, s.id)}/${shelterCapacity(s)}`, '');
+  const stock = useSelected((s) => {
+    const items = s.stock;
+    if (!items || stockTotal(items) === 0) return '';
+    return ANIMAL_PRODUCT_IDS.filter((p) => (items[p] ?? 0) > 0)
+      .map((p) => `${ANIMAL_PRODUCTS[p].icon} ${items[p] ?? 0}`)
+      .join('  ');
+  }, '');
+  const money = useGameStore((s) => s.game.money);
+  const id = useGameStore((s) => s.selectedStructure);
+  const upgrade = useGameStore((s) => s.upgradeShelter);
+  const def = shelterDef(type);
+  if (!def || building) return null;
+  const next = nextShelterLevel({ type, level });
+  const max = maxShelterLevel(type);
+  const ownMax = def.maxLevel ?? 4;
+  const cost = next ? upgradeCost(type, next) : 0;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-1" aria-label={`Nível ${level} de ${ownMax}`}>
+        {SHELTER_LEVEL_IDS.filter((l) => l <= ownMax).map((l) => (
+          <span
+            key={l}
+            title={SHELTER_LEVELS[l].label}
+            className={`h-1.5 flex-1 rounded-full ${l <= level ? 'bg-coin' : l <= max ? 'bg-wood/20' : 'bg-wood/10'}`}
+          />
+        ))}
+        <span className="ml-2 text-xs font-black">{SHELTER_LEVELS[level].label}</span>
+      </div>
+      <Meter label="Conforto" value={shelterComfort({ level })} />
+      <Meter label="Segurança" value={shelterSafety({ type, level })} />
+      <p className="flex justify-between text-xs font-bold">
+        <span className="text-wood/70">Animais</span>
+        <span className="tabular-nums">{heads}</span>
+      </p>
+      <p className="flex justify-between text-xs font-bold">
+        <span className="text-wood/70">Para coletar</span>
+        <span>{stock || 'nada'}</span>
+      </p>
+      <ul className="flex flex-col gap-0.5 text-xs font-bold">
+        {SHELTER_LEVEL_IDS.filter((l) => l >= 2 && l <= ownMax && def.perks[l]).map((l) => (
+          <li key={l} className={l <= level ? 'text-green-900' : 'text-wood/50'}>
+            {l <= level ? '✓' : '·'} {def.perks[l]}
+            {l > max && ' (em breve)'}
+          </li>
+        ))}
+      </ul>
+      {!upgrading && id !== null && next && (
+        <Button className="flex flex-col items-center text-sm" disabled={money < cost} onClick={() => upgrade(id)}>
+          <span>Melhorar para {SHELTER_LEVELS[next].label.toLowerCase()}</span>
+          <span className="flex items-center gap-2 text-xs font-bold opacity-90">
+            <Coins value={formatCoins(cost)} /> · obra de {formatWorkTime(upgradeMinutes(type, next))}
+          </span>
+        </Button>
+      )}
+      {!upgrading && !next && <p className="text-xs font-bold text-wood/70">Nível mais alto disponível por enquanto.</p>}
+    </div>
+  );
+}
+
+/** What else a structure offers: beds, selling, team hub. */
+function ExtraSection({ type }: { type: StructureId }) {
+  const beds = useGameStore((s) => `${staffCount(s.game)}/${bedCount(s.game)}`);
+  const showPanel = useGameStore((s) => s.showPanel);
+  if (type === 'bunkhouse') {
+    return (
+      <div className="flex items-center justify-between text-xs font-bold">
+        <span>
+          Camas da fazenda: <span className="tabular-nums">{beds}</span> ({BUNKHOUSE_BEDS} por alojamento)
+        </span>
+        <Button variant="ghost" className="text-xs" onClick={() => showPanel('workers')}>
+          Equipe
+        </Button>
+      </div>
+    );
+  }
+  if (type === 'shippingBin') {
+    return (
+      <Button variant="leaf" className="text-sm" onClick={() => showPanel('inventory')}>
+        Vender colheita e produtos
+      </Button>
+    );
+  }
+  if (STRUCTURES[type].category === 'storage') {
+    return <p className="text-xs font-bold text-wood/70">O armazenamento começa a contar na próxima etapa.</p>;
+  }
+  return null;
+}
+
+/** Card of the structure selected with the hand: status and the actions it offers. */
+export function StructureCard() {
+  const type = useSelected((s) => s.type, null as StructureId | null);
+  const level = useSelected((s) => s.level ?? 1, 1 as ShelterLevel);
+  const working = useSelected((s) => s.work !== undefined, false);
+  const id = useGameStore((s) => s.selectedStructure);
+  const select = useGameStore((s) => s.selectStructure);
+  const demolish = useGameStore((s) => s.demolishOrCancel);
+  if (!type || id === null) return null;
+  const def = STRUCTURES[type];
+  const demolishable = def.cost !== undefined && !working;
+  return (
+    <Card className="flex w-72 flex-col gap-2 px-4 py-3">
+      <header className="flex items-start justify-between gap-2">
+        <div>
+          <p className="font-black">
+            {def.icon} {def.label}
+          </p>
+          <p className="text-xs font-bold text-wood/70">{def.description}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => select(null)}
+          className="rounded-md px-1.5 text-lg leading-none font-black text-wood hover:bg-parchment-dark"
+          aria-label="Fechar"
+        >
+          ×
+        </button>
+      </header>
+      <WorkSection />
+      <ShelterSection type={type} />
+      <ExtraSection type={type} />
+      {demolishable && (
+        <button
+          type="button"
+          onClick={() => demolish(id)}
+          className="self-end text-[11px] font-extrabold text-red-800/80 hover:underline"
+        >
+          Demolir (devolve {formatCoins(refundFor(type, level))})
+        </button>
+      )}
+    </Card>
+  );
+}

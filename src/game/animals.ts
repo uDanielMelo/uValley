@@ -20,6 +20,7 @@ import {
   isPasture,
   pastureCapacity,
   pastureUsed,
+  productionMultiplier,
   shelterDoor,
   shelterFor,
   stockCap,
@@ -189,7 +190,8 @@ const followPath = (from: Pick<Animal, 'x' | 'y' | 'path'>, distance: number): P
 /**
  * Moves every animal for `minutes`. Awake: wander over pasture near the shelter, with pauses (and
  * walk back when too far). At night: walk home and sleep inside. Fed animals produce; products go
- * to the shelter's stock (production waits while it is full, and slows on crowded pasture).
+ * to the shelter's stock (production waits while it is full, is faster in better shelters and
+ * slows on crowded pasture).
  */
 export const stepAnimals = (state: GameState, minutes: number): GameState => {
   if (minutes <= 0 || state.animals.length === 0) return state;
@@ -206,8 +208,8 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
 
     if (def.product && a.fed && shelter) {
       const needed = def.productionHours * 60;
-      productMinutes = Math.min(needed, productMinutes + minutes * crowd);
-      if (productMinutes >= needed && stockTotal(shelter.stock) < stockCap(shelter.type)) {
+      productMinutes = Math.min(needed, productMinutes + minutes * crowd * productionMultiplier(shelter));
+      if (productMinutes >= needed && stockTotal(shelter.stock) < stockCap(shelter)) {
         world = addStock(world, shelter.id, def.product);
         productMinutes = 0;
       }

@@ -121,7 +121,7 @@ describe('collecting', () => {
 
   it('production waits while the shelter is full', () => {
     const s = spawnAnimals(coopFarm(), 'chicken', 1);
-    const cap = stockCap('chickenCoop');
+    const cap = stockCap({ type: 'chickenCoop' });
     const full: GameState = {
       ...s,
       workers: [],

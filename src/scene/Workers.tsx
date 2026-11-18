@@ -7,6 +7,7 @@ import type { TaskKind, Worker } from '../game/types';
 import { workerActivity } from '../game/workers';
 import { useGameStore } from '../store/gameStore';
 import { hash01 } from './coords';
+import { setHoverCursor } from './cursor';
 import { Person, personScale, type PersonLook, type PersonRig } from './models/Person';
 
 const HALF = GRID_SIZE / 2;
@@ -50,12 +51,10 @@ const heightFor = (worker: Worker): number =>
 const onDown = (e: ThreeEvent<PointerEvent>) => {
   if (e.button === 0) e.stopPropagation();
 };
-const onOut = () => {
-  document.body.style.cursor = '';
-};
+const onOut = () => setHoverCursor(false);
 const onOver = (e: ThreeEvent<PointerEvent>) => {
   e.stopPropagation();
-  document.body.style.cursor = 'pointer';
+  setHoverCursor(true);
 };
 
 /** Shortest signed angle from a to b. */

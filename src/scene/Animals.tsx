@@ -6,6 +6,7 @@ import { GRID_SIZE } from '../data/world';
 import { animalActivity, isInside } from '../game/animals';
 import { useGameStore } from '../store/gameStore';
 import { hash01 } from './coords';
+import { setHoverCursor } from './cursor';
 import { animalModel } from './models/animalModels';
 
 const HALF = GRID_SIZE / 2;
@@ -81,11 +82,11 @@ function AnimalFigure({ id, kind }: { id: number; kind: AnimalId }) {
   const onOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
     useGameStore.getState().setHoveredAnimal(id);
-    document.body.style.cursor = 'pointer';
+    setHoverCursor(true);
   };
   const onOut = () => {
     if (useGameStore.getState().hoveredAnimal === id) useGameStore.getState().setHoveredAnimal(null);
-    document.body.style.cursor = '';
+    setHoverCursor(false);
   };
 
   return (
