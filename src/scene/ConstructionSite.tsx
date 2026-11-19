@@ -28,6 +28,12 @@ const SCAFFOLD_HEIGHT: Partial<Record<StructureId, number>> = {
   warehouse: 5,
   barn: 6,
   coldRoom: 3.6,
+  lampPost: 2,
+  flowerBed: 1,
+  bench: 1,
+  scarecrow: 1.5,
+  tree: 2,
+  fountain: 1.5,
 };
 const DEFAULT_SCAFFOLD = 3;
 const POLE = meters(0.12);

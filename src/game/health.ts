@@ -27,7 +27,7 @@ import { deathAt, isKnownSick, noticeAt } from './disease';
 import { inBounds, tileIndex } from './grid';
 import { addCount } from './inventory';
 import { hash01 } from './random';
-import { crowdingFactor, manureFull, residents, shelterComfort, shelterDoor, shelterSafety } from './shelters';
+import { crowdingFactor, effectiveSafety, manureFull, residents, shelterComfort, shelterDoor } from './shelters';
 import {
   fail,
   ok,
@@ -153,9 +153,12 @@ export interface PredatorAttack {
 
 const isLarge = (animal: Animal): boolean => LARGE_ANIMALS.includes(animal.kind);
 
-/** How exposed an animal is to a predator: asleep inside (1 − safety) or out; babies more, large animals less. */
+/**
+ * How exposed an animal is to a predator: asleep inside (1 − safety, lamps included) or out;
+ * babies more, large animals less.
+ */
 export const exposure = (state: GameState, animal: Animal, shelter: StructureInstance): number =>
-  (isInside(state, animal) ? 1 - shelterSafety(shelter) : PREDATOR_RISK.outside) *
+  (isInside(state, animal) ? 1 - effectiveSafety(state, shelter) : PREDATOR_RISK.outside) *
   (lifeStage(state.gameMinutes, animal) === 'baby' ? PREDATOR_RISK.baby : 1) *
   (isLarge(animal) ? PREDATOR_RISK.large : 1);
 

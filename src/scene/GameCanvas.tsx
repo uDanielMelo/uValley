@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { PCFShadowMap } from 'three';
 import { Animals } from './Animals';
 import { Carcasses } from './Carcasses';
+import { Blueprint } from './Blueprint';
 import { BuildGhost } from './BuildGhost';
 import { CameraRig } from './CameraRig';
 import { Car } from './Car';
@@ -46,6 +47,7 @@ export function GameCanvas() {
         <SoilLayer />
         <GrassLayer />
         <TileHighlight />
+        <Blueprint />
         <BuildGhost />
         <TaskMarkers />
         <Fences />

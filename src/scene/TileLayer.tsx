@@ -1,6 +1,7 @@
 import type { ThreeEvent } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { BoxGeometry, Color, Matrix4, type InstancedMesh, type MeshStandardMaterial } from 'three';
+import { STRUCTURES } from '../data/structures';
 import { TILE_COUNT, tileCoords } from '../game/grid';
 import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
@@ -33,7 +34,10 @@ const grassColor = (index: number, target: Color): Color => {
 };
 
 const tileColor = (tile: Tile, index: number, target: Color): Color => {
-  if (tile.structure) return target.copy(C.structure);
+  // Buildings stand on bare ground; decorations keep the grass around them.
+  if (tile.structure) {
+    return STRUCTURES[tile.structure].category === 'decor' ? grassColor(index, target) : target.copy(C.structure);
+  }
   // Fertilized soil is darker and richer.
   if (tile.fertilized) return soilColor(tile, index, target).lerp(C.fertilized, 0.35);
   return soilColor(tile, index, target);

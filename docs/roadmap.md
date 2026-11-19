@@ -118,8 +118,16 @@ Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
 5. Contratação e compras: a agência abre a equipe e as lojas abrem as abas da loja (que continua acessível
    pelo topo). Save v13.
 
-### Etapa 6: hub de construção em planta baixa
+### Etapa 6: hub de construção em planta baixa ✅
 Visual azulado de projeto ao construir estradas e prédios, compra de decoração e iluminação.
+
+Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
+1. Planta: com o painel Construir aberto ou algo sendo posicionado, a fazenda ganha papel azul, grade de
+   tiles e de lotes e o contorno de cada construção; a câmera inclina para uma vista de cima e volta depois.
+2. Decoração e iluminação (nova categoria): poste de luz 90, canteiro 40, banco 50, espantalho 60, árvore 30
+   e chafariz 450. São obras da equipe, como as outras construções.
+3. O poste acende à noite (brilho no chão) e protege: abrigos a até 4 tiles ganham +10% de segurança contra
+   predadores, até +20%. Sem mudança no save.
 
 ### Etapa 7: plantações 2.0
 Pesquisa de culturas, culturas de campo e de estrutura (estufa, pomar), adubo, habilidade por cultura.

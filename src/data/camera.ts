@@ -21,6 +21,8 @@ export const CAMERA = {
   maxDistance: 70,
   /** Zoom used when the camera is sent to a spot (e.g. the dev attack preview). */
   focusDistance: 6,
+  /** Tilt of the top view used while building (a floor plan). */
+  blueprintElevationDeg: 80,
   /** Zoom when arriving in town. */
   townDistance: 22,
   zoomSensitivity: 0.0015,

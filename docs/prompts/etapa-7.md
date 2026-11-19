@@ -1,30 +1,30 @@
-# Prompt para continuar: etapa 6 (construção em planta baixa)
+# Prompt para continuar: etapa 7 (plantações 2.0)
 
 Cole o bloco abaixo numa sessão nova do Claude Code, na pasta do projeto.
 
 ---
 
-Vamos continuar o uValley na **etapa 6: hub de construção em planta baixa**. Leia o contexto, decida o
-desenho (tenho dado autonomia: decida o que for de balanceamento e registre em `docs/roadmap.md`) e siga até
-o fim validando cada parte.
+Vamos continuar o uValley na **etapa 7: plantações 2.0**. Leia o contexto, decida o desenho (tenho dado
+autonomia: decida o que for de balanceamento e registre em `docs/roadmap.md`) e siga até o fim validando
+cada parte.
 
 ## Onde estamos
 
 - Leia `CLAUDE.md` (modelo do jogo) e `docs/roadmap.md` (etapas e decisões).
-- As etapas 0–5 estão na `main`. Crie `fase-3c-etapa-6` a partir dela.
+- As etapas 0–6 estão na `main`. Crie `fase-3d-etapa-7` a partir dela.
 - Save na versão 13. `npm test` e `npm run build` precisam passar.
 - Commit: faça também o push da branch e, ao fim da etapa, o merge (fast-forward) na `main`.
 
 ## Escopo (do documento de design)
 
-Visual azulado de projeto ao construir estradas e prédios, compra de decoração e iluminação.
+Pesquisa de culturas, culturas de campo e de estrutura (estufa, pomar), adubo, habilidade por cultura.
 
 ## O que já existe
 
-- Modo de construção (`buildMode` no store, `BuildPanel`, `BuildGhost`, tecla B, R gira, Esc sai), estradas
-  por clique e arraste, demolir. Obras são feitas pela equipe (`game/construction.ts`).
-- Postes de luz só existem na cidade (`scene/city/CityScene.tsx`); janelas e lampião emissivos à noite
-  (`scene/materials.ts`).
+- Três culturas (`data/crops.ts`: trigo, milho, tomate), crescimento só regado (`game/growth.ts`), estações
+  (`game/climate.ts`), adubo (`data/fertilizer.ts`, atividade Adubar), especialidade de cultura nos
+  trabalhadores (`Specialty`), armazenamento e estragos por item (`data/storage.ts`), peso por item e
+  pedidos da cidade (`data/market.ts`).
 
 ## Notas práticas (Windows)
 

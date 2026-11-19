@@ -54,6 +54,8 @@ export function CameraRig() {
   const pointer = useRef({ x: 0, y: 0, inside: false, drag: null as DragMode, button: -1 });
   const keys = useRef(new Set<string>());
   const panRef = useRef<((dx: number, dy: number, viewHeight: number) => void) | null>(null);
+  /** Elevation to restore when leaving the blueprint (top) view of the build mode. */
+  const beforeBlueprint = useRef<number | null>(null);
   /** Id of the last camera focus request already followed. */
   const focused = useRef(useGameStore.getState().cameraFocus?.id ?? 0);
 
@@ -181,6 +183,17 @@ export function CameraRig() {
       const dirY = p.y < m ? -1 : p.y > height - m ? 1 : 0;
       const step = CAMERA.edgePanSpeed * dt;
       if (dirX || dirY) panRef.current(-dirX * step, -dirY * step, height);
+    }
+
+    // Building: tilt to a top view (a floor plan); back to the previous tilt afterwards.
+    const { buildMode, panel } = useGameStore.getState();
+    const building = buildMode !== null || panel === 'build';
+    if (building && beforeBlueprint.current === null) {
+      beforeBlueprint.current = g.elevation;
+      g.elevation = CAMERA.blueprintElevationDeg * DEG;
+    } else if (!building && beforeBlueprint.current !== null) {
+      g.elevation = beforeBlueprint.current;
+      beforeBlueprint.current = null;
     }
 
     // Sent to a spot (dev tools): center it and come closer.

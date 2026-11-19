@@ -15,10 +15,16 @@ export const STRUCTURE_IDS = [
   'warehouse',
   'barn',
   'coldRoom',
+  'lampPost',
+  'flowerBed',
+  'bench',
+  'scarecrow',
+  'tree',
+  'fountain',
 ] as const;
 export type StructureId = (typeof STRUCTURE_IDS)[number];
 
-export type StructureCategory = 'housing' | 'animals' | 'storage';
+export type StructureCategory = 'housing' | 'animals' | 'storage' | 'decor';
 
 /** Shelter levels: basic, reinforced, comfortable, automated. */
 export type ShelterLevel = 1 | 2 | 3 | 4;
@@ -89,6 +95,8 @@ export interface StructureDef {
   shelter?: ShelterDef;
   /** Present on storage buildings. */
   storage?: StorageDef;
+  /** Present on lights: shelters whose door is within `radius` tiles gain `safety` (see LIGHT_SAFETY_CAP). */
+  light?: { radius: number; safety: number };
   /** Short pt-BR description for the build menu. */
   description: string;
 }
@@ -244,7 +252,77 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     storage: { capacity: 30, cold: true },
     description: 'Refrigerada: guarda 30 de perecíveis (leite, ovos, tomate) sem estragar.',
   },
+  lampPost: {
+    id: 'lampPost',
+    label: 'Poste de luz',
+    icon: '💡',
+    width: 1,
+    depth: 1,
+    cost: 90,
+    buildMinutes: 60,
+    category: 'decor',
+    light: { radius: 4, safety: 0.1 },
+    description: 'Ilumina à noite: abrigos a até 4 tiles ganham +10% de segurança contra predadores.',
+  },
+  flowerBed: {
+    id: 'flowerBed',
+    label: 'Canteiro de flores',
+    icon: '🌷',
+    width: 1,
+    depth: 1,
+    cost: 40,
+    buildMinutes: 30,
+    category: 'decor',
+    description: 'Canteiro elevado com flores coloridas.',
+  },
+  bench: {
+    id: 'bench',
+    label: 'Banco',
+    icon: '🪑',
+    width: 1,
+    depth: 1,
+    cost: 50,
+    buildMinutes: 30,
+    category: 'decor',
+    description: 'Banco de jardim.',
+  },
+  scarecrow: {
+    id: 'scarecrow',
+    label: 'Espantalho',
+    icon: '🎃',
+    width: 1,
+    depth: 1,
+    cost: 60,
+    buildMinutes: 30,
+    category: 'decor',
+    description: 'O clássico da roça.',
+  },
+  tree: {
+    id: 'tree',
+    label: 'Árvore',
+    icon: '🌳',
+    width: 1,
+    depth: 1,
+    cost: 30,
+    buildMinutes: 20,
+    category: 'decor',
+    description: 'Uma árvore de sombra.',
+  },
+  fountain: {
+    id: 'fountain',
+    label: 'Chafariz',
+    icon: '⛲',
+    width: 2,
+    depth: 2,
+    cost: 450,
+    buildMinutes: 240,
+    category: 'decor',
+    description: 'Chafariz de pedra para enfeitar a fazenda.',
+  },
 };
+
+/** Most safety lights can add to one shelter. */
+export const LIGHT_SAFETY_CAP = 0.2;
 
 /** Structures that house animals, in menu order. */
 export const SHELTER_IDS: readonly StructureId[] = STRUCTURE_IDS.filter((id) => STRUCTURES[id].shelter !== undefined);
@@ -256,6 +334,7 @@ export const CATEGORY_LABELS: Record<StructureCategory, string> = {
   housing: 'Moradia',
   animals: 'Animais',
   storage: 'Armazenamento',
+  decor: 'Decoração e iluminação',
 };
 
 /** Fraction of the build cost refunded when a demolition is finished. */

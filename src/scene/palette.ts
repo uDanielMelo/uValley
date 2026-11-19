@@ -59,6 +59,10 @@ export const PALETTE = {
   seasonAutumn: '#f6c88c',
   seasonWinter: '#cfd9de',
   rain: '#b9d2e6',
+  /** Building mode: blueprint paper, grid and footprint lines. */
+  blueprintPaper: '#1f5fa8',
+  blueprintLine: '#bfe0ff',
+  blueprintWall: '#ffffff',
   snow: '#ffffff',
   /** Fertilized soil is darkened toward this. */
   fertilizedSoil: '#3b2614',

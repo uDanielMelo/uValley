@@ -5,6 +5,8 @@ import { BUNKHOUSE_BEDS } from '../data/workers';
 import { workProgress } from '../game/construction';
 import { isKnownSick } from '../game/health';
 import {
+  effectiveSafety,
+  lightingBonus,
   manureCap,
   manureFull,
   maxShelterLevel,
@@ -13,7 +15,6 @@ import {
   shelterCapacity,
   shelterComfort,
   shelterDef,
-  shelterSafety,
   stockTotal,
 } from '../game/shelters';
 import { staffCount } from '../game/staff';
@@ -85,6 +86,8 @@ function ShelterSection({ type }: { type: StructureId }) {
       .map((p) => `${ANIMAL_PRODUCTS[p].icon} ${items[p] ?? 0}`)
       .join('  ');
   }, '');
+  const safety = useSelected((s, game) => effectiveSafety(game, s), 0);
+  const lit = useSelected((s, game) => lightingBonus(game, s), 0);
   const manure = useSelected((s) => `${Math.floor(s.manure ?? 0)}/${manureCap(s)}`, '');
   const manureIsFull = useSelected((s) => manureFull(s), false);
   const sick = useSelected((s, game) => game.animals.filter((a) => a.shelterId === s.id && isKnownSick(a)).length, 0);
@@ -111,7 +114,7 @@ function ShelterSection({ type }: { type: StructureId }) {
         <span className="ml-2 text-xs font-black">{SHELTER_LEVELS[level].label}</span>
       </div>
       <Meter label="Conforto" value={shelterComfort({ level })} />
-      <Meter label="Segurança" value={shelterSafety({ type, level })} />
+      <Meter label={lit > 0 ? 'Segurança (+ postes)' : 'Segurança'} value={safety} />
       <p className="flex justify-between text-xs font-bold">
         <span className="text-wood/70">Animais</span>
         <span className="tabular-nums">{heads}</span>

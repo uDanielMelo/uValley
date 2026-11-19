@@ -5,6 +5,7 @@
 import { ANIMALS, PLOT_PASTURE_UNITS, SHELTER_STOCK_PER_HEAD, type AnimalId, type AnimalProductId } from '../data/animals';
 import { MANURE_PIT_BONUS, SHELTER_MANURE_PER_HEAD } from '../data/fertilizer';
 import {
+  LIGHT_SAFETY_CAP,
   SHELTER_LEVELS,
   SHELTER_LEVEL_LIMIT,
   STRUCTURES,
@@ -75,6 +76,23 @@ export const shelterSafety = (s: Pick<StructureInstance, 'type' | 'level'>): num
   const bonus = shelterLevel(s) >= 2 ? (shelterDef(s.type)?.safetyBonus ?? 0) : 0;
   return Math.min(1, levelDef(s).safety + bonus);
 };
+
+/** Safety lamps near a shelter's door add (finished lights only, up to LIGHT_SAFETY_CAP). */
+export const lightingBonus = (state: Pick<GameState, 'structures'>, shelter: StructureInstance): number => {
+  const door = shelterDoor(shelter);
+  let bonus = 0;
+  for (const s of state.structures) {
+    const light = STRUCTURES[s.type].light;
+    if (!light || s.work) continue;
+    const c = { x: s.x + STRUCTURES[s.type].width / 2, y: s.y + STRUCTURES[s.type].depth / 2 };
+    if (Math.hypot(c.x - door.x, c.y - door.y) <= light.radius) bonus += light.safety;
+  }
+  return Math.min(LIGHT_SAFETY_CAP, bonus);
+};
+
+/** Safety against predators: the shelter's own plus nearby lamps. */
+export const effectiveSafety = (state: Pick<GameState, 'structures'>, shelter: StructureInstance): number =>
+  Math.min(1, shelterSafety(shelter) + lightingBonus(state, shelter));
 
 /** How fast the animals of a shelter produce, from its level (comfort). */
 export const productionMultiplier = (s: Pick<StructureInstance, 'level'>): number => levelDef(s).production;
