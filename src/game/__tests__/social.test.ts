@@ -42,7 +42,7 @@ describe('GitHub activity', () => {
   });
 
   it('speeds up crop growth', () => {
-    const t = tileIndex(15, 19);
+    const t = tileIndex(31, 51);
     const s = unwrap(water(unwrap(plant(unwrap(till(createInitialState(), t)), t, 'wheat')), t));
     const plain = growTiles(s.tiles, s.gameMinutes, s.gameMinutes + 60)[t]?.crop?.growthMinutes ?? 0;
     const boosted = growTiles(s.tiles, s.gameMinutes, s.gameMinutes + 60, 1.1)[t]?.crop?.growthMinutes ?? 0;
@@ -80,9 +80,4 @@ describe('save', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates v14 saves: no account linked', () => {
-    const { github: _g, ...v14 } = createInitialState();
-    const raw = JSON.stringify({ saveVersion: 14, savedAt: 0, game: v14, settings: DEFAULT_SETTINGS });
-    expect(deserialize(raw)?.game.github).toBeNull();
-  });
 });

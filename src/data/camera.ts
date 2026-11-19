@@ -18,7 +18,9 @@ export const CAMERA = {
   initialDistance: 24,
   /** Close enough to see people (≈0.5 tile tall) and chickens. */
   minDistance: 3.5,
-  maxDistance: 70,
+  maxDistance: 95,
+  /** The camera starts over the house, this many tiles toward the fields north of it. */
+  startNorthOffset: 2,
   /** Zoom used when the camera is sent to a spot (e.g. the dev attack preview). */
   focusDistance: 6,
   /** Tilt of the top view used while building (a floor plan). */

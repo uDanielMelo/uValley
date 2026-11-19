@@ -23,13 +23,13 @@ const unwrap = (result: ActionResult): GameState => {
 };
 
 /** A free grass tile inside the starting plots. */
-const TILE = tileIndex(15, 19);
+const TILE = tileIndex(31, 51);
 
-/** 7:00, lots of money, some fertilizer, a coop at (12, 12) and a pigsty at (17, 12). */
+/** 7:00, lots of money, some fertilizer, a coop at (28, 44) and a pigsty at (33, 44). */
 const farm = (): GameState => {
   let s: GameState = { ...createInitialState(), money: 100_000 };
-  s = unwrap(placeStructure(s, 'chickenCoop', 12, 12));
-  s = unwrap(placeStructure(s, 'pigsty', 17, 12));
+  s = unwrap(placeStructure(s, 'chickenCoop', 28, 44));
+  s = unwrap(placeStructure(s, 'pigsty', 33, 44));
   return addFertilizer(setTimeOfDay(s, 7), 5);
 };
 
@@ -172,13 +172,4 @@ describe('save', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates v11 saves: no fertilizer, and fertilizing right after planting in every list', () => {
-    const s = createInitialState();
-    const { fertilizer: _f, ...inventory } = s.inventory;
-    const workers = s.workers.map((w) => ({ ...w, priorities: ['water', 'seed', 'hoe'] }));
-    const raw = JSON.stringify({ saveVersion: 11, savedAt: 0, game: { ...s, inventory, workers }, settings: DEFAULT_SETTINGS });
-    const loaded = deserialize(raw)?.game;
-    expect(loaded?.inventory.fertilizer).toBe(0);
-    expect(loaded?.workers.every((w) => w.priorities.join() === 'water,seed,fertilize,hoe')).toBe(true);
-  });
 });

@@ -4,7 +4,7 @@ import { CanvasTexture, SRGBColorSpace, SpriteMaterial, type Sprite } from 'thre
 import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
 import { FERTILIZER } from '../data/fertilizer';
 import { manureUnits } from '../game/shelters';
-import { footprintOf } from '../game/structures';
+import { footprintOf, isCutOff } from '../game/structures';
 import { useGameStore } from '../store/gameStore';
 import { cornerToWorld } from './coords';
 import { PALETTE } from './palette';
@@ -19,14 +19,17 @@ const CANVAS_H = 96;
 const WORLD_H = 0.4;
 const FONT = '800 52px Nunito, system-ui, sans-serif';
 
+/** Text shown for a building no road reaches (it overrides the stock). */
+const CUT_OFF_TEXT = '🚧 sem estrada';
+
 /** Draws the pill with its text and returns the pill width in pixels. */
-const drawBadge = (ctx: CanvasRenderingContext2D, text: string): number => {
+const drawBadge = (ctx: CanvasRenderingContext2D, text: string, warn: boolean): number => {
   ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
   ctx.font = FONT;
   const width = Math.min(CANVAS_W - 8, ctx.measureText(text).width + 44);
   const x = (CANVAS_W - width) / 2;
-  ctx.fillStyle = PALETTE.badgeFill;
-  ctx.strokeStyle = PALETTE.badgeBorder;
+  ctx.fillStyle = warn ? PALETTE.badgeWarnFill : PALETTE.badgeFill;
+  ctx.strokeStyle = warn ? PALETTE.badgeWarnBorder : PALETTE.badgeBorder;
   ctx.lineWidth = 6;
   ctx.beginPath();
   ctx.roundRect(x, 6, width, CANVAS_H - 12, (CANVAS_H - 12) / 2);
@@ -39,8 +42,12 @@ const drawBadge = (ctx: CanvasRenderingContext2D, text: string): number => {
   return width;
 };
 
-/** Floating "🥚 3  💩 1" over a shelter while products or manure wait for the crew. Redrawn only when the text changes. */
-export function ShelterBadge({ id, type, x, y, rotation }: PlacedProps & { id: number }) {
+/**
+ * Floating badge over a structure: "🚧 sem estrada" while no road links it to the access road,
+ * otherwise "🥚 3  💩 1" over a shelter while products or manure wait for the crew. Redrawn only
+ * when the text changes.
+ */
+export function StructureBadge({ id, type, x, y, rotation }: PlacedProps & { id: number }) {
   const sprite = useRef<Sprite>(null);
   const fp = footprintOf(type, x, y, rotation);
   const [x0, z0] = cornerToWorld(fp.x, fp.y);
@@ -68,17 +75,21 @@ export function ShelterBadge({ id, type, x, y, rotation }: PlacedProps & { id: n
     const s = sprite.current;
     const ctx = canvas.getContext('2d');
     if (!s || !ctx) return;
-    const shelter = useGameStore.getState().game.structures.find((x) => x.id === id);
+    const game = useGameStore.getState().game;
+    const shelter = game.structures.find((x) => x.id === id);
     const stock = shelter?.stock;
     const manure = shelter ? manureUnits(shelter) : 0;
-    const next = [
-      ...ANIMAL_PRODUCT_IDS.filter((p) => (stock?.[p] ?? 0) > 0).map((p) => `${ANIMAL_PRODUCTS[p].icon} ${stock?.[p] ?? 0}`),
-      ...(manure > 0 ? [`${FERTILIZER.icon} ${manure}`] : []),
-    ].join('  ');
+    const cutOff = !!shelter && isCutOff(game, shelter);
+    const next = cutOff
+      ? CUT_OFF_TEXT
+      : [
+          ...ANIMAL_PRODUCT_IDS.filter((p) => (stock?.[p] ?? 0) > 0).map((p) => `${ANIMAL_PRODUCTS[p].icon} ${stock?.[p] ?? 0}`),
+          ...(manure > 0 ? [`${FERTILIZER.icon} ${manure}`] : []),
+        ].join('  ');
     if (next !== badge.text) {
       badge.text = next;
       if (next) {
-        drawBadge(ctx, next);
+        drawBadge(ctx, next, cutOff);
         texture.needsUpdate = true;
       }
     }

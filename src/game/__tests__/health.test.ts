@@ -36,8 +36,8 @@ const HOUR = GAME_MINUTES_PER_REAL_HOUR;
 /** 7:00, lots of money, a finished coop (id 4 + n) and corral. */
 const farm = (): GameState => {
   let s: GameState = { ...createInitialState(), money: 100_000 };
-  s = unwrap(placeStructure(s, 'chickenCoop', 12, 12));
-  s = unwrap(placeStructure(s, 'corral', 17, 12));
+  s = unwrap(placeStructure(s, 'chickenCoop', 28, 44));
+  s = unwrap(placeStructure(s, 'corral', 33, 44));
   return setTimeOfDay(s, 7);
 };
 
@@ -282,14 +282,4 @@ describe('save', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates v10 saves: everyone healthy, no medicine, no carcasses', () => {
-    const s = unwrap(addAnimal(farm(), 'cow'));
-    const { carcasses: _c, ...v10 } = s;
-    const { medicine: _m, ...inventory } = s.inventory;
-    const raw = JSON.stringify({ saveVersion: 10, savedAt: 0, game: { ...v10, inventory }, settings: DEFAULT_SETTINGS });
-    const loaded = deserialize(raw)?.game;
-    expect(loaded?.carcasses).toEqual([]);
-    expect(loaded?.inventory.medicine).toEqual({});
-    expect(loaded?.animals[0]?.health).toBeUndefined();
-  });
 });

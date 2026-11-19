@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { ACCESS_ROAD_X } from '../../data/roads';
 import { BUNKHOUSE_BEDS, CANDIDATE_COUNT, SEVERANCE_HOURS, STARTING_WORKERS, TEMP_WORKERS, WORK_END_HOUR } from '../../data/workers';
 import { MINUTES_PER_DAY } from '../../data/world';
 import { tileIndex } from '../grid';
@@ -30,8 +29,8 @@ const unwrap = (result: ActionResult | QueueResult): GameState => {
 };
 
 const rich = (s: GameState): GameState => ({ ...s, money: 100_000 });
-/** A second bunkhouse north of the house (2×1 at 12–13, 12). */
-const withBunkhouse = (s: GameState): GameState => unwrap(placeStructure(rich(s), 'bunkhouse', 12, 12));
+/** A second bunkhouse north of the house (2×1 at 28–29, 44). */
+const withBunkhouse = (s: GameState): GameState => unwrap(placeStructure(rich(s), 'bunkhouse', 28, 44));
 const at = (s: GameState, hour: number): GameState => ({ ...s, gameMinutes: hour * 60 });
 
 const profile = (over: Partial<WorkerProfile>): WorkerProfile => ({
@@ -118,11 +117,11 @@ describe('bunkhouse and hiring', () => {
   it('rests the crew in front of the bunkhouse door', () => {
     const s = createInitialState();
     const spot = homeSpot(s, 0);
-    // Bunkhouse at 12–13, 16, front facing south.
-    expect(spot.x).toBeGreaterThan(12);
-    expect(spot.x).toBeLessThan(14);
-    expect(spot.y).toBeGreaterThan(17);
-    expect(spot.y).toBeLessThan(18);
+    // Bunkhouse at 27–28, 57, front facing south onto the street (row 58).
+    expect(spot.x).toBeGreaterThan(27);
+    expect(spot.x).toBeLessThan(29);
+    expect(spot.y).toBeGreaterThan(58);
+    expect(spot.y).toBeLessThan(59);
   });
 
   it('needs a free bed to hire a candidate', () => {
@@ -221,11 +220,11 @@ describe('priorities', () => {
     const crop: Tile = { state: 'planted', crop: { cropId: 'wheat', growthMinutes: 0 } };
     let s: GameState = {
       ...base,
-      tiles: base.tiles.map((t, i) => (i === tileIndex(19, 13) ? crop : t)),
-      workers: base.workers.slice(0, 1).map((w) => ({ ...w, x: 12.5, y: 13.5, priorities })),
+      tiles: base.tiles.map((t, i) => (i === tileIndex(35, 45) ? crop : t)),
+      workers: base.workers.slice(0, 1).map((w) => ({ ...w, x: 28.5, y: 45.5, priorities })),
     };
-    s = unwrap(toggleTask(s, 'hoe', tileIndex(12, 13), 'wheat'));
-    return unwrap(toggleTask(s, 'water', tileIndex(19, 13), 'wheat'));
+    s = unwrap(toggleTask(s, 'hoe', tileIndex(28, 45), 'wheat'));
+    return unwrap(toggleTask(s, 'water', tileIndex(35, 45), 'wheat'));
   };
   const takenKind = (s: GameState) => {
     const next = tick(s, 0.1);
@@ -259,46 +258,4 @@ describe('save v6', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates a v5 save: road to the south, family to staff, a bunkhouse and the board', () => {
-    const s = createInitialState();
-    const north = Array.from({ length: 16 }, (_, y) => tileIndex(ACCESS_ROAD_X, y));
-    const tiles = s.tiles.map((t, i) => {
-      const { road: _road, structure: _structure, ...rest } = t;
-      if (north.includes(i)) return { ...rest, road: true };
-      return t.structure === 'bunkhouse' ? rest : i >= tileIndex(0, 16) && t.road ? rest : t;
-    });
-    const legacy = (name: string, kind: 'family' | 'hired', id: number) => ({
-      id,
-      name,
-      role: kind === 'family' ? 'Pai' : 'Contratado',
-      kind,
-      efficiency: 1,
-      x: 15,
-      y: 17,
-      taskId: null,
-      path: [],
-      progress: 0,
-    });
-    const { candidates: _c, ...game } = s;
-    const v5 = {
-      ...game,
-      tiles,
-      structures: s.structures.filter((x) => x.type !== 'bunkhouse'),
-      workers: [legacy('Antônio', 'family', 1), legacy('Helena', 'family', 2), legacy('Lucas', 'family', 3), legacy('Zé', 'hired', 4)],
-      nextId: 20,
-    };
-    const loaded = deserialize(JSON.stringify({ saveVersion: 5, savedAt: 0, game: v5, settings: DEFAULT_SETTINGS }));
-    if (!loaded) throw new Error('migration failed');
-    const g = loaded.game;
-    expect(g.tiles[tileIndex(ACCESS_ROAD_X, 5)]).toEqual({ state: 'locked' });
-    expect(g.tiles[tileIndex(ACCESS_ROAD_X, 14)]).toEqual({ state: 'grass' });
-    expect(g.tiles[tileIndex(ACCESS_ROAD_X, 25)]?.road).toBe(true);
-    expect(g.structures.find((x) => x.type === 'bunkhouse')).toEqual({ id: 20, type: 'bunkhouse', x: 12, y: 16, rotation: 0 });
-    expect(g.tiles[tileIndex(13, 16)]?.structure).toBe('bunkhouse');
-    expect(g.workers.every((w) => w.kind === 'staff')).toBe(true);
-    expect(g.workers[0]?.age).toBe(STARTING_WORKERS[0]?.age);
-    expect(g.workers[3]?.stars).toBe(2);
-    expect(g.candidates).toHaveLength(CANDIDATE_COUNT);
-    expect(g.nextId).toBe(21 + CANDIDATE_COUNT);
-  });
 });

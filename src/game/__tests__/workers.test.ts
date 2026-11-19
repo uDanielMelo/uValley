@@ -24,8 +24,8 @@ const unwrap = (result: ActionResult | QueueResult): GameState => {
   return result.state;
 };
 
-const TILE = tileIndex(13, 13);
-const OTHER = tileIndex(19, 13);
+const TILE = tileIndex(29, 45);
+const OTHER = tileIndex(35, 45);
 
 /** Runs the simulation in small steps, like the render loop does. */
 const run = (state: GameState, minutes: number, step = 1): GameState => {
@@ -63,10 +63,10 @@ describe('task queue', () => {
     // Seeds are reserved by queued plantings.
     const seeds = s.inventory.seeds.wheat ?? 0;
     for (let i = 0; i < seeds - 1; i++) {
-      const tile = tileIndex(12 + i, 19);
+      const tile = tileIndex(28 + i, 51);
       s = unwrap(toggleTask(unwrap(toggleTask(s, 'hoe', tile, 'wheat')), 'seed', tile, 'wheat'));
     }
-    const extra = tileIndex(19, 18);
+    const extra = tileIndex(35, 50);
     s = unwrap(toggleTask(s, 'hoe', extra, 'wheat'));
     expect(toggleTask(s, 'seed', extra, 'wheat')).toEqual({ ok: false, error: 'no-seeds' });
   });
@@ -81,7 +81,7 @@ describe('task queue', () => {
   it('rejects invalid tiles', () => {
     const s = createInitialState();
     expect(toggleTask(s, 'hoe', tileIndex(0, 0), 'wheat')).toEqual({ ok: false, error: 'locked' });
-    expect(toggleTask(s, 'hoe', tileIndex(15, 15), 'wheat')).toEqual({ ok: false, error: 'structure' });
+    expect(toggleTask(s, 'hoe', tileIndex(30, 56), 'wheat')).toEqual({ ok: false, error: 'structure' });
   });
 });
 
@@ -112,7 +112,7 @@ describe('workers', () => {
   });
 
   it('finish a batch sooner when there are more of them', () => {
-    const tiles = [12, 13, 14, 16, 17, 19].map((x) => tileIndex(x, 12));
+    const tiles = [28, 29, 30, 32, 33, 35].map((x) => tileIndex(x, 44));
     const queue = (base: GameState) => tiles.reduce((s, t) => unwrap(toggleTask(s, 'hoe', t, 'wheat')), base);
     const minutesToFinish = (start: GameState): number => {
       let s = start;
@@ -151,8 +151,9 @@ describe('workers', () => {
 describe('paths', () => {
   it('go around the house instead of through it', () => {
     const s = createInitialState();
-    const from = { x: 15.5, y: 17.5 };
-    const to = { x: 16.5, y: 13.5 };
+    // From the street in front of the house to the field behind it.
+    const from = { x: 30.5, y: 58.5 };
+    const to = { x: 31.5, y: 53.5 };
     expect(lineClear(s.tiles, from, to)).toBe(false);
     const path = findPath(s.tiles, from, to);
     expect(path.at(-1)).toEqual(to);
@@ -172,42 +173,35 @@ describe('save v2', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates v1 saves by adding the family, who become the starting crew in v6', () => {
-    const { workers: _w, tasks: _t, nextId: _n, candidates: _c, structures: _s, ...v1Game } = createInitialState();
-    const loaded = deserialize(JSON.stringify({ saveVersion: 1, savedAt: 0, game: v1Game, settings: {} }));
-    expect(loaded?.game.workers.map((w) => [w.name, w.kind])).toEqual(STARTING_WORKERS.map((t) => [t.name, 'staff']));
-    expect(loaded?.game.tasks).toEqual([]);
-    expect(loaded?.settings).toEqual(DEFAULT_SETTINGS);
-  });
 });
 
 describe('area orders', () => {
   it('lists the tiles of a rectangle whatever corner the drag starts from', () => {
-    expect(tilesInRect(tileIndex(13, 13), tileIndex(12, 12))).toEqual([
-      tileIndex(12, 12),
-      tileIndex(13, 12),
-      tileIndex(12, 13),
-      tileIndex(13, 13),
+    expect(tilesInRect(tileIndex(29, 45), tileIndex(28, 44))).toEqual([
+      tileIndex(28, 44),
+      tileIndex(29, 44),
+      tileIndex(28, 45),
+      tileIndex(29, 45),
     ]);
   });
 
   it('queues the order on every valid tile and skips the rest', () => {
     const s = createInitialState();
-    // 12..15 × 12..13 is free grass; row 15 crosses the house (15–16, 15).
-    const field = applyArea(s, 'hoe', tilesInRect(tileIndex(12, 12), tileIndex(15, 13)), 'wheat', 'queue');
+    // 28..31 × 44..45 is free grass; row 57 crosses the house (30–31), the yard's roads and the bin (33).
+    const field = applyArea(s, 'hoe', tilesInRect(tileIndex(28, 44), tileIndex(31, 45)), 'wheat', 'queue');
     expect(field.changed).toHaveLength(8);
     expect(field.state.tasks).toHaveLength(8);
     expect(field.error).toBeNull();
 
-    const row = applyArea(s, 'hoe', tilesInRect(tileIndex(14, 15), tileIndex(19, 15)), 'wheat', 'queue');
-    expect(row.changed).toEqual([tileIndex(14, 15), tileIndex(17, 15), tileIndex(18, 15), tileIndex(19, 15)]);
+    const row = applyArea(s, 'hoe', tilesInRect(tileIndex(30, 57), tileIndex(37, 57)), 'wheat', 'queue');
+    expect(row.changed).toEqual([tileIndex(35, 57), tileIndex(36, 57), tileIndex(37, 57)]);
     expect(row.error).toBe('structure');
   });
 
   it('reserves seeds across the area and stops planting when they run out', () => {
     let s = createInitialState();
     s = { ...s, inventory: { ...s.inventory, seeds: { wheat: 3 } } };
-    const tiles = tilesInRect(tileIndex(12, 12), tileIndex(16, 12));
+    const tiles = tilesInRect(tileIndex(28, 44), tileIndex(32, 44));
     s = applyArea(s, 'hoe', tiles, 'wheat', 'queue').state;
     const planted = applyArea(s, 'seed', tiles, 'wheat', 'queue');
     expect(planted.changed).toEqual(tiles.slice(0, 3));
@@ -215,14 +209,14 @@ describe('area orders', () => {
   });
 
   it('does not queue twice, and cancels when the drag starts on the same order', () => {
-    const tiles = tilesInRect(tileIndex(12, 12), tileIndex(14, 12));
+    const tiles = tilesInRect(tileIndex(28, 44), tileIndex(30, 44));
     let s = applyArea(createInitialState(), 'hoe', tiles.slice(0, 2), 'wheat', 'queue').state;
     const again = applyArea(s, 'hoe', tiles, 'wheat', 'queue');
     expect(again.changed).toEqual([tiles[2]]);
     s = again.state;
 
-    expect(areaMode(s, 'hoe', tileIndex(12, 12), 'wheat')).toBe('cancel');
-    expect(areaMode(s, 'water', tileIndex(12, 12), 'wheat')).toBe('queue');
+    expect(areaMode(s, 'hoe', tileIndex(28, 44), 'wheat')).toBe('cancel');
+    expect(areaMode(s, 'water', tileIndex(28, 44), 'wheat')).toBe('queue');
     const cancelled = applyArea(s, 'hoe', tiles.slice(1), 'wheat', 'cancel');
     expect(cancelled.changed).toEqual(tiles.slice(1));
     expect(cancelled.state.tasks.map((t) => t.tile)).toEqual([tiles[0]]);

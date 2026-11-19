@@ -15,14 +15,24 @@ import {
   workSpot,
 } from '../construction';
 import { setTimeOfDay } from '../dev';
-import { tileCoords, tileIndex } from '../grid';
+import { tileCoords, tileIndex, withTile } from '../grid';
 import { homeSpot } from '../home';
 import { isWalkable } from '../path';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { advanceGame, type FinishedWork } from '../simulation';
 import { freeBeds, workSpeed } from '../staff';
 import { createInitialState } from '../state';
-import { bedCount, buildCost, buildMinutesFor, demolishMinutesFor, footprintCells, footprintOf, refundFor } from '../structures';
+import {
+  bedCount,
+  buildCost,
+  buildMinutesFor,
+  demolishMinutesFor,
+  footprintCells,
+  footprintOf,
+  hasRoadAccess,
+  refundFor,
+  ringCells,
+} from '../structures';
 import type { GameState, StructureInstance, Worker } from '../types';
 import { unstaffedKinds } from '../workers';
 
@@ -31,10 +41,20 @@ const unwrap = <T extends { ok: true; state: GameState } | { ok: false; error: s
   return result.state;
 };
 
-// Free owned grass in the starting area (12..19 on both axes), away from the house and bunkhouse.
-const FREE_X = 12;
-const FREE_Y = 12;
+// Free owned grass in the fields north of the yard: no road reaches it.
+const FREE_X = 28;
+const FREE_Y = 44;
 const FREE = tileIndex(FREE_X, FREE_Y);
+// Free grass beside the access road: a ring there runs along it.
+const NEAR_X = 33;
+const NEAR_Y = 60;
+const NEAR = tileIndex(NEAR_X, NEAR_Y);
+
+/** Opens road on tiles at once. */
+const withRoadAt = (s: GameState, tiles: readonly number[]): GameState => ({
+  ...s,
+  tiles: tiles.reduce((acc, i) => withTile(acc, i, { state: 'grass', road: true }), s.tiles),
+});
 
 /** A fresh farm at 7:00 with plenty of money. */
 const farm = (): GameState => ({ ...setTimeOfDay(createInitialState(), 7), money: 5000 });
@@ -65,7 +85,8 @@ describe('construction orders', () => {
     const s0 = farm();
     const s = unwrap(orderStructure(s0, 'silo', FREE_X, FREE_Y));
     const silo = site(s);
-    expect(s.money).toBe(s0.money - buildCost('silo'));
+    // A 2×2 silo has a ring of 12 road tiles, paid with the order.
+    expect(s.money).toBe(s0.money - buildCost('silo') - 12 * ROAD_COST);
     expect(silo.work).toEqual({ kind: 'build', done: 0, total: buildMinutesFor('silo') });
     expect(s.tiles[FREE]?.structure).toBe('silo');
     const tasks = s.tasks.filter((t) => t.job?.type === 'structure' && t.job.structureId === silo.id);
@@ -89,7 +110,7 @@ describe('construction orders', () => {
     const s = unwrap(orderStructure(farm(), 'chickenCoop', FREE_X, FREE_Y));
     const coop = site(s);
     for (const tile of crewTiles(coop)) {
-      const spot = workSpot(s, coop, tile, { x: 16, y: 18 });
+      const spot = workSpot(s, coop, tile, { x: 32, y: 50 });
       expect(spot).not.toBeNull();
       if (!spot) continue;
       const x = Math.floor(spot.x);
@@ -112,7 +133,8 @@ describe('construction orders', () => {
     const s0 = farm();
     const s = unwrap(orderStructure(s0, 'chickenCoop', FREE_X, FREE_Y));
     const result = demolishClick(s, FREE);
-    expect(result.ok && result.change).toEqual({ kind: 'build-cancelled', type: 'chickenCoop', refund: buildCost('chickenCoop') });
+    const refund = buildCost('chickenCoop') + 10 * ROAD_COST;
+    expect(result.ok && result.change).toEqual({ kind: 'build-cancelled', type: 'chickenCoop', refund });
     const after = unwrap(result);
     expect(after.money).toBe(s0.money);
     expect(after.tasks).toEqual([]);
@@ -121,14 +143,73 @@ describe('construction orders', () => {
   });
 });
 
+describe('road rings', () => {
+  it('queues the ring as road tasks tied to the site, sharing roads already there', () => {
+    const s0 = farm();
+    const s = unwrap(orderStructure(s0, 'chickenCoop', NEAR_X, NEAR_Y));
+    const coop = site(s);
+    const ring = ringCells('chickenCoop', NEAR_X, NEAR_Y, 0).map((c) => tileIndex(c.x, c.y));
+    const roads = s.tasks.filter((t) => t.job?.type === 'road');
+    // Part of the ring is the yard's street and the access road already: those need no new road.
+    const shared = ring.filter((i) => s0.tiles[i]?.road).length;
+    expect(shared).toBeGreaterThan(0);
+    expect(roads).toHaveLength(ring.length - shared);
+    expect(roads.every((t) => t.job?.type === 'road' && !t.job.remove && t.job.siteId === coop.id)).toBe(true);
+    expect(s.money).toBe(s0.money - buildCost('chickenCoop') - roads.length * ROAD_COST);
+  });
+
+  it('needs free grass (or road) all around, inside the map', () => {
+    const s0 = farm();
+    const tilled = withTile(s0.tiles, tileIndex(FREE_X - 1, FREE_Y), { state: 'tilled' });
+    expect(orderStructure({ ...s0, tiles: tilled }, 'chickenCoop', FREE_X, FREE_Y)).toEqual({
+      ok: false,
+      error: 'no-room-for-road',
+    });
+    // Neighbours stand one shared road apart: right beside the ring is fine, on it is not.
+    const coop = unwrap(orderStructure(s0, 'chickenCoop', FREE_X, FREE_Y));
+    expect(orderStructure(coop, 'chickenCoop', FREE_X + 2, FREE_Y)).toEqual({ ok: false, error: 'tile-busy' });
+    expect(unwrap(orderStructure(coop, 'chickenCoop', FREE_X + 3, FREE_Y)).structures).toHaveLength(
+      coop.structures.length + 1,
+    );
+    // The bottom row has no room for the ring below it.
+    expect(orderStructure(s0, 'chickenCoop', NEAR_X + 4, 63)).toEqual({ ok: false, error: 'no-room-for-road' });
+  });
+
+  it('a building no road reaches stands idle until one does', () => {
+    const s = farm();
+    const far = run(unwrap(orderStructure(s, 'bunkhouse', FREE_X, FREE_Y)), 600);
+    const bunk = far.state.structures.find((x) => x.type === 'bunkhouse' && x.x === FREE_X);
+    if (!bunk) throw new Error('no bunkhouse');
+    expect(bunk.work).toBeUndefined();
+    expect(far.finished).toContainEqual({ type: 'bunkhouse', kind: 'build', cutOff: true });
+    expect(hasRoadAccess(far.state.tiles, bunk)).toBe(false);
+    expect(bedCount(far.state)).toBe(bedCount(s));
+    // A road from the ring's corner down to the house ring links it.
+    const link = Array.from({ length: 55 - (FREE_Y + 2) }, (_, i) => tileIndex(FREE_X + 1, FREE_Y + 2 + i));
+    const linked = withRoadAt(far.state, link);
+    expect(hasRoadAccess(linked.tiles, bunk)).toBe(true);
+    expect(bedCount(linked)).toBe(bedCount(s) + BUNKHOUSE_BEDS);
+  });
+
+  it('cancelling refunds the queued ring once, also with "cancel everything"', () => {
+    const s0 = farm();
+    let s = unwrap(orderStructure(s0, 'barn', FREE_X, FREE_Y));
+    s = unwrap(orderRoad(s, tileIndex(FREE_X + 8, FREE_Y)));
+    const cleared = cancelAllOrders(s);
+    expect(cleared.money).toBe(s0.money);
+    expect(cleared.tasks).toEqual([]);
+  });
+});
+
 describe('crew work', () => {
-  it('the crew raises the building and the game reports it', () => {
-    const s = unwrap(orderStructure(farm(), 'chickenCoop', FREE_X, FREE_Y));
+  it('the crew raises the building with its ring and the game reports it', () => {
+    const s = unwrap(orderStructure(farm(), 'chickenCoop', NEAR_X, NEAR_Y));
     const { state, finished } = run(s, 400);
     const coop = state.structures.find((x) => x.type === 'chickenCoop');
     expect(coop?.work).toBeUndefined();
     expect(state.tasks).toEqual([]);
     expect(finished).toEqual([{ type: 'chickenCoop', kind: 'build' }]);
+    expect(ringCells('chickenCoop', NEAR_X, NEAR_Y, 0).every((c) => state.tiles[tileIndex(c.x, c.y)]?.road)).toBe(true);
     expect(state.workers.every((w) => w.taskId === null)).toBe(true);
   });
 
@@ -173,34 +254,34 @@ describe('crew work', () => {
 
 describe('demolition', () => {
   it('is queued, done by the crew and refunds part of the cost at the end', () => {
-    const built = unwrap(orderStructure(farm(), 'chickenCoop', FREE_X, FREE_Y));
+    const built = unwrap(orderStructure(farm(), 'chickenCoop', NEAR_X, NEAR_Y));
     const ready = run(built, 400).state;
-    const queued = unwrap(orderDemolish(ready, FREE));
+    const queued = unwrap(orderDemolish(ready, NEAR));
     expect(site(queued).work).toEqual({ kind: 'demolish', done: 0, total: demolishMinutesFor('chickenCoop') });
     expect(queued.money).toBe(ready.money);
     const { state, finished } = run(queued, 300);
     expect(finished).toEqual([{ type: 'chickenCoop', kind: 'demolish', refund: refundFor('chickenCoop') }]);
     expect(state.structures.some((x) => x.type === 'chickenCoop')).toBe(false);
-    expect(state.tiles[FREE]?.structure).toBeUndefined();
+    expect(state.tiles[NEAR]?.structure).toBeUndefined();
     expect(state.money).toBeGreaterThan(ready.money);
     expect(state.money).toBeLessThanOrEqual(ready.money + refundFor('chickenCoop'));
   });
 
   it('can be called off, and a demolished bunkhouse stops giving beds right away', () => {
     const s = farm();
-    const extra = run(unwrap(orderStructure(s, 'bunkhouse', FREE_X, FREE_Y)), 600).state;
+    const extra = run(unwrap(orderStructure(s, 'bunkhouse', NEAR_X, NEAR_Y)), 600).state;
     expect(bedCount(extra)).toBe(bedCount(s) + BUNKHOUSE_BEDS);
-    const queued = unwrap(demolishClick(extra, FREE));
+    const queued = unwrap(demolishClick(extra, NEAR));
     expect(bedCount(queued)).toBe(bedCount(s));
-    const called = demolishClick(queued, FREE);
+    const called = demolishClick(queued, NEAR);
     expect(called.ok && called.change.kind).toBe('demolish-cancelled');
     expect(bedCount(unwrap(called))).toBe(bedCount(extra));
   });
 
   it('refuses a bunkhouse whose beds are in use and buildings that cannot be demolished', () => {
     const s = farm();
-    expect(orderDemolish(s, tileIndex(12, 16))).toEqual({ ok: false, error: 'beds-in-use' });
-    expect(orderDemolish(s, tileIndex(15, 15))).toEqual({ ok: false, error: 'not-demolishable' });
+    expect(orderDemolish(s, tileIndex(27, 57))).toEqual({ ok: false, error: 'beds-in-use' });
+    expect(orderDemolish(s, tileIndex(30, 56))).toEqual({ ok: false, error: 'not-demolishable' });
   });
 });
 
@@ -208,11 +289,11 @@ describe('road work', () => {
   it('the crew opens queued roads', () => {
     const s0 = farm();
     let s = unwrap(orderRoad(s0, FREE));
-    s = unwrap(orderRoad(s, tileIndex(13, 12)));
+    s = unwrap(orderRoad(s, tileIndex(29, 44)));
     expect(s.money).toBe(s0.money - 2 * ROAD_COST);
     const done = run(s, ROAD_WORK_MINUTES.build * 3).state;
     expect(done.tiles[FREE]?.road).toBe(true);
-    expect(done.tiles[tileIndex(13, 12)]?.road).toBe(true);
+    expect(done.tiles[tileIndex(29, 44)]?.road).toBe(true);
     expect(done.tasks).toEqual([]);
   });
 
@@ -226,12 +307,15 @@ describe('road work', () => {
   });
 
   it('removing a road is crew work too', () => {
-    const access = tileIndex(18, 17);
+    const access = tileIndex(32, 60);
     const result = demolishClick(farm(), access);
     expect(result.ok && result.change.kind).toBe('road-removal-queued');
     const done = run(unwrap(result), ROAD_WORK_MINUTES.remove * 6).state;
     expect(done.tiles[access]?.road).toBeUndefined();
-    expect(demolishClick(farm(), tileIndex(18, 31))).toEqual({ ok: false, error: 'locked' });
+    // A road on land for sale (off the farm) stays.
+    const s = farm();
+    const forSale = { ...s, tiles: withTile(s.tiles, access, { state: 'locked', road: true }) };
+    expect(demolishClick(forSale, access)).toEqual({ ok: false, error: 'locked' });
   });
 });
 
@@ -239,7 +323,7 @@ describe('whole queue and saves', () => {
   it('"cancel everything" calls off sites and refunds queued roads', () => {
     const s0 = farm();
     let s = unwrap(orderStructure(s0, 'chickenCoop', FREE_X, FREE_Y));
-    s = unwrap(orderRoad(s, tileIndex(14, 14)));
+    s = unwrap(orderRoad(s, tileIndex(30, 46)));
     const cleared = cancelAllOrders(s);
     expect(cleared.money).toBe(s0.money);
     expect(cleared.tasks).toEqual([]);
@@ -264,21 +348,9 @@ describe('whole queue and saves', () => {
     expect(repaired.tasks).toHaveLength(crewTiles(site(s)).length);
   });
 
-  it('migrates a v6 save: everyone gets the build (and later tend and fertilize) activities at the end of the list', () => {
-    const s = createInitialState();
-    const v6 = {
-      ...s,
-      workers: s.workers.map((w) => ({ ...w, priorities: ['hand', 'water'] })),
-    };
-    const raw = JSON.stringify({ saveVersion: 6, savedAt: 0, game: v6, settings: DEFAULT_SETTINGS });
-    const loaded = deserialize(raw);
-    expect(loaded?.game.workers.every((w) => w.priorities.join() === 'hand,water,build,tend,fertilize')).toBe(true);
-    expect(loaded?.game.structures.every((x) => x.work === undefined)).toBe(true);
-  });
-
   it('a day of play keeps ids unique', () => {
     let s = unwrap(orderStructure(farm(), 'silo', FREE_X, FREE_Y));
-    s = unwrap(orderRoad(s, tileIndex(14, 14)));
+    s = unwrap(orderRoad(s, tileIndex(36, 46)));
     s = run(s, MINUTES_PER_DAY / 4).state;
     const ids = [...s.tasks.map((t) => t.id), ...s.structures.map((x) => x.id), ...s.workers.map((w) => w.id)];
     expect(new Set(ids).size).toBe(ids.length);

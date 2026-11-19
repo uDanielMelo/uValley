@@ -18,7 +18,15 @@ import { HOME_POSITION, MAX_TASKS } from '../data/workers';
 import { PLOT_SIZE } from '../data/world';
 import { inBounds, tileCoords, tileIndex, tilesInPlot } from './grid';
 import { addCount } from './inventory';
-import { findFreeSpot, frontPoint, frontTile, isOperational, placeStructure } from './structures';
+import {
+  findFreeSpot,
+  frontPoint,
+  frontTile,
+  hasRoadAccess,
+  isActive,
+  isOperational,
+  placeStructure,
+} from './structures';
 import {
   fail,
   ok,
@@ -103,10 +111,12 @@ export const residents = (state: Pick<GameState, 'animals'>, shelterId: number):
 export const freeSlots = (state: Pick<GameState, 'animals'>, s: StructureInstance): number =>
   shelterCapacity(s) - residents(state, s.id);
 
-/** The shelter a new animal moves into (finished, with room, the emptiest), or why there is none. */
+/** The shelter a new animal moves into (working, with room, the emptiest), or why there is none. */
 export const shelterFor = (state: GameState, kind: AnimalId): StructureInstance | ActionError => {
-  const homes = state.structures.filter((s) => housesKind(s.type, kind) && isOperational(s));
-  if (homes.length === 0) return 'no-shelter';
+  const standing = state.structures.filter((s) => housesKind(s.type, kind) && isOperational(s));
+  if (standing.length === 0) return 'no-shelter';
+  const homes = standing.filter((s) => isActive(state, s));
+  if (homes.length === 0) return 'shelter-no-road';
   let best: StructureInstance | null = null;
   let bestFree = 0;
   for (const s of homes) {
@@ -247,11 +257,14 @@ export const mainSpecies = (state: Pick<GameState, 'animals'>, shelterId: number
 
 const isChoreFor = (shelterId: number) => (t: Task) => t.job?.type === 'shelter' && t.job.structureId === shelterId;
 
-/** Standing order: every shelter with products or manure gets a 'tend' task (one at a time) for the crew. */
+/**
+ * Standing order: every shelter with products or manure gets a 'tend' task (one at a time) for the
+ * crew, as long as a road reaches it (the goods leave by road).
+ */
 export const queueShelterChores = (state: GameState): GameState => {
   let next = state;
   for (const s of state.structures) {
-    if (!shelterDef(s.type) || !hasChores(s)) continue;
+    if (!shelterDef(s.type) || !hasChores(s) || !hasRoadAccess(state.tiles, s)) continue;
     if (next.tasks.length >= MAX_TASKS) break;
     if (next.tasks.some(isChoreFor(s.id))) continue;
     const task: Task = {
@@ -283,10 +296,9 @@ export const rehomeAnimals = (state: GameState): GameState => {
       const type = sheltersFor(animal.kind)[0];
       const spot = type ? findFreeSpot(next, type, HOME_POSITION) : null;
       if (type && spot) {
-        const cost = STRUCTURES[type].cost ?? 0;
-        const placed = placeStructure({ ...next, money: next.money + cost }, type, spot.x, spot.y, spot.rotation);
+        const placed = placeStructure(next, type, spot.x, spot.y, spot.rotation, { free: true });
         if (placed.ok) {
-          next = { ...placed.state, money: next.money };
+          next = placed.state;
           home = shelterFor(next, animal.kind);
         }
       }

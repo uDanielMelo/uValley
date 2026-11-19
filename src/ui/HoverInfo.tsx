@@ -1,17 +1,19 @@
+import { useMemo } from 'react';
 import { ANIMALS, ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS, BREEDS, LIFE_STAGES } from '../data/animals';
 import { FERTILIZER } from '../data/fertilizer';
 import { DISEASES } from '../data/health';
 import { CROPS } from '../data/crops';
-import { STRUCTURES } from '../data/structures';
+import { ROAD_COST } from '../data/roads';
+import { STRUCTURES, type StructureId } from '../data/structures';
 import { animalActivity, animalProduct, lifeStage } from '../game/animals';
 import { levelDef, manureUnits, residents, shelterCapacity, shelterDef, stockCap, stockTotal } from '../game/shelters';
 import { growthProgress, isMature } from '../game/crops';
 import { nextPlotCost, plotStatus } from '../game/economy';
-import { workProgress } from '../game/construction';
-import { plotOfTile } from '../game/grid';
-import { structureAt } from '../game/structures';
+import { previewPlacement, workProgress } from '../game/construction';
+import { plotOfTile, tileCoords } from '../game/grid';
+import { anchorFor, buildCost, isCutOff, needsRoadAccess, structureAt } from '../game/structures';
 import type { Tile } from '../game/types';
-import { useGameStore } from '../store/gameStore';
+import { ERROR_MESSAGES, useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
 import { taskLabel } from './tools';
 import { Card, Coins } from './primitives';
@@ -57,6 +59,61 @@ function PlotDetails({ tileIndex }: { tileIndex: number }) {
       Preço: <Coins value={formatCoins(cost)} className={money < cost ? 'text-red-700' : ''} />· clique para comprar
     </p>
   );
+}
+
+/** Placing a structure: its price with the road ring, what is in the way and whether a road reaches it. */
+function BuildDetails({ type, tileIndex }: { type: StructureId; tileIndex: number }) {
+  const rotation = useGameStore((s) => s.buildRotation);
+  // These change only on game events, so the preview is recomputed only then.
+  const tiles = useGameStore((s) => s.game.tiles);
+  const tasks = useGameStore((s) => s.game.tasks);
+  const money = useGameStore((s) => s.game.money);
+  const preview = useMemo(() => {
+    const { x, y } = tileCoords(tileIndex);
+    const at = anchorFor(type, x, y, rotation);
+    return previewPlacement(useGameStore.getState().game, type, at.x, at.y, rotation);
+  }, [type, tileIndex, rotation, tiles, tasks, money]);
+  const def = STRUCTURES[type];
+  const roads = preview.newRoads.length;
+  return (
+    <Card className="w-72 px-4 py-2">
+      <p className="font-black">
+        {def.icon} {def.label}
+      </p>
+      <p className="flex items-center gap-2 text-sm">
+        Obra: <Coins value={formatCoins(buildCost(type))} />
+        {roads > 0 && (
+          <>
+            + rua ({roads} × {ROAD_COST}): <Coins value={formatCoins(roads * ROAD_COST)} />
+          </>
+        )}
+      </p>
+      {roads > 0 && (
+        <p className="flex items-center gap-2 text-sm font-extrabold">
+          Total: <Coins value={formatCoins(preview.cost)} className={money < preview.cost ? 'text-red-700' : ''} />
+        </p>
+      )}
+      {preview.error && <p className="text-xs font-black text-red-700">{ERROR_MESSAGES[preview.error]}</p>}
+      {!preview.error && !preview.connects && (
+        <p className="text-xs font-black text-orange-700">
+          A rua em volta não chega à estrada de acesso: puxe uma estrada até ela, senão a construção fica parada.
+        </p>
+      )}
+      {!preview.error && preview.connects && needsRoadAccess(type) && (
+        <p className="text-xs font-bold text-wood/70">A rua em volta liga na estrada de acesso.</p>
+      )}
+    </Card>
+  );
+}
+
+/** A building no road reaches: it stands idle until one does. */
+function RoadAccessDetails({ tileIndex }: { tileIndex: number }) {
+  const cutOff = useGameStore((s) => {
+    const found = structureAt(s.game, tileIndex);
+    return !!found && isCutOff(s.game, found);
+  });
+  if (!cutOff) return null;
+  return <p className="text-xs font-black text-orange-700">🚧 Sem acesso por estrada: está parada.</p>;
 }
 
 /** Site or demolition under way on the hovered structure: progress and crew at work. */
@@ -226,7 +283,11 @@ export function HoverInfo() {
   const onSelected = useGameStore(
     (s) => s.selectedStructure !== null && s.hoveredTile !== null && structureAt(s.game, s.hoveredTile)?.id === s.selectedStructure,
   );
+  const buildMode = useGameStore((s) => s.buildMode);
   if (hoveredAnimal !== null) return hoveredAnimal === selectedAnimal ? null : <AnimalInfo id={hoveredAnimal} />;
+  if (hovered !== null && buildMode && buildMode !== 'road' && buildMode !== 'demolish') {
+    return <BuildDetails type={buildMode} tileIndex={hovered} />;
+  }
   if (hovered === null || !tile || onSelected) return null;
   // Greenhouse crops and orchard trees never need the watering can.
   const selfWatered = tile.state === 'planted' && (tile.cover || (tile.crop && CROPS[tile.crop.cropId].kind === 'orchard'));
@@ -244,6 +305,7 @@ export function HoverInfo() {
       {tile.structure && tile.structure !== 'shippingBin' && (
         <p className="text-sm">{STRUCTURES[tile.structure].description}</p>
       )}
+      {tile.structure && <RoadAccessDetails tileIndex={hovered} />}
       {tile.structure && <WorkDetails tileIndex={hovered} />}
       {tile.structure && <ShelterDetails tileIndex={hovered} />}
       {tile.state === 'locked' && <PlotDetails tileIndex={hovered} />}

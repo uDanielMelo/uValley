@@ -118,8 +118,8 @@ export interface Order {
 export type TaskJob =
   /** A structure site or demolition; the task tile is one of the footprint tiles. */
   | { type: 'structure'; structureId: number }
-  /** Opening (or removing) the road on the task tile. */
-  | { type: 'road'; remove: boolean }
+  /** Opening (or removing) the road on the task tile; `siteId` when it is part of a site's road ring. */
+  | { type: 'road'; remove: boolean; siteId?: number }
   /** Collecting a shelter's products ('tend'); the task tile is the footprint tile by the door. */
   | { type: 'shelter'; structureId: number }
   /** Medicating a sick animal ('tend'); the task tile is where the animal was when it was queued. */
@@ -309,11 +309,13 @@ export type ActionError =
   | 'no-structure'
   | 'not-demolishable'
   | 'road'
+  | 'no-room-for-road'
   | 'already-road'
   | 'no-road'
   | 'under-construction'
   | 'no-shelter'
   | 'shelter-full'
+  | 'shelter-no-road'
   | 'pasture-full'
   | 'shelter-in-use'
   | 'max-level'

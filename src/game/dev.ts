@@ -6,7 +6,6 @@ import { ANIMAL_PRODUCT_IDS, GAME_MINUTES_PER_REAL_HOUR, type AnimalId } from '.
 import { CROP_IDS } from '../data/crops';
 import type { WeatherId } from '../data/climate';
 import { DISEASES, MEDICINE_IDS, type DiseaseId } from '../data/health';
-import { STRUCTURES } from '../data/structures';
 import { HOME_POSITION, MAX_WORKERS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { addAnimal, animalProduct } from './animals';
@@ -125,9 +124,8 @@ const freeShelter = (state: GameState, kind: AnimalId): GameState | null => {
   const type = sheltersFor(kind)[0];
   const spot = type ? findFreeSpot(state, type, HOME_POSITION) : null;
   if (!type || !spot) return null;
-  const cost = STRUCTURES[type].cost ?? 0;
-  const placed = placeStructure({ ...state, money: state.money + cost }, type, spot.x, spot.y, spot.rotation);
-  return placed.ok ? { ...placed.state, money: state.money } : null;
+  const placed = placeStructure(state, type, spot.x, spot.y, spot.rotation, { free: true });
+  return placed.ok ? placed.state : null;
 };
 
 /** Adds animals for free, ignoring the pasture limit and building free shelters when they run out of room. */

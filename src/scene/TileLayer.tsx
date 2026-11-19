@@ -2,7 +2,7 @@ import type { ThreeEvent } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { BoxGeometry, Color, Matrix4, type InstancedMesh, type MeshStandardMaterial } from 'three';
 import { STRUCTURES } from '../data/structures';
-import { TILE_COUNT, tileCoords } from '../game/grid';
+import { TILE_COUNT, tileCoords, tileLine } from '../game/grid';
 import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { TILE_HEIGHT, hash01, indexToWorld } from './coords';
@@ -65,7 +65,7 @@ const tileOffset = (tile: Tile): number => {
   return -0.04;
 };
 
-/** All 32x32 tiles in a single InstancedMesh, also the raycast target for hover/click. */
+/** All the map's tiles in a single InstancedMesh, also the raycast target for hover/click. */
 export function TileLayer() {
   const meshRef = useRef<InstancedMesh>(null);
   const tiles = useGameStore((s) => s.game.tiles);
@@ -93,8 +93,10 @@ export function TileLayer() {
     mesh.computeBoundingSphere();
   }, [tiles]);
 
-  // Road mode paints: press places the first tile (with error feedback), dragging adds more silently.
+  // Road mode paints: press places the first tile (with error feedback), dragging adds more silently,
+  // filling every tile between the last one and the cursor so the road never has gaps.
   const painting = useRef(false);
+  const lastPainted = useRef<number | null>(null);
   const roadMode = () => useGameStore.getState().buildMode === 'road';
 
   // Tool mode drags an area: press starts it, moving extends it, releasing anywhere queues it.
@@ -113,7 +115,11 @@ export function TileLayer() {
     const changed = store.hoveredTile !== e.instanceId;
     store.setHoveredTile(e.instanceId);
     if (store.area) store.extendArea(e.instanceId);
-    if (painting.current && changed && (e.buttons & 1) === 1 && roadMode()) store.paintRoadAt(e.instanceId);
+    if (painting.current && changed && (e.buttons & 1) === 1 && roadMode()) {
+      const from = lastPainted.current ?? e.instanceId;
+      for (const tile of tileLine(from, e.instanceId).slice(1)) store.paintRoadAt(tile);
+      lastPainted.current = e.instanceId;
+    }
   };
   const onLeave = () => useGameStore.getState().setHoveredTile(null);
   const onDown = (e: ThreeEvent<PointerEvent>) => {
@@ -122,6 +128,7 @@ export function TileLayer() {
     if (roadMode()) {
       e.stopPropagation();
       painting.current = true;
+      lastPainted.current = e.instanceId;
       store.interactAt(e.instanceId);
       return;
     }
@@ -135,6 +142,7 @@ export function TileLayer() {
   };
   const onUp = () => {
     painting.current = false;
+    lastPainted.current = null;
   };
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();

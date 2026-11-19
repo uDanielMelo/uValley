@@ -62,6 +62,35 @@ export const withTile = (tiles: readonly Tile[], index: number, tile: Tile): Til
   return next;
 };
 
+/**
+ * Tiles from `a` to `b` (both included), each a side neighbour of the previous one, as close to
+ * the straight line as possible: what a dragged road covers.
+ */
+export const tileLine = (a: number, b: number): number[] => {
+  const p = tileCoords(a);
+  const q = tileCoords(b);
+  const sx = Math.sign(q.x - p.x);
+  const sy = Math.sign(q.y - p.y);
+  const nx = Math.abs(q.x - p.x);
+  const ny = Math.abs(q.y - p.y);
+  const result = [a];
+  let { x, y } = p;
+  let ix = 0;
+  let iy = 0;
+  while (ix < nx || iy < ny) {
+    // Step along the axis that lags behind the line.
+    if ((0.5 + ix) * ny < (0.5 + iy) * nx) {
+      x += sx;
+      ix++;
+    } else {
+      y += sy;
+      iy++;
+    }
+    result.push(tileIndex(x, y));
+  }
+  return result;
+};
+
 /** Tile indices of the axis-aligned rectangle with corners at tiles `a` and `b`, row by row. */
 export const tilesInRect = (a: number, b: number): number[] => {
   const p = tileCoords(a);

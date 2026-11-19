@@ -4,7 +4,7 @@ import { STRUCTURES } from '../../data/structures';
 import { buyAnimal } from '../animals';
 import { orderDemolish, orderStructure } from '../construction';
 import { setTimeOfDay, skipMinutes, spawnAnimals, unlockAll } from '../dev';
-import { tileIndex } from '../grid';
+import { plotIndex, tileIndex } from '../grid';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import {
   crowdingFactor,
@@ -27,9 +27,9 @@ const unwrap = (result: ActionResult): GameState => {
   return result.state;
 };
 
-/** 7:00 on a fresh farm with lots of money and a finished coop at (12, 12). */
+/** 7:00 on a fresh farm with lots of money and a finished coop at (28, 44). */
 const coopFarm = (): GameState =>
-  setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 12, 12)), 7);
+  setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 28, 44)), 7);
 
 const coopOf = (s: GameState): StructureInstance => {
   const coop = s.structures.find((x) => x.type === 'chickenCoop');
@@ -54,13 +54,13 @@ describe('shelters', () => {
   });
 
   it('a shelter still being built houses nobody', () => {
-    const s = unwrap(orderStructure({ ...createInitialState(), money: 5000 }, 'chickenCoop', 12, 12));
+    const s = unwrap(orderStructure({ ...createInitialState(), money: 5000 }, 'chickenCoop', 28, 44));
     expect(shelterFor(s, 'chicken')).toBe('no-shelter');
   });
 
   it('cannot be demolished while animals live there', () => {
     const s = unwrap(buyAnimal(coopFarm(), 'chicken'));
-    expect(orderDemolish(s, tileIndex(12, 12))).toEqual({ ok: false, error: 'shelter-in-use' });
+    expect(orderDemolish(s, tileIndex(28, 44))).toEqual({ ok: false, error: 'shelter-in-use' });
   });
 });
 
@@ -68,15 +68,18 @@ describe('pasture', () => {
   it('each plot of free grass holds PLOT_PASTURE_UNITS; buildings and crops take room', () => {
     const s = createInitialState();
     expect(plotPastureUnits(unlockAll(s).tiles, 0)).toBe(PLOT_PASTURE_UNITS);
-    // Plot (3, 3) covers tiles 12–15 on both axes: the house takes one of its 16 tiles.
-    expect(plotPastureUnits(s.tiles, 3 * 8 + 3)).toBe((PLOT_PASTURE_UNITS * 15) / 16);
+    // A plot of the fields is all grass; plot (8, 14) holds the shipping bin and the yard's roads.
+    expect(plotPastureUnits(s.tiles, plotIndex(8, 10))).toBe(PLOT_PASTURE_UNITS);
+    expect(plotPastureUnits(s.tiles, plotIndex(8, 14))).toBe((PLOT_PASTURE_UNITS * 6) / 16);
     const capacity = pastureCapacity(s);
     expect(capacity).toBeLessThan(PLOT_PASTURE_UNITS * s.unlockedPlots.length);
     expect(pastureCapacity(coopFarm())).toBeLessThan(capacity);
   });
 
   it('blocks purchases beyond the pasture and slows production when overstocked', () => {
-    let s = spawnAnimals({ ...createInitialState(), money: 100_000 }, 'cow', 1);
+    // Only the four plots of the yard, so the pasture fills up quickly.
+    const yard = [plotIndex(7, 14), plotIndex(8, 14), plotIndex(7, 15), plotIndex(8, 15)];
+    let s = spawnAnimals({ ...createInitialState(), money: 100_000, unlockedPlots: yard }, 'cow', 1);
     while (true) {
       const next = buyAnimal(s, 'cow');
       if (!next.ok) {
@@ -149,7 +152,7 @@ describe('collecting', () => {
       ...s,
       structures: s.structures.map((x) => (x.type === 'chickenCoop' ? { ...x, stock: { egg: 3 } } : x)),
     };
-    const done = run(unwrap(orderDemolish(stocked, tileIndex(12, 12))), 200);
+    const done = run(unwrap(orderDemolish(stocked, tileIndex(28, 44))), 200);
     expect(done.structures.some((x) => x.type === 'chickenCoop')).toBe(false);
     expect(done.inventory.products.egg).toBe(3);
   });
@@ -163,28 +166,4 @@ describe('shelter saves', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates a v7 save: animals move into shelters (built for free if needed) and keep ready products', () => {
-    const s = coopFarm();
-    const v7Animals = [
-      { id: 900, kind: 'chicken', x: 14.5, y: 13.5, target: null, waitMinutes: 0, productMinutes: 0, hasProduct: true, fed: true },
-      { id: 901, kind: 'cow', x: 18.5, y: 13.5, target: { x: 18, y: 12 }, waitMinutes: 0, productMinutes: 60, hasProduct: false, fed: true },
-    ];
-    const v7 = {
-      ...s,
-      animals: v7Animals,
-      workers: s.workers.map((w) => ({ ...w, priorities: w.priorities.filter((k) => k !== 'tend') })),
-      nextId: 1000,
-    };
-    const loaded = deserialize(JSON.stringify({ saveVersion: 7, savedAt: 0, game: v7, settings: DEFAULT_SETTINGS }));
-    if (!loaded) throw new Error('not loaded');
-    const game = loaded.game;
-    expect(game.animals).toHaveLength(2);
-    const chicken = game.animals.find((a) => a.id === 900);
-    const cow = game.animals.find((a) => a.id === 901);
-    expect(chicken?.shelterId).toBe(coopOf(game).id);
-    expect(game.structures.find((x) => x.id === cow?.shelterId)?.type).toBe('corral');
-    expect(chicken?.productMinutes).toBe(ANIMALS.chicken.productionHours * 60);
-    expect(game.workers.every((w) => w.priorities[w.priorities.length - 1] === 'tend')).toBe(true);
-    expect(game.money).toBe(s.money);
-  });
 });

@@ -13,8 +13,13 @@ export const PALETTE = {
   watered: '#5a3a22',
   /** Packed dirt under structures. */
   structureGround: '#b08a5c',
-  /** Packed dirt road. */
+  /** Packed dirt road, and the worn grass verge along its edges. */
   road: '#a88d66',
+  roadVerge: '#8e8a5c',
+  roadRut: '#8d7252',
+  /** Badge over a building that no road reaches. */
+  badgeWarnFill: '#fbe3c2',
+  badgeWarnBorder: '#b5562a',
   /** Paved highway beyond the farm and its painted lines. */
   asphalt: '#4a4a4f',
   highwayEdgeLine: '#e8e6df',
@@ -43,6 +48,9 @@ export const PALETTE = {
   // Interaction overlays
   hoverValid: '#fff6c2',
   hoverInvalid: '#ff6b5a',
+  /** Build preview: the road ring to open, and the same when it does not reach the access road. */
+  ghostRoad: '#e8c98f',
+  ghostRoadCutOff: '#f08a3c',
   /** Area selection that will cancel the queued orders under it. */
   hoverCancel: '#ffa53a',
   plotAvailable: '#ffd75e',

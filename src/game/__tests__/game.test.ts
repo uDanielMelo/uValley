@@ -7,8 +7,9 @@ import { cropStage, isMature } from '../crops';
 import { buyPlot, buySeeds, plotCost, plotStatus, sellAllProduce, sellProduce } from '../economy';
 import { plotIndex, tileIndex } from '../grid';
 import { tick } from '../simulation';
-import { deserialize, serialize } from '../save';
+import { DEFAULT_SETTINGS, SAVE_VERSION, deserialize, isOutdatedSave, serialize } from '../save';
 import { createInitialState } from '../state';
+import { hasRoadAccess, ringCells } from '../structures';
 import { daylight, formatClock, toClock } from '../time';
 import type { ActionResult, GameState } from '../types';
 
@@ -17,16 +18,27 @@ const unwrap = (result: ActionResult): GameState => {
   return result.state;
 };
 
-const FREE_TILE = tileIndex(13, 13);
+const FREE_TILE = tileIndex(29, 45);
 const LOCKED_TILE = tileIndex(0, 0);
-const HOUSE_TILE = tileIndex(15, 15);
+const HOUSE_TILE = tileIndex(30, 56);
 
 describe('initial state', () => {
-  it('unlocks the central 8x8 area and places the house', () => {
+  it('owns 32x32 tiles by the south edge, with the yard and its roads', () => {
     const s = createInitialState();
-    expect(s.tiles.filter((t) => t.state !== 'locked')).toHaveLength(64);
+    expect(s.tiles).toHaveLength(64 * 64);
+    expect(s.tiles.filter((t) => t.state !== 'locked')).toHaveLength(32 * 32);
+    // Centered left to right, touching the south edge (the highway side).
+    expect(s.tiles[tileIndex(16, 63)]?.state).toBe('grass');
+    expect(s.tiles[tileIndex(47, 32)]?.state).toBe('grass');
+    expect(s.tiles[tileIndex(15, 63)]?.state).toBe('locked');
+    expect(s.tiles[tileIndex(16, 31)]?.state).toBe('locked');
     expect(s.tiles[HOUSE_TILE]?.structure).toBe('house');
     expect(s.tiles[LOCKED_TILE]?.state).toBe('locked');
+    // Every starting building has its road ring, linked to the access road.
+    for (const x of s.structures) {
+      for (const c of ringCells(x.type, x.x, x.y, x.rotation)) expect(s.tiles[tileIndex(c.x, c.y)]?.road).toBe(true);
+      expect(hasRoadAccess(s.tiles, x)).toBe(true);
+    }
     expect(s.money).toBe(STARTING_MONEY);
   });
 });
@@ -105,14 +117,14 @@ describe('economy', () => {
 
   it('buys adjacent plots with increasing cost', () => {
     let s = createInitialState();
-    const adjacent = plotIndex(5, 3);
+    const adjacent = plotIndex(12, 8);
     expect(plotStatus(s, adjacent)).toBe('available');
     expect(plotStatus(s, plotIndex(0, 0))).toBe('not-adjacent');
     expect(buyPlot(s, plotIndex(0, 0))).toEqual({ ok: false, error: 'plot-not-adjacent' });
 
     s = unwrap(buyPlot(s, adjacent));
     expect(s.money).toBe(STARTING_MONEY - PLOT_BASE_COST);
-    expect(s.tiles[tileIndex(20, 12)]?.state).toBe('grass');
+    expect(s.tiles[tileIndex(48, 32)]?.state).toBe('grass');
     expect(plotCost(1)).toBeGreaterThan(plotCost(0));
     expect(buyPlot(s, adjacent)).toEqual({ ok: false, error: 'plot-unlocked' });
   });
@@ -144,5 +156,14 @@ describe('save', () => {
     expect(deserialize('not json')).toBeNull();
     expect(deserialize(JSON.stringify({ saveVersion: 99, game: {} }))).toBeNull();
     expect(deserialize(JSON.stringify({ saveVersion: 1, game: { money: 1 } }))).toBeNull();
+  });
+
+  it('does not load saves from the smaller map (before v16), and says so', () => {
+    const current = serialize(createInitialState(), DEFAULT_SETTINGS);
+    const old = current.replace(`"saveVersion":${SAVE_VERSION}`, '"saveVersion":15');
+    expect(deserialize(old)).toBeNull();
+    expect(isOutdatedSave(old)).toBe(true);
+    expect(isOutdatedSave(current)).toBe(false);
+    expect(isOutdatedSave('not json')).toBe(false);
   });
 });

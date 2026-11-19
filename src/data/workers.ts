@@ -152,4 +152,4 @@ export const TASK_MINUTES: Record<ToolId, number> = {
 };
 
 /** Fallback resting spot (in front of the house door) when the farm has no bunkhouse. */
-export const HOME_POSITION = { x: 15.7, y: 17.35 } as const;
+export const HOME_POSITION = { x: 30.7, y: 58.35 } as const;

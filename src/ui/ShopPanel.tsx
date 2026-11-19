@@ -19,7 +19,7 @@ import { PLOT_SIZE } from '../data/world';
 import { purchasePrice, type PurchaseAge } from '../game/animals';
 import { freeMedicine } from '../game/health';
 import { freeSlots, housesKind, pastureCapacity, pastureUsed, sheltersFor } from '../game/shelters';
-import { isOperational } from '../game/structures';
+import { isActive } from '../game/structures';
 import { nextPlotCost } from '../game/economy';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { formatCoins, formatHours } from './format';
@@ -136,9 +136,9 @@ const animalPurpose = (kind: AnimalId): string => {
   return '';
 };
 
-/** Room for one more animal of a kind: free slots in finished shelters, or null without any. */
+/** Room for one more animal of a kind: free slots in working shelters (finished, reached by road), or null without any. */
 const shelterRoom = (kind: AnimalId) => (s: GameStore): number | null => {
-  const homes = s.game.structures.filter((x) => housesKind(x.type, kind) && isOperational(x));
+  const homes = s.game.structures.filter((x) => housesKind(x.type, kind) && isActive(s.game, x));
   return homes.length === 0 ? null : homes.reduce((sum, x) => sum + Math.max(0, freeSlots(s.game, x)), 0);
 };
 

@@ -13,7 +13,7 @@ import { STRUCTURES } from '../data/structures';
 import { seasonOf } from './climate';
 import { addCount } from './inventory';
 import { hash01 } from './random';
-import { isOperational } from './structures';
+import { isActive } from './structures';
 import type { GameState, ItemCounts, ProductCounts } from './types';
 
 export interface StorageCapacity {
@@ -25,12 +25,12 @@ export interface StorageCapacity {
   cold: number;
 }
 
-/** Room from the house pantry and every finished storage building. */
-export const storageCapacity = (state: Pick<GameState, 'structures'>): StorageCapacity => {
+/** Room from the house pantry and every working storage building (finished and reached by road). */
+export const storageCapacity = (state: Pick<GameState, 'structures' | 'tiles'>): StorageCapacity => {
   const capacity: StorageCapacity = { general: PANTRY_CAPACITY, grain: 0, cold: 0 };
   for (const s of state.structures) {
     const def = STRUCTURES[s.type].storage;
-    if (!def || !isOperational(s)) continue;
+    if (!def || !isActive(state, s)) continue;
     if (def.cold) capacity.cold += def.capacity;
     else if (def.grainOnly) capacity.grain += def.capacity;
     else capacity.general += def.capacity;
@@ -95,7 +95,7 @@ export interface StorageUse {
   openAir: number;
 }
 
-export const storageUse = (state: Pick<GameState, 'inventory' | 'structures'>): StorageUse => {
+export const storageUse = (state: Pick<GameState, 'inventory' | 'structures' | 'tiles'>): StorageUse => {
   const capacity = storageCapacity(state);
   const placements = place(state, capacity);
   const total = placements.reduce((sum, p) => sum + p.count, 0);

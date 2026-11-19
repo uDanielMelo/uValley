@@ -1,7 +1,7 @@
 import { ACCESS_ROAD_EDGE, ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X, HIGHWAY, OFFMAP_ROAD_LENGTH } from '../data/roads';
 import { PROP_SIZES, meters } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
-import { isValidTileIndex, tileIndex } from './grid';
+import { inBounds, isValidTileIndex, tileCoords, tileIndex } from './grid';
 import { fail, ok, type ActionError, type ActionResult, type GameState, type GridPoint, type Tile } from './types';
 
 /** Where the access road leaves the map, in tile space. */
@@ -47,6 +47,83 @@ export const accessRoadTiles = (): number[] => {
   const step = edgeRow < ACCESS_ROAD_FARM_Y ? -1 : 1;
   for (let y = ACCESS_ROAD_FARM_Y; y !== edgeRow + step; y += step) result.push(tileIndex(ACCESS_ROAD_X, y));
   return result;
+};
+
+/** The access road's tile on the map edge: where the farm's road network meets the outside world. */
+export const accessEntryTile = (): number => tileIndex(ACCESS_ROAD_X, accessRoadExit().edgeRow);
+
+const SIDES: ReadonlyArray<readonly [number, number]> = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+];
+
+const networks = new WeakMap<readonly Tile[], ReadonlySet<number>>();
+
+/**
+ * Road tiles linked (4-connected) to the access road: the network people and the vehicle use to
+ * reach the buildings. Cached per tile array, which only changes on game events.
+ */
+export const roadNetwork = (tiles: readonly Tile[]): ReadonlySet<number> => {
+  const cached = networks.get(tiles);
+  if (cached) return cached;
+  const result = new Set<number>();
+  const entry = accessEntryTile();
+  if (tiles[entry]?.road) {
+    result.add(entry);
+    const queue = [entry];
+    for (let head = 0; head < queue.length; head++) {
+      const current = queue[head];
+      if (current === undefined) break;
+      const { x, y } = tileCoords(current);
+      for (const [dx, dy] of SIDES) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!inBounds(nx, ny)) continue;
+        const next = tileIndex(nx, ny);
+        if (result.has(next) || !tiles[next]?.road) continue;
+        result.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  networks.set(tiles, result);
+  return result;
+};
+
+/** A rectangle of tiles (a structure's footprint). */
+export interface TileRect {
+  x: number;
+  y: number;
+  width: number;
+  depth: number;
+}
+
+/** The ring of tiles around a rectangle (corners included), clockwise from the top-left; may leave the map. */
+export const ringAround = (r: TileRect, width = 1): GridPoint[] => {
+  const cells: GridPoint[] = [];
+  for (let y = r.y - width; y < r.y + r.depth + width; y++) {
+    for (let x = r.x - width; x < r.x + r.width + width; x++) {
+      const inside = x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.depth;
+      if (!inside) cells.push({ x, y });
+    }
+  }
+  return cells;
+};
+
+/** Tiles touching a rectangle's sides (no corners): where a road gives access to it. */
+export const sidesOf = (r: TileRect): GridPoint[] => {
+  const cells: GridPoint[] = [];
+  for (let x = r.x; x < r.x + r.width; x++) cells.push({ x, y: r.y - 1 }, { x, y: r.y + r.depth });
+  for (let y = r.y; y < r.y + r.depth; y++) cells.push({ x: r.x - 1, y }, { x: r.x + r.width, y });
+  return cells;
+};
+
+/** True when a road of the network runs along one of the rectangle's sides. */
+export const touchesNetwork = (tiles: readonly Tile[], r: TileRect): boolean => {
+  const network = roadNetwork(tiles);
+  return sidesOf(r).some((c) => inBounds(c.x, c.y) && network.has(tileIndex(c.x, c.y)));
 };
 
 /** Marks the access road on a fresh tile array (only on free grass or land for sale). */

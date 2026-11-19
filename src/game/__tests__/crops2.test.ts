@@ -30,8 +30,8 @@ const farm = (): GameState => {
   return { ...s, inventory: { ...s.inventory, seeds }, research: { unlocked: Object.keys(CROPS) as CropId[], current: null } };
 };
 
-const GH_X = 13;
-const GH_Y = 20;
+const GH_X = 29;
+const GH_Y = 52;
 /** A tile inside the greenhouse at (GH_X, GH_Y), and one outside. */
 const INSIDE = tileIndex(GH_X + 1, GH_Y);
 const OUTSIDE = tileIndex(GH_X + 7, GH_Y + 3);
@@ -162,9 +162,4 @@ describe('save', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates v13 saves: the three starting crops are known', () => {
-    const { research: _r, ...v13 } = createInitialState();
-    const raw = JSON.stringify({ saveVersion: 13, savedAt: 0, game: v13, settings: DEFAULT_SETTINGS });
-    expect(deserialize(raw)?.game.research).toEqual({ unlocked: ['wheat', 'corn', 'tomato'], current: null });
-  });
 });

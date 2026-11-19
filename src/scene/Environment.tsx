@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { Matrix4, MeshStandardMaterial, Quaternion, Vector3, type BufferGeometry } from 'three';
+import { GRID_SIZE } from '../data/world';
 import { hash01 } from './coords';
 import { InstancedProps } from './InstancedProps';
 import { bush, flowerTuft, grassTuft, pineTree, rock, roundTree } from './models/natureModels';
@@ -29,7 +30,7 @@ interface ScatterOptions {
 const scatter = (o: ScatterOptions): Matrix4[] => {
   const result: Matrix4[] = [];
   const q = new Quaternion();
-  const reach = 16 + o.maxDistance;
+  const reach = GRID_SIZE / 2 + o.maxDistance;
   for (let i = 0; i < o.candidates; i++) {
     const x = (hash01(o.seed + i * 3) * 2 - 1) * reach;
     const z = (hash01(o.seed + i * 7 + 1) * 2 - 1) * reach;
@@ -58,7 +59,7 @@ interface PropSet {
 
 const buildProps = (): PropSet[] => {
   const trees = scatter({
-    candidates: 5000,
+    candidates: 7000,
     seed: 1,
     minDistance: 2.5,
     maxDistance: 75,
@@ -76,7 +77,7 @@ const buildProps = (): PropSet[] => {
   });
   const tufts = (seed: number, density: number) =>
     scatter({
-      candidates: 4000,
+      candidates: 7600,
       seed,
       minDistance: 0.2,
       maxDistance: 26,
@@ -93,7 +94,7 @@ const buildProps = (): PropSet[] => {
       geometry: bush(),
       castShadow: true,
       matrices: scatter({
-        candidates: 1200,
+        candidates: 1900,
         seed: 300,
         minDistance: 0.8,
         maxDistance: 45,
@@ -106,7 +107,7 @@ const buildProps = (): PropSet[] => {
       geometry: rock(),
       castShadow: true,
       matrices: scatter({
-        candidates: 700,
+        candidates: 1000,
         seed: 500,
         minDistance: 3,
         maxDistance: 60,

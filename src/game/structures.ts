@@ -6,10 +6,12 @@ import {
   type ShelterLevel,
   type StructureId,
 } from '../data/structures';
+import { ROAD_COST, ROAD_RING } from '../data/roads';
 import { BUNKHOUSE_BEDS } from '../data/workers';
 import { GRID_SIZE } from '../data/world';
-import { inBounds, tileIndex } from './grid';
+import { inBounds, tileCoords, tileIndex } from './grid';
 import { findPath, isWalkable } from './path';
+import { ringAround, roadNetwork, touchesNetwork } from './roads';
 import {
   fail,
   ok,
@@ -104,14 +106,47 @@ export const stampStructures = (tiles: readonly Tile[], structures: readonly Str
 };
 
 /**
- * A structure works (beds, a door to rest at, room for animals) unless it is being built or torn
- * down. Shelters keep working while they are upgraded.
+ * A structure is standing (beds, a door to rest at, room for animals) unless it is being built or
+ * torn down. Shelters keep standing while they are upgraded.
  */
 export const isOperational = (s: StructureInstance): boolean => s.work === undefined || s.work.kind === 'upgrade';
 
-/** Beds for staff workers: one set per finished bunkhouse (not one being built or torn down). */
-export const bedCount = (state: Pick<GameState, 'structures'>): number =>
-  state.structures.filter((s) => s.type === 'bunkhouse' && isOperational(s)).length * BUNKHOUSE_BEDS;
+// ---------- roads around buildings ----------
+
+/** Buildings get a road ring around them; decorations keep the grass. */
+export const hasRoadRing = (type: StructureId): boolean => STRUCTURES[type].category !== 'decor';
+
+/**
+ * Buildings that stop working without a road to the access road: the bunkhouse, shelters and
+ * storage. The house and the shipping bin are fixed, decorations need no road and the greenhouse
+ * is only a roof over the field.
+ */
+export const needsRoadAccess = (type: StructureId): boolean => {
+  const def = STRUCTURES[type];
+  return def.cost !== undefined && def.category !== 'decor' && !def.cover;
+};
+
+/** Tiles of a structure's road ring (may leave the map). Empty for decorations. */
+export const ringCells = (type: StructureId, x: number, y: number, rotation: Rotation): GridPoint[] =>
+  hasRoadRing(type) ? ringAround(footprintOf(type, x, y, rotation), ROAD_RING) : [];
+
+/** True when a road of the network (linked to the access road) runs along the structure. */
+export const hasRoadAccess = (
+  tiles: readonly Tile[],
+  s: Pick<StructureInstance, 'type' | 'x' | 'y' | 'rotation'>,
+): boolean => !needsRoadAccess(s.type) || touchesNetwork(tiles, footprintOf(s.type, s.x, s.y, s.rotation));
+
+/** The structure works: it is standing and, when it needs one, has a road to the access road. */
+export const isActive = (state: Pick<GameState, 'tiles'>, s: StructureInstance): boolean =>
+  isOperational(s) && hasRoadAccess(state.tiles, s);
+
+/** A building past its construction that is cut off from the road network (it stands idle). */
+export const isCutOff = (state: Pick<GameState, 'tiles'>, s: StructureInstance): boolean =>
+  s.work?.kind !== 'build' && !hasRoadAccess(state.tiles, s);
+
+/** Beds for staff workers: one set per working bunkhouse (finished and reached by road). */
+export const bedCount = (state: Pick<GameState, 'structures' | 'tiles'>): number =>
+  state.structures.filter((s) => s.type === 'bunkhouse' && isActive(state, s)).length * BUNKHOUSE_BEDS;
 
 export const buildCost = (type: StructureId): number => STRUCTURES[type].cost ?? 0;
 
@@ -140,13 +175,63 @@ export const refundFor = (type: StructureId, level: ShelterLevel = 1): number =>
 /** Work minutes (at speed 1) to tear a structure down. */
 export const demolishMinutesFor = (type: StructureId): number => Math.round(buildMinutesFor(type) * DEMOLISH_WORK);
 
-/** Why a structure cannot be placed there, or null when it can. */
+/** A ring tile can carry the building's road: owned, free and grass (or already a road). */
+const ringTileFree = (tiles: readonly Tile[], c: GridPoint): boolean => {
+  if (!inBounds(c.x, c.y)) return false;
+  const tile = tiles[tileIndex(c.x, c.y)];
+  if (!tile || tile.state === 'locked' || tile.structure || tile.cover) return false;
+  return tile.road === true || tile.state === 'grass';
+};
+
+/** A ring tile: already a road, a new road to open, or in the way (outside the map, not free grass). */
+export type RingTileStatus = 'road' | 'new' | 'blocked';
+
+export interface RingPlan {
+  /** Every ring tile can carry a road. */
+  free: boolean;
+  /** Tiles that still need a road (empty when the ring is not free). */
+  newRoads: number[];
+  /** Each ring tile inside the map and what it would be. */
+  cells: Array<{ tile: number; status: RingTileStatus }>;
+}
+
+/** The road ring a structure would get there, judged on `future` tiles (the queue applied). */
+export const ringPlan = (
+  future: readonly Tile[],
+  type: StructureId,
+  x: number,
+  y: number,
+  rotation: Rotation,
+): RingPlan => {
+  const ring = ringCells(type, x, y, rotation);
+  const free = ring.every((c) => ringTileFree(future, c));
+  const cells = ring
+    .filter((c) => inBounds(c.x, c.y))
+    .map((c) => {
+      const tile = tileIndex(c.x, c.y);
+      const status: RingTileStatus = !ringTileFree(future, c) ? 'blocked' : future[tile]?.road ? 'road' : 'new';
+      return { tile, status };
+    });
+  const newRoads = free ? cells.filter((c) => c.status === 'new').map((c) => c.tile) : [];
+  return { free, newRoads, cells };
+};
+
+/** Price of a structure plus the new road tiles of its ring. */
+export const placementCost = (type: StructureId, newRoads: number): number => buildCost(type) + newRoads * ROAD_COST;
+
+/**
+ * Why a structure cannot be placed there, or null when it can. The footprint is judged on the
+ * tiles now and the road ring on `future` tiles (the queue applied, so queued roads count). The
+ * price includes the ring's new road tiles (skipped with `free`).
+ */
 export const checkPlacement = (
   state: GameState,
   type: StructureId,
   x: number,
   y: number,
   rotation: Rotation,
+  future: readonly Tile[] = state.tiles,
+  options: { free?: boolean } = {},
 ): ActionError | null => {
   if (STRUCTURES[type].cost === undefined) return 'not-buildable';
   const cells = footprintCells(footprintOf(type, x, y, rotation));
@@ -157,14 +242,16 @@ export const checkPlacement = (
   if (tiles.some((t) => t.tile?.road)) return 'road';
   if (tiles.some((t) => t.tile?.state !== 'grass')) return 'not-grass';
   if (state.tasks.some((task) => tiles.some((t) => t.index === task.tile))) return 'tile-busy';
-  if (state.money < buildCost(type)) return 'not-enough-money';
+  const ring = ringPlan(future, type, x, y, rotation);
+  if (!ring.free) return 'no-room-for-road';
+  if (!options.free && state.money < placementCost(type, ring.newRoads.length)) return 'not-enough-money';
   return null;
 };
 
 /**
- * Where a structure fits without cost checks (free owned grass, no road, no queued work), as close
- * as possible to `near`. It prefers spots with a one-tile gap to other structures and roads, so
- * doors and paths stay clear. Used by save migrations and dev tools. Null when it fits nowhere.
+ * Where a structure fits without cost checks (free owned grass, no road, no queued work, room for
+ * its road ring), as close as possible to `near`. Used by save repairs and dev tools. Null when it
+ * fits nowhere.
  */
 export const findFreeSpot = (
   state: Pick<GameState, 'tiles' | 'tasks'>,
@@ -178,30 +265,28 @@ export const findFreeSpot = (
     const tile = state.tiles[index];
     return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.road && !busy.has(index);
   };
-  const clear = (x: number, y: number): boolean => {
-    const tile = inBounds(x, y) ? state.tiles[tileIndex(x, y)] : undefined;
-    return !tile?.structure && !tile?.road;
-  };
-  const search = (gap: number) => {
-    let best: { x: number; y: number; rotation: Rotation } | null = null;
-    let bestDistance = Infinity;
-    for (const rotation of [0, 1] as const) {
-      const { width, depth } = footprintOf(type, 0, 0, rotation);
-      for (let y = 0; y + depth <= GRID_SIZE; y++) {
-        for (let x = 0; x + width <= GRID_SIZE; x++) {
-          const d = Math.hypot(x + width / 2 - near.x, y + depth / 2 - near.y) + rotation * 0.01;
-          if (d >= bestDistance) continue;
-          if (!footprintCells({ x, y, width, depth }).every((c) => free(c.x, c.y))) continue;
-          const margin = { x: x - gap, y: y - gap, width: width + gap * 2, depth: depth + gap * 2 };
-          if (gap > 0 && !footprintCells(margin).every((c) => clear(c.x, c.y))) continue;
-          best = { x, y, rotation };
-          bestDistance = d;
-        }
+  const ringFree = (x: number, y: number, rotation: Rotation): boolean =>
+    ringCells(type, x, y, rotation).every((c) => {
+      if (!ringTileFree(state.tiles, c)) return false;
+      const index = tileIndex(c.x, c.y);
+      return state.tiles[index]?.road === true || !busy.has(index);
+    });
+  let best: { x: number; y: number; rotation: Rotation } | null = null;
+  let bestDistance = Infinity;
+  for (const rotation of [0, 1] as const) {
+    const { width, depth } = footprintOf(type, 0, 0, rotation);
+    for (let y = 0; y + depth <= GRID_SIZE; y++) {
+      for (let x = 0; x + width <= GRID_SIZE; x++) {
+        const d = Math.hypot(x + width / 2 - near.x, y + depth / 2 - near.y) + rotation * 0.01;
+        if (d >= bestDistance) continue;
+        if (!footprintCells({ x, y, width, depth }).every((c) => free(c.x, c.y))) continue;
+        if (!ringFree(x, y, rotation)) continue;
+        best = { x, y, rotation };
+        bestDistance = d;
       }
     }
-    return best;
-  };
-  return search(1) ?? search(0);
+  }
+  return best;
 };
 
 type Passable = (x: number, y: number) => boolean;
@@ -240,18 +325,17 @@ const evictWorker = (w: Worker, fp: Footprint, state: GameState): Worker => {
 };
 
 /**
- * Places a finished structure at once, charging its cost. Whoever stands in the footprint is moved
- * aside. The player's orders go through `orderStructure` (construction.ts), which adds the work.
+ * Takes a structure's footprint: stamps its tiles, charges `cost` and adds the instance (id
+ * `nextId`). Whoever stands in the footprint is moved aside. No checks (see checkPlacement).
  */
-export const placeStructure = (
+export const occupyFootprint = (
   state: GameState,
   type: StructureId,
   x: number,
   y: number,
-  rotation: Rotation = 0,
-): ActionResult => {
-  const error = checkPlacement(state, type, x, y, rotation);
-  if (error) return fail(error);
+  rotation: Rotation,
+  cost: number,
+): GameState => {
   const fp = footprintOf(type, x, y, rotation);
   const tiles = state.tiles.slice();
   const cover = STRUCTURES[type].cover;
@@ -264,15 +348,93 @@ export const placeStructure = (
   const next: GameState = {
     ...state,
     tiles,
-    money: state.money - buildCost(type),
+    money: state.money - cost,
     structures: [...state.structures, built],
     nextId: state.nextId + 1,
   };
-  return ok({
+  return {
     ...next,
     animals: next.animals.map((a) => evictAnimal(a, fp, next)),
     workers: next.workers.map((w) => evictWorker(w, fp, next)),
-  });
+  };
+};
+
+/** Opens road on tiles at once (free grass or roads already). */
+export const withRoads = (tiles: readonly Tile[], indices: readonly number[]): Tile[] => {
+  const result = tiles.slice();
+  for (const i of indices) result[i] = { state: 'grass', road: true };
+  return result;
+};
+
+const SIDE_STEPS: ReadonlyArray<readonly [number, number]> = [
+  [0, -1],
+  [1, 0],
+  [0, 1],
+  [-1, 0],
+];
+
+/**
+ * Lays the shortest road over free owned grass from a structure's ring to the road network, at no
+ * cost (dev tools and save repairs, so the structures they add work). Unchanged when the structure
+ * is already reached by road or no way exists.
+ */
+export const linkToNetwork = (state: GameState, s: StructureInstance): GameState => {
+  if (!needsRoadAccess(s.type) || hasRoadAccess(state.tiles, s)) return state;
+  const network = roadNetwork(state.tiles);
+  if (network.size === 0) return state;
+  const busy = new Set(state.tasks.map((t) => t.tile));
+  const crossable = (index: number): boolean => {
+    const tile = state.tiles[index];
+    return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !busy.has(index);
+  };
+  const starts = ringCells(s.type, s.x, s.y, s.rotation)
+    .filter((c) => inBounds(c.x, c.y))
+    .map((c) => tileIndex(c.x, c.y))
+    .filter((i) => state.tiles[i]?.road);
+  const parent = new Map<number, number>(starts.map((i) => [i, -1]));
+  const queue = starts.slice();
+  for (let head = 0; head < queue.length; head++) {
+    const current = queue[head];
+    if (current === undefined) break;
+    const { x, y } = tileCoords(current);
+    for (const [dx, dy] of SIDE_STEPS) {
+      if (!inBounds(x + dx, y + dy)) continue;
+      const next = tileIndex(x + dx, y + dy);
+      if (parent.has(next)) continue;
+      if (network.has(next)) {
+        const path: number[] = [];
+        for (let node = current; node !== -1; node = parent.get(node) ?? -1) path.push(node);
+        return { ...state, tiles: withRoads(state.tiles, path.filter((i) => !state.tiles[i]?.road)) };
+      }
+      if (!crossable(next)) continue;
+      parent.set(next, current);
+      queue.push(next);
+    }
+  }
+  return state;
+};
+
+/**
+ * Places a finished structure at once with its road ring, linked to the road network, charging
+ * its price (nothing with `free`). Dev tools, save repairs and tests use it; the player's orders go
+ * through `orderStructure` (construction.ts), where the crew does the work.
+ */
+export const placeStructure = (
+  state: GameState,
+  type: StructureId,
+  x: number,
+  y: number,
+  rotation: Rotation = 0,
+  options: { free?: boolean } = {},
+): ActionResult => {
+  const error = checkPlacement(state, type, x, y, rotation, state.tiles, options);
+  if (error) return fail(error);
+  const { newRoads } = ringPlan(state.tiles, type, x, y, rotation);
+  const cost = options.free ? 0 : placementCost(type, newRoads.length);
+  const placed = occupyFootprint(state, type, x, y, rotation, cost);
+  const ringed: GameState = { ...placed, tiles: withRoads(placed.tiles, newRoads) };
+  const built = ringed.structures[ringed.structures.length - 1];
+  return ok(built ? linkToNetwork(ringed, built) : ringed);
 };
 
 /** The structure covering a tile, if any. */
@@ -309,7 +471,7 @@ export const checkDemolish = (state: GameState, tile: number): StructureInstance
   if (STRUCTURES[found.type].cost === undefined) return 'not-demolishable';
   if (found.work) return 'under-construction';
   if (state.animals.some((a) => a.shelterId === found.id)) return 'shelter-in-use';
-  if (found.type === 'bunkhouse') {
+  if (found.type === 'bunkhouse' && isActive(state, found)) {
     const staff = state.workers.filter((w) => w.kind === 'staff').length;
     if (bedCount(state) - BUNKHOUSE_BEDS < staff) return 'beds-in-use';
   }

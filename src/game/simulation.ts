@@ -13,7 +13,7 @@ import { spoilGoods, type Spoiled } from './storage';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
 import type { Animal, GameState, StructureInstance, StructureWorkKind } from './types';
 import type { ShelterLevel, StructureId } from '../data/structures';
-import { refundFor } from './structures';
+import { hasRoadAccess, refundFor } from './structures';
 import { stepWorkers } from './workers';
 
 export interface TickResult {
@@ -50,10 +50,13 @@ export interface FinishedWork {
   level?: ShelterLevel;
   /** Demolitions: what came back. */
   refund?: number;
+  /** Buildings: finished, but no road links them to the access road yet (they stand idle). */
+  cutOff?: boolean;
 }
 
 /** Works under way before that are no longer (only the crew finishes work while time passes). */
-const finishedWorks = (before: readonly StructureInstance[], after: readonly StructureInstance[]): FinishedWork[] => {
+const finishedWorks = (before: readonly StructureInstance[], next: GameState): FinishedWork[] => {
+  const after = next.structures;
   if (before === after) return [];
   const result: FinishedWork[] = [];
   for (const s of before) {
@@ -62,6 +65,7 @@ const finishedWorks = (before: readonly StructureInstance[], after: readonly Str
     if (now?.work) continue;
     if (s.work.kind === 'upgrade') result.push({ type: s.type, kind: 'upgrade', level: now?.level ?? s.work.toLevel });
     else if (s.work.kind === 'demolish') result.push({ type: s.type, kind: 'demolish', refund: refundFor(s.type, s.level) });
+    else if (now && !hasRoadAccess(next.tiles, now)) result.push({ type: s.type, kind: 'build', cutOff: true });
     else result.push({ type: s.type, kind: 'build' });
   }
   return result;
@@ -102,7 +106,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   const studied = stepResearch(aged.state, dtMinutes);
   const health = stepHealth(studied.state, state.gameMinutes);
   let next = queueAnimalCare(queueShelterChores(health.state));
-  const worksFinished = finishedWorks(state.structures, next.structures);
+  const worksFinished = finishedWorks(state.structures, next);
 
   const workersLeft: string[] = [];
   let hungryAnimals = 0;

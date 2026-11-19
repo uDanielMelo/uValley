@@ -124,12 +124,4 @@ describe('save', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates v12 saves: the starting pickup, nothing loaded, no orders', () => {
-    const { vehicleLevel: _v, cargo: _c, orders: _o, ...v12 } = createInitialState();
-    const raw = JSON.stringify({ saveVersion: 12, savedAt: 0, game: v12, settings: DEFAULT_SETTINGS });
-    const loaded = deserialize(raw)?.game;
-    expect(loaded?.vehicleLevel).toBe(1);
-    expect(loaded?.cargo).toEqual({ produce: {}, products: {} });
-    expect(loaded?.orders).toEqual([]);
-  });
 });

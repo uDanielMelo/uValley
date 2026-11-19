@@ -24,9 +24,9 @@ const unwrap = (result: ActionResult): GameState => {
   return result.state;
 };
 
-/** 7:00, lots of money and a finished coop at (12, 12). */
+/** 7:00, lots of money and a finished coop at (28, 44). */
 const coopFarm = (): GameState =>
-  setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 12, 12)), 7);
+  setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 28, 44)), 7);
 
 const coopOf = (s: GameState): StructureInstance => {
   const coop = s.structures.find((x) => x.type === 'chickenCoop');
@@ -95,7 +95,7 @@ describe('upgrading', () => {
   it('can be cancelled with a full refund (demolish tool or cancel all)', () => {
     const s0 = coopFarm();
     const s = unwrap(orderUpgrade(s0, coopOf(s0).id));
-    const cancelled = demolishClick(s, tileIndex(12, 12));
+    const cancelled = demolishClick(s, tileIndex(28, 44));
     expect(cancelled.ok && cancelled.change).toEqual({ kind: 'upgrade-cancelled', type: 'chickenCoop', refund: upgradeCost('chickenCoop', 2) });
     const after = unwrap(cancelled);
     expect(after.money).toBe(s0.money);
@@ -129,7 +129,7 @@ describe('upgrading', () => {
     expect(coopOf(s).level).toBe(2);
     const refund = refundFor('chickenCoop', 2);
     expect(refund).toBe(Math.floor((buildCost('chickenCoop') + upgradeCost('chickenCoop', 2)) * DEMOLISH_REFUND));
-    const done = completeAllWork(unwrap(orderDemolish(s, tileIndex(12, 12))));
+    const done = completeAllWork(unwrap(orderDemolish(s, tileIndex(28, 44))));
     expect(done.money).toBe(s.money + refund);
   });
 

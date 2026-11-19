@@ -370,9 +370,12 @@ export interface StructurePlacement {
   y: number;
 }
 
-/** Structures present on a new game. The house sits on the exact grid center. */
+/**
+ * Structures present on a new game: a small yard near the south edge, facing the street (row 58)
+ * that the access road comes up to. Each one starts with its road ring already open.
+ */
 export const START_STRUCTURES: readonly StructurePlacement[] = [
-  { id: 'house', x: 15, y: 15 },
-  { id: 'shippingBin', x: 17, y: 16 },
-  { id: 'bunkhouse', x: 12, y: 16 },
+  { id: 'house', x: 30, y: 56 },
+  { id: 'shippingBin', x: 33, y: 57 },
+  { id: 'bunkhouse', x: 27, y: 57 },
 ];

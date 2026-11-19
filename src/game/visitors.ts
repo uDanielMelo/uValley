@@ -1,14 +1,16 @@
 import { ACCESS_ROAD_X, CAR } from '../data/roads';
-import { START_STRUCTURES, STRUCTURES } from '../data/structures';
+import { START_STRUCTURES } from '../data/structures';
 import { GRID_SIZE, MINUTES_PER_DAY } from '../data/world';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { accessRoadExit } from './roads';
+import { frontPoint } from './structures';
 import type { GridPoint, Tile } from './types';
 
 /**
  * The visiting car. It is purely derived from the clock and the road network (never saved):
- * at each visit hour it drives in from far beyond the map edge along the roads, parks at the
- * road tile closest to the shipping bin, waits, and drives back out until it disappears.
+ * at each visit hour it drives in from far beyond the map edge along the roads, taking the bends
+ * in arcs, parks at the road tile closest to the front of the shipping bin, waits, and drives back
+ * out until it disappears.
  */
 
 const DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
@@ -18,13 +20,64 @@ const DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
   [-1, 0],
 ];
 
-/** Where the car tries to park: next to the shipping bin. */
+/** Where the car tries to park: on the road in front of the shipping bin. */
 const parkingGoal = (): GridPoint => {
   const bin = START_STRUCTURES.find((s) => s.id === 'shippingBin');
   if (!bin) return { x: GRID_SIZE / 2, y: GRID_SIZE / 2 };
-  const def = STRUCTURES.shippingBin;
-  return { x: bin.x + def.width / 2, y: bin.y + def.depth / 2 };
+  return frontPoint({ type: bin.id, x: bin.x, y: bin.y, rotation: 0 }, 0.5);
 };
+
+/** Radius (tiles) of the turns on farm roads: the bend drawn on a corner road tile. */
+const FARM_TURN_RADIUS = 0.5;
+/** Arcs are drawn with a point every this many radians. */
+const ARC_STEP = Math.PI / 12;
+
+/**
+ * Replaces each corner of a polyline with a circular arc tangent to both legs. `radius(i)` is the
+ * wanted radius at point i; it shrinks so that an arc never takes more than half of a leg.
+ */
+export const roundCorners = (points: readonly GridPoint[], radius: (i: number) => number): GridPoint[] => {
+  const result: GridPoint[] = [];
+  points.forEach((p, i) => {
+    const a = points[i - 1];
+    const b = points[i + 1];
+    if (!a || !b) {
+      result.push(p);
+      return;
+    }
+    const inLength = Math.hypot(p.x - a.x, p.y - a.y);
+    const outLength = Math.hypot(b.x - p.x, b.y - p.y);
+    if (inLength === 0 || outLength === 0) {
+      result.push(p);
+      return;
+    }
+    const d1 = { x: (p.x - a.x) / inLength, y: (p.y - a.y) / inLength };
+    const d2 = { x: (b.x - p.x) / outLength, y: (b.y - p.y) / outLength };
+    const turn = Math.acos(Math.min(1, Math.max(-1, d1.x * d2.x + d1.y * d2.y)));
+    const cross = d1.x * d2.y - d1.y * d2.x;
+    if (turn < 1e-6 || Math.abs(Math.PI - turn) < 1e-6) {
+      result.push(p);
+      return;
+    }
+    const half = Math.tan(turn / 2);
+    const tangent = Math.min(radius(i) * half, inLength / 2, outLength / 2);
+    const r = tangent / half;
+    const side = cross > 0 ? 1 : -1;
+    const start = { x: p.x - d1.x * tangent, y: p.y - d1.y * tangent };
+    const center = { x: start.x - d1.y * r * side, y: start.y + d1.x * r * side };
+    const from = Math.atan2(start.y - center.y, start.x - center.x);
+    const steps = Math.max(2, Math.ceil(turn / ARC_STEP));
+    for (let k = 0; k <= steps; k++) {
+      const angle = from + (side * turn * k) / steps;
+      result.push({ x: center.x + Math.cos(angle) * r, y: center.y + Math.sin(angle) * r });
+    }
+  });
+  return result;
+};
+
+/** Rounds a drive's corners: a wide turn where it meets the highway, the road bends on the farm. */
+const smoothDrive = (points: readonly GridPoint[], junction: GridPoint): GridPoint[] =>
+  roundCorners(points, (i) => (points[i] === junction ? CAR.junctionRadius : FARM_TURN_RADIUS));
 
 const isRoad = (tiles: readonly Tile[], x: number, y: number): boolean =>
   inBounds(x, y) && !!tiles[tileIndex(x, y)]?.road;
@@ -55,7 +108,10 @@ export const carRoutes = (tiles: readonly Tile[]): CarRoutes => {
   const entry = tileIndex(ACCESS_ROAD_X, exit.edgeRow);
   const { border: edge, turn: junction, highwayEast, highwayWest } = exit;
   if (!tiles[entry]?.road) {
-    return { arrive: [highwayEast, junction, edge], leave: [edge, junction, highwayWest] };
+    return {
+      arrive: smoothDrive([highwayEast, junction, edge], junction),
+      leave: smoothDrive([edge, junction, highwayWest], junction),
+    };
   }
 
   const goal = parkingGoal();
@@ -89,8 +145,8 @@ export const carRoutes = (tiles: readonly Tile[]): CarRoutes => {
   }
   path.reverse();
   return {
-    arrive: simplify([highwayEast, junction, edge, ...path]),
-    leave: simplify([...path.slice().reverse(), edge, junction, highwayWest]),
+    arrive: smoothDrive(simplify([highwayEast, junction, edge, ...path]), junction),
+    leave: smoothDrive(simplify([...path.slice().reverse(), edge, junction, highwayWest]), junction),
   };
 };
 

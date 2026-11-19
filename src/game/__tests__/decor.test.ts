@@ -15,7 +15,8 @@ const unwrap = (result: ActionResult): GameState => {
 
 const coopFarm = (): GameState => {
   const s: GameState = { ...unlockAll(createInitialState()), money: 100_000 };
-  return unwrap(placeStructure(s, 'chickenCoop', 12, 12));
+  // Facing north, away from the road that links it to the yard.
+  return unwrap(placeStructure(s, 'chickenCoop', 28, 44, 2));
 };
 
 const coopOf = (s: GameState): StructureInstance => {
@@ -43,20 +44,20 @@ describe('lamp posts', () => {
     let s = coopFarm();
     const coop = coopOf(s);
     expect(lightingBonus(s, coop)).toBe(0);
-    s = lampNear(s, 0, 1);
+    s = lampNear(s, 0, -1);
     expect(lightingBonus(s, coop)).toBeCloseTo(0.1);
     expect(effectiveSafety(s, coop)).toBeCloseTo(shelterSafety(coop) + 0.1);
-    s = lampNear(s, 1, 1);
-    s = lampNear(s, -1, 1);
+    s = lampNear(s, 1, -1);
+    s = lampNear(s, -1, -1);
     expect(lightingBonus(s, coop)).toBeCloseTo(LIGHT_SAFETY_CAP);
   });
 
   it('far away lamps do nothing, and a lamp still being built neither', () => {
     let s = coopFarm();
-    s = lampNear(s, 0, 8);
+    s = lampNear(s, 0, -8);
     expect(lightingBonus(s, coopOf(s))).toBe(0);
     let site = coopFarm();
-    site = lampNear(site, 0, 1);
+    site = lampNear(site, 0, -1);
     const building = { kind: 'build' as const, done: 0, total: 60 };
     site = { ...site, structures: site.structures.map((x) => (x.type === 'lampPost' ? { ...x, work: building } : x)) };
     expect(lightingBonus(site, coopOf(site))).toBe(0);
@@ -66,7 +67,7 @@ describe('lamp posts', () => {
     const s = setTimeOfDay(unwrap(addAnimal(coopFarm(), 'chicken')), 23);
     const hen = s.animals[0];
     if (!hen) throw new Error('no hen');
-    const lit = lampNear(s, 0, 1);
+    const lit = lampNear(s, 0, -1);
     expect(exposure(lit, hen, coopOf(lit))).toBeLessThan(exposure(s, hen, coopOf(s)));
   });
 });

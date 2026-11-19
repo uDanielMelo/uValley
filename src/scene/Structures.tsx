@@ -1,12 +1,13 @@
 import type { ThreeEvent } from '@react-three/fiber';
-import { SHELTER_LEVEL_IDS, STRUCTURES, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
+import { SHELTER_LEVEL_IDS, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
+import { needsRoadAccess } from '../game/structures';
 import type { Rotation, StructureWorkKind } from '../game/types';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { ConstructionSite } from './ConstructionSite';
 import { setHoverCursor } from './cursor';
 import { ShelterUpgrades } from './models/ShelterUpgrades';
 import { SelectionOutline } from './SelectionOutline';
-import { ShelterBadge } from './ShelterBadge';
+import { StructureBadge } from './StructureBadge';
 import { STRUCTURE_MODELS, StructureTransform, type PlacedProps } from './structureModels';
 
 export { STRUCTURE_MODELS, StructureTransform };
@@ -88,8 +89,8 @@ export function Structures() {
           ) : (
             <PlacedStructure id={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} level={s.level} />
           )}
-          {STRUCTURES[s.type].shelter && s.work !== 'build' && (
-            <ShelterBadge id={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} />
+          {needsRoadAccess(s.type) && s.work !== 'build' && (
+            <StructureBadge id={s.id} type={s.type} x={s.x} y={s.y} rotation={s.rotation} />
           )}
         </group>
       ))}

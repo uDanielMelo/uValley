@@ -1,17 +1,25 @@
 /** World layout and time configuration. Pure data, no logic. */
 
-export const GRID_SIZE = 32;
+export const GRID_SIZE = 64;
 /** Side length (in tiles) of a purchasable land plot. GRID_SIZE must be divisible by it. */
 export const PLOT_SIZE = 4;
 export const PLOTS_PER_SIDE = GRID_SIZE / PLOT_SIZE;
 
-/** Plots unlocked on a new game, as [plotX, plotY]. Central 2x2 plots = 8x8 tiles. */
-export const START_PLOTS: ReadonlyArray<readonly [number, number]> = [
-  [3, 3],
-  [4, 3],
-  [3, 4],
-  [4, 4],
-];
+/** Side (in plots) of the land owned on a new game: 8x8 plots = 32x32 tiles. */
+export const START_PLOTS_SIDE = 8;
+
+/**
+ * Plots unlocked on a new game, as [plotX, plotY]: a square centered left to right that touches the
+ * south edge, the side closest to the highway. The rest of the map is for sale.
+ */
+export const START_PLOTS: ReadonlyArray<readonly [number, number]> = Array.from(
+  { length: START_PLOTS_SIDE * START_PLOTS_SIDE },
+  (_, i) =>
+    [
+      (PLOTS_PER_SIDE - START_PLOTS_SIDE) / 2 + (i % START_PLOTS_SIDE),
+      PLOTS_PER_SIDE - START_PLOTS_SIDE + Math.floor(i / START_PLOTS_SIDE),
+    ] as const,
+);
 
 export const MINUTES_PER_DAY = 24 * 60;
 /** Real minutes one game day lasts at speed x1. */

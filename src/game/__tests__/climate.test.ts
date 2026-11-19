@@ -17,7 +17,7 @@ const unwrap = (result: ActionResult): GameState => {
   return result.state;
 };
 
-const TILE = tileIndex(15, 19);
+const TILE = tileIndex(31, 51);
 
 type Inventory = GameState['inventory'];
 
@@ -108,16 +108,16 @@ describe('storage', () => {
   it('the pantry holds PANTRY_CAPACITY; silos, warehouses, barns and cold rooms add room', () => {
     let s: GameState = { ...unlockAll(createInitialState()), money: 100_000 };
     expect(storageCapacity(s)).toEqual({ general: PANTRY_CAPACITY, grain: 0, cold: 0 });
-    s = unwrap(placeStructure(s, 'silo', 12, 19));
-    s = unwrap(placeStructure(s, 'coldRoom', 14, 19));
-    s = unwrap(placeStructure(s, 'barn', 20, 19));
+    s = unwrap(placeStructure(s, 'silo', 28, 51));
+    s = unwrap(placeStructure(s, 'coldRoom', 31, 51));
+    s = unwrap(placeStructure(s, 'barn', 36, 51));
     expect(storageCapacity(s)).toEqual({ general: PANTRY_CAPACITY + 100, grain: 80, cold: 30 });
   });
 
   it('grain goes to the silo, perishables to the cold room, the rest is in general storage or the open', () => {
     let s: GameState = { ...unlockAll(createInitialState()), money: 100_000 };
-    s = unwrap(placeStructure(s, 'silo', 12, 19));
-    s = unwrap(placeStructure(s, 'coldRoom', 14, 19));
+    s = unwrap(placeStructure(s, 'silo', 28, 51));
+    s = unwrap(placeStructure(s, 'coldRoom', 31, 51));
     const use = storageUse(withGoods(s, { wheat: 100, tomato: 20 }, { milk: 20, wool: 25 }));
     expect(use.grainUsed).toBe(80);
     expect(use.coldUsed).toBe(30);
@@ -139,7 +139,7 @@ describe('storage', () => {
 
   it('goods in the cold room or the silo keep; goods in the open spoil fast', () => {
     let s: GameState = { ...unlockAll(createInitialState()), money: 100_000 };
-    s = unwrap(placeStructure(s, 'coldRoom', 14, 19));
+    s = unwrap(placeStructure(s, 'coldRoom', 31, 51));
     const cold = spoilGoods(withGoods(s, { tomato: 20 }, { milk: 10 }), 2);
     expect(cold.spoiled.total).toBe(0);
 

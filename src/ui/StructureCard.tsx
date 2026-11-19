@@ -18,7 +18,7 @@ import {
   stockTotal,
 } from '../game/shelters';
 import { staffCount } from '../game/staff';
-import { bedCount, refundFor, upgradeCost, upgradeMinutes } from '../game/structures';
+import { bedCount, isCutOff, refundFor, upgradeCost, upgradeMinutes } from '../game/structures';
 import type { GameState, StructureInstance } from '../game/types';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { formatCoins, formatWorkTime } from './format';
@@ -47,6 +47,26 @@ function Meter({ label, value }: { label: string; value: number }) {
       </div>
       <span className="w-8 text-right tabular-nums">{percent}%</span>
     </div>
+  );
+}
+
+/** What a building cut off from the roads stops doing, by kind. */
+const idleText = (type: StructureId): string => {
+  const def = STRUCTURES[type];
+  if (type === 'bunkhouse') return 'as camas não contam e a equipe dorme na frente da casa';
+  if (def.shelter) return 'não recebe animais novos e a equipe não coleta o que eles produzem';
+  if (def.storage) return 'não guarda nada';
+  return 'fica parada';
+};
+
+/** Warning for a building that no road links to the access road. */
+function RoadAccessSection({ type }: { type: StructureId }) {
+  const cutOff = useSelected((s, game) => isCutOff(game, s), false);
+  if (!cutOff) return null;
+  return (
+    <p className="rounded-lg bg-orange-100 px-2 py-1.5 text-xs font-bold text-orange-900">
+      🚧 Sem acesso por estrada: {idleText(type)}. Ligue a rua em volta à estrada de acesso no modo Estrada.
+    </p>
   );
 }
 
@@ -230,6 +250,7 @@ export function StructureCard() {
           ×
         </button>
       </header>
+      <RoadAccessSection type={type} />
       <WorkSection />
       <ShelterSection type={type} />
       <ExtraSection type={type} />

@@ -90,6 +90,10 @@ export function BuildPanel() {
           <RoadRow />
         </section>
         <p className="text-xs font-bold text-wood/80">
+          Cada construção (menos decoração) ganha uma rua em volta, a {ROAD_COST} moedas por trecho novo; vizinhos
+          dividem a mesma rua. Alojamento, abrigos e armazéns só funcionam se essa rua chegar à estrada de acesso.
+        </p>
+        <p className="text-xs font-bold text-wood/80">
           Toda obra é feita pela equipe com 🔨 Obras nas atividades (Construção deixa mais rápido). O valor é pago na
           ordem e volta inteiro se você cancelar.
         </p>

@@ -1,30 +1,18 @@
 import {
-  ANIMALS,
   ANIMAL_IDS,
   ANIMAL_PRODUCT_IDS,
   BREEDS,
   BREED_IDS,
-  GAME_MINUTES_PER_REAL_HOUR,
-  LIFE_STAGES,
-  SPECIES_BREEDS,
   type AnimalId,
   type AnimalProductId,
   type BreedId,
 } from '../data/animals';
 import { CROP_IDS, type CropId } from '../data/crops';
 import { DISEASE_IDS, MEDICINE_IDS, type DiseaseId, type MedicineId } from '../data/health';
-import { ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X } from '../data/roads';
-import { SHELTER_LEVEL_IDS, START_STRUCTURES, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
-import {
-  DEFAULT_PRIORITIES,
-  HOME_POSITION,
-  SKILL_IDS,
-  STARTING_WORKERS,
-  type SkillId,
-  type WorkerTemplate,
-} from '../data/workers';
-import { GRID_SIZE, MINUTES_PER_DAY, SPEED_OPTIONS, type GameSpeed } from '../data/world';
-import { PLOT_COUNT, TILE_COUNT, inBounds, isValidTileIndex, tileIndex } from './grid';
+import { SHELTER_LEVEL_IDS, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
+import { SKILL_IDS, type SkillId } from '../data/workers';
+import { SPEED_OPTIONS, type GameSpeed } from '../data/world';
+import { PLOT_COUNT, TILE_COUNT, inBounds, isValidTileIndex } from './grid';
 import { TOWN_SHOP_IDS, VEHICLE_LEVELS, type OrderGood, type TownShopId, type VehicleLevel } from '../data/market';
 import type {
   Animal,
@@ -58,11 +46,14 @@ import type {
 import { repairSiteTasks } from './construction';
 import { STARTING_CROPS } from './research';
 import { rehomeAnimals } from './shelters';
-import { accessRoadTiles } from './roads';
-import { hourlyWageFor, rollCandidates } from './staff';
-import { footprintCells, footprintOf, stampStructures } from './structures';
+import { stampStructures } from './structures';
 
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
+/**
+ * Saves older than this were made on the 32x32 map, before buildings needed roads; they cannot be
+ * placed on the new map, so loading one starts a new game.
+ */
+export const OLDEST_LOADABLE_VERSION = 16;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -76,28 +67,18 @@ export interface SaveSettings {
 export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphics: 'high' };
 
 /**
- * v2 added workers, the task queue and nextId; v3 added animals and animal products;
- * v4 added the list of placed structures; v5 added roads (`Tile.road`) and the access road;
- * v6 moved the access road south, replaced the family with staff (age, stars, skills,
- * priorities, hourly wage), added the bunkhouse and the hiring board; v7 made construction
- * work for the crew (`StructureInstance.work`, 'build' tasks with a `job`, 'build' in priorities);
- * v8 housed animals in shelters (`Animal.shelterId`, `path` instead of `target`, products in
- * `StructureInstance.stock`) and added the 'tend' activity; v9 added shelter levels
- * (`StructureInstance.level`, 'upgrade' work with `toLevel`); v10 gave animals a breed, stars and a
- * birth time (`bornAt`); v11 added health (`Animal.health`), medicine in the inventory and carcasses; v12 added fertilizer
- * (`inventory.fertilizer`, `Tile.fertilized`, `StructureInstance.manure`) and the 'fertilize' activity; v13
- * added the vehicle, its load for town and town orders (`vehicleLevel`, `cargo`, `orders`); v14 added
- * crop research (`research`), crop mastery (`cropXp`) and the greenhouse cover (`Tile.cover`); v15
- * added the linked GitHub account (`github`).
+ * v16 is the 64x64 map (the farm starts with 32x32 tiles by the south edge), with road rings
+ * around the buildings and ring road tasks tied to their site (`job.siteId`). Earlier versions
+ * (v1–v15, on the 32x32 map) are not loaded.
  */
-export interface SaveDataV15 {
-  saveVersion: 15;
+export interface SaveDataV16 {
+  saveVersion: 16;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV15;
+export type SaveData = SaveDataV16;
 
 export interface LoadedSave {
   game: GameState;
@@ -106,237 +87,9 @@ export interface LoadedSave {
 
 /**
  * Migrations from version N to N + 1. Add an entry here whenever SAVE_VERSION is bumped:
- * `migrations[1] = (v1) => v2`.
+ * `migrations[16] = (v16) => v17`.
  */
-const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {
-  // v1 → v2: the family arrives (in the v2 worker format); the queue starts empty.
-  1: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    const family = LEGACY_FAMILY.map((f, i) => ({
-      id: 1 + i,
-      name: f.name,
-      role: f.role,
-      kind: 'family',
-      efficiency: f.efficiency,
-      x: HOME_POSITION.x + (i - 1.5) * 0.3,
-      y: HOME_POSITION.y,
-      taskId: null,
-      path: [],
-      progress: 0,
-    }));
-    return { ...data, game: { ...game, workers: family, tasks: [], nextId: family.length + 1 } };
-  },
-  // v2 → v3: no animals yet, empty product inventory.
-  2: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    const inventory = isRecord(game.inventory) ? game.inventory : {};
-    return { ...data, game: { ...game, animals: [], inventory: { ...inventory, products: {} } } };
-  },
-  // v3 → v4: the starting structures (already marked on the tiles) become placed instances.
-  3: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    const firstId = isFiniteNumber(game.nextId) ? game.nextId : 1;
-    const structures = START_STRUCTURES.filter((p) => p.id === 'house' || p.id === 'shippingBin').map((p, i) => ({
-      id: firstId + i,
-      type: p.id,
-      x: p.x,
-      y: p.y,
-      rotation: 0,
-    }));
-    return { ...data, game: { ...game, structures, nextId: firstId + structures.length } };
-  },
-  // v4 → v5: the access road appears, but only on free grass or land for sale (crops and
-  // buildings already there are kept; the car then parks at the last reachable road tile).
-  4: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    if (!Array.isArray(game.tiles)) return data;
-    const tiles: unknown[] = game.tiles.slice();
-    for (const index of accessRoadTiles()) {
-      const tile = tiles[index];
-      if (isRecord(tile) && (tile.state === 'grass' || tile.state === 'locked') && tile.structure === undefined) {
-        tiles[index] = { ...tile, road: true };
-      }
-    }
-    return { ...data, game: { ...game, tiles } };
-  },
-  // v5 → v6: the access road moves south, the family becomes staff in a new bunkhouse, and the
-  // hiring board opens.
-  5: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    if (!Array.isArray(game.tiles)) return data;
-    const tiles = moveAccessRoad(game.tiles);
-    let nextId = isFiniteNumber(game.nextId) ? game.nextId : 1;
-    const structures = Array.isArray(game.structures) ? game.structures.slice() : [];
-    const taskTiles = new Set(
-      (Array.isArray(game.tasks) ? game.tasks : []).flatMap((t) => (isRecord(t) && isFiniteNumber(t.tile) ? [t.tile] : [])),
-    );
-    const spot = findBunkhouseSpot(tiles, taskTiles);
-    if (spot) structures.push({ id: nextId++, type: 'bunkhouse', x: spot.x, y: spot.y, rotation: spot.rotation });
-    const workers = (Array.isArray(game.workers) ? game.workers : []).map((w, i) => (isRecord(w) ? migrateWorker(w, i) : w));
-    const names = workers.flatMap((w) => (isRecord(w) && typeof w.name === 'string' ? [w.name] : []));
-    const day = isFiniteNumber(game.gameMinutes) ? Math.floor(game.gameMinutes / MINUTES_PER_DAY) : 0;
-    const candidates = rollCandidates(day, nextId, names);
-    nextId += candidates.length;
-    return { ...data, game: { ...game, tiles, structures, workers, candidates, nextId } };
-  },
-  // v6 → v7: construction becomes crew work. Saved structures are finished; everyone gets the
-  // new 'build' activity at the end of their list.
-  6: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    const workers = (Array.isArray(game.workers) ? game.workers : []).map((w) =>
-      isRecord(w) && Array.isArray(w.priorities) && !w.priorities.includes('build')
-        ? { ...w, priorities: [...w.priorities, 'build'] }
-        : w,
-    );
-    return { ...data, game: { ...game, workers } };
-  },
-  // v7 → v8: animals move into shelters (assigned on load by rehomeAnimals), walk along paths and
-  // leave their products in the shelter; a ready product is laid as soon as the game runs. Everyone
-  // gets the new 'tend' activity at the end of their list.
-  7: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    const workers = (Array.isArray(game.workers) ? game.workers : []).map((w) =>
-      isRecord(w) && Array.isArray(w.priorities) && !w.priorities.includes('tend')
-        ? { ...w, priorities: [...w.priorities, 'tend'] }
-        : w,
-    );
-    const animals = (Array.isArray(game.animals) ? game.animals : []).map((a) => {
-      if (!isRecord(a)) return a;
-      const { target, hasProduct, ...rest } = a;
-      const hours = isAnimalId(a.kind) ? ANIMALS[a.kind].productionHours : 0;
-      return {
-        ...rest,
-        shelterId: -1,
-        path: isRecord(target) ? [target] : [],
-        productMinutes: hasProduct === true ? hours * 60 : rest.productMinutes,
-      };
-    });
-    return { ...data, game: { ...game, workers, animals } };
-  },
-  // v8 → v9: shelter levels. Absent level means level 1, so the data needs no change.
-  8: (data) => data,
-  // v9 → v10: animals get the common breed of their species, 2 stars and a birth time that makes
-  // them just adult now (a whole adult life ahead).
-  9: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    const now = isFiniteNumber(game.gameMinutes) ? game.gameMinutes : 0;
-    const adultAt = LIFE_STAGES.adult.startsAtRealHours * GAME_MINUTES_PER_REAL_HOUR;
-    const animals = (Array.isArray(game.animals) ? game.animals : []).map((a) =>
-      isRecord(a) && isAnimalId(a.kind) ? { ...a, breed: SPECIES_BREEDS[a.kind][0], stars: 2, bornAt: now - adultAt } : a,
-    );
-    return { ...data, game: { ...game, animals } };
-  },
-  // v10 → v11: everyone healthy (no `health`), no medicine and no carcasses yet.
-  10: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    const inventory = isRecord(game.inventory) ? game.inventory : {};
-    return { ...data, game: { ...game, inventory: { ...inventory, medicine: {} }, carcasses: [] } };
-  },
-  // v11 → v12: no fertilizer yet; everyone gets 'fertilize' right after 'seed' (or last).
-  11: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    const inventory = isRecord(game.inventory) ? game.inventory : {};
-    const workers = (Array.isArray(game.workers) ? game.workers : []).map((w) => {
-      if (!isRecord(w) || !Array.isArray(w.priorities) || w.priorities.includes('fertilize')) return w;
-      const priorities = w.priorities.slice();
-      const seed = priorities.indexOf('seed');
-      priorities.splice(seed < 0 ? priorities.length : seed + 1, 0, 'fertilize');
-      return { ...w, priorities };
-    });
-    return { ...data, game: { ...game, workers, inventory: { ...inventory, fertilizer: 0 } } };
-  },
-  // v12 → v13: the starting pickup, nothing loaded and no orders yet.
-  12: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    return { ...data, game: { ...game, vehicleLevel: 1, cargo: { produce: {}, products: {} }, orders: [] } };
-  },
-  // v13 → v14: the three starting crops are known; nobody has crop mastery yet.
-  13: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    return { ...data, game: { ...game, research: { unlocked: [...STARTING_CROPS], current: null } } };
-  },
-  // v14 → v15: no GitHub account linked yet.
-  14: (data) => {
-    const game = isRecord(data.game) ? data.game : {};
-    return { ...data, game: { ...game, github: null } };
-  },
-};
-
-/** The v2–v5 family, as it was saved before v6. */
-const LEGACY_FAMILY = [
-  { name: 'Antônio', role: 'Pai', efficiency: 1 },
-  { name: 'Helena', role: 'Mãe', efficiency: 1 },
-  { name: 'Lucas', role: 'Filho', efficiency: 0.8 },
-] as const;
-
-/** v6: drops the old northward access road and lays the southward one on free land. */
-const moveAccessRoad = (raw: readonly unknown[]): unknown[] => {
-  const tiles = raw.slice();
-  for (let y = 0; y < ACCESS_ROAD_FARM_Y; y++) {
-    const index = tileIndex(ACCESS_ROAD_X, y);
-    const tile = tiles[index];
-    if (isRecord(tile) && tile.road === true) {
-      const { road: _road, ...rest } = tile;
-      tiles[index] = rest;
-    }
-  }
-  for (const index of accessRoadTiles()) {
-    const tile = tiles[index];
-    if (isRecord(tile) && (tile.state === 'grass' || tile.state === 'locked') && tile.structure === undefined) {
-      tiles[index] = { ...tile, road: true };
-    }
-  }
-  return tiles;
-};
-
-/** v6: where the new bunkhouse fits: its default spot, else the free owned grass nearest to it. */
-const findBunkhouseSpot = (
-  tiles: readonly unknown[],
-  taskTiles: ReadonlySet<number>,
-): { x: number; y: number; rotation: Rotation } | null => {
-  const free = (x: number, y: number): boolean => {
-    if (!inBounds(x, y)) return false;
-    const index = tileIndex(x, y);
-    const tile = tiles[index];
-    return (
-      isRecord(tile) && tile.state === 'grass' && tile.structure === undefined && tile.road !== true && !taskTiles.has(index)
-    );
-  };
-  const fits = (x: number, y: number, rotation: Rotation) =>
-    footprintCells(footprintOf('bunkhouse', x, y, rotation)).every((c) => free(c.x, c.y));
-  const home = START_STRUCTURES.find((p) => p.id === 'bunkhouse') ?? { x: 0, y: 0 };
-  let best: { x: number; y: number; rotation: Rotation } | null = null;
-  let bestDistance = Infinity;
-  for (const rotation of [0, 1] as const) {
-    for (let y = 0; y < GRID_SIZE; y++) {
-      for (let x = 0; x < GRID_SIZE; x++) {
-        const d = Math.hypot(x - home.x, y - home.y) + rotation * 0.01;
-        if (d < bestDistance && fits(x, y, rotation)) {
-          best = { x, y, rotation };
-          bestDistance = d;
-        }
-      }
-    }
-  }
-  return best;
-};
-
-/** v6: family and hired workers become staff with attributes (the family keeps the starting crew's). */
-const migrateWorker = (w: Record<string, unknown>, index: number): Record<string, unknown> => {
-  const template: WorkerTemplate | undefined =
-    w.kind === 'family' ? (STARTING_WORKERS.find((t) => t.name === w.name) ?? STARTING_WORKERS[index]) : undefined;
-  const profile: Omit<WorkerProfile, 'name'> = template
-    ? {
-        age: template.age,
-        stars: template.stars,
-        skills: template.skills.slice(),
-        specialty: template.specialty,
-        hourlyWage: hourlyWageFor(template.stars, template.specialty),
-      }
-    : { age: 30, stars: 2, skills: ['farming'], specialty: null, hourlyWage: hourlyWageFor(2, null) };
-  const { role: _role, efficiency: _efficiency, ...rest } = w;
-  return { ...rest, ...profile, kind: 'staff', priorities: DEFAULT_PRIORITIES.slice() };
-};
+const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {};
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {
   const data: SaveData = { saveVersion: SAVE_VERSION, savedAt: now, game, settings };
@@ -499,7 +252,9 @@ const parseJob = (v: unknown): TaskJob | null => {
   if (!isRecord(v)) return null;
   if (v.type === 'structure' && isId(v.structureId)) return { type: 'structure', structureId: v.structureId };
   if (v.type === 'shelter' && isId(v.structureId)) return { type: 'shelter', structureId: v.structureId };
-  if (v.type === 'road' && typeof v.remove === 'boolean') return { type: 'road', remove: v.remove };
+  if (v.type === 'road' && typeof v.remove === 'boolean') {
+    return isId(v.siteId) ? { type: 'road', remove: v.remove, siteId: v.siteId } : { type: 'road', remove: v.remove };
+  }
   if (v.type === 'medicate' && isId(v.animalId)) return { type: 'medicate', animalId: v.animalId };
   if (v.type === 'carcass' && isId(v.carcassId)) return { type: 'carcass', carcassId: v.carcassId };
   return null;
@@ -766,7 +521,7 @@ export const deserialize = (raw: string | null): LoadedSave | null => {
   }
   if (!isRecord(data) || !isFiniteNumber(data.saveVersion)) return null;
   let version = data.saveVersion;
-  if (version > SAVE_VERSION) return null;
+  if (version > SAVE_VERSION || version < OLDEST_LOADABLE_VERSION) return null;
   let current: Record<string, unknown> = data;
   while (version < SAVE_VERSION) {
     const migrate = migrations[version];
@@ -777,6 +532,17 @@ export const deserialize = (raw: string | null): LoadedSave | null => {
   const game = parseGame(current.game);
   if (!game) return null;
   return { game, settings: parseSettings(current.settings) };
+};
+
+/** True for a readable save made before OLDEST_LOADABLE_VERSION (it cannot be loaded any more). */
+export const isOutdatedSave = (raw: string | null): boolean => {
+  if (!raw) return false;
+  try {
+    const data: unknown = JSON.parse(raw);
+    return isRecord(data) && isFiniteNumber(data.saveVersion) && data.saveVersion < OLDEST_LOADABLE_VERSION;
+  } catch {
+    return false;
+  }
 };
 
 /** Minimal storage interface so the logic can be tested without a browser. */

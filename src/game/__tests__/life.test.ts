@@ -29,8 +29,8 @@ const HOUR = GAME_MINUTES_PER_REAL_HOUR;
 /** 7:00, lots of money, a finished coop and corral. */
 const farm = (): GameState => {
   let s: GameState = { ...createInitialState(), money: 100_000 };
-  s = unwrap(placeStructure(s, 'chickenCoop', 12, 12));
-  s = unwrap(placeStructure(s, 'corral', 17, 12));
+  s = unwrap(placeStructure(s, 'chickenCoop', 28, 44));
+  s = unwrap(placeStructure(s, 'corral', 33, 44));
   return setTimeOfDay(s, 7);
 };
 
@@ -92,7 +92,7 @@ describe('breeds and stars', () => {
   it('a Merino gives fine wool instead of wool', () => {
     expect(animalProduct({ kind: 'sheep', breed: 'merino' })).toBe('fineWool');
     expect(animalProduct({ kind: 'sheep', breed: 'santaInes' })).toBe('wool');
-    const fold = unwrap(placeStructure(farm(), 'sheepfold', 12, 14));
+    const fold = unwrap(placeStructure(farm(), 'sheepfold', 40, 46));
     const merino = unwrap(addAnimal(fold, 'sheep', { breed: 'merino', ignorePasture: true }));
     const stocked = readyAllProducts(merino).structures.find((x) => x.type === 'sheepfold');
     expect(stocked?.stock).toEqual({ fineWool: 1 });
@@ -135,15 +135,4 @@ describe('life saves', () => {
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 
-  it('migrates a v9 save: common breed, 2 stars, a whole adult life ahead', () => {
-    const s = spawnAnimals(farm(), 'cow', 1);
-    const v9Animals = s.animals.map(({ breed: _b, stars: _s, bornAt: _a, ...rest }) => rest);
-    const raw = JSON.stringify({ saveVersion: 9, savedAt: 0, game: { ...s, animals: v9Animals }, settings: DEFAULT_SETTINGS });
-    const loaded = deserialize(raw)?.game;
-    const cow = loaded?.animals[0];
-    expect(cow?.breed).toBe('gir');
-    expect(cow?.stars).toBe(2);
-    expect(cow && loaded && lifeStage(loaded.gameMinutes, cow)).toBe('adult');
-    expect(cow && loaded && lifeStage(loaded.gameMinutes + 47 * HOUR, cow)).toBe('adult');
-  });
 });

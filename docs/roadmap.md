@@ -158,6 +158,23 @@ Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
 Falta (depende do usuário criar o projeto Supabase e o OAuth App do GitHub): testar o login e a nuvem de
 verdade e fazer o sistema de amigos (seguir e visitar fazendas).
 
+### Vias e mapa maior (pedido do usuário) ✅
+
+Decidido com o usuário:
+1. Mapa 64×64 (16×16 lotes). A fazenda começa com 32×32 tiles (8×8 lotes), centrada e encostada na borda
+   sul, perto da rodovia; o pátio (casa, caixa de venda, alojamento) fica de frente para uma rua junto da
+   estrada de acesso, que ficou com 4 tiles fora do mapa até a rodovia.
+2. Anel de rua automático: toda construção, menos decoração, precisa de 1 tile livre em volta; a obra paga
+   e enfileira a rua do anel (5 por tile novo), e vizinhos dividem a mesma rua.
+3. Só funciona ligada: alojamento, abrigos e armazéns sem estrada até a estrada de acesso ficam parados
+   (aviso no card, no toast e no selo 🚧). Casa, caixa de venda, decoração e estufa não dependem disso.
+4. Saves antigos (mapa 32×32) não carregam: começa uma fazenda nova, com aviso. Save v16.
+
+Decidido por mim: estradas desenhadas por peça (reta, curva em quarto de anel, T e cruzamento com cantos
+arredondados, ponta), com acostamento e trilhos de roda; o carro faz as esquinas em arco e estaciona na
+frente da caixa de venda; a equipe prefere as ruas no A* e segue as curvas; o arraste de estrada preenche os
+tiles pulados; `placeStructure` (dev) liga sozinho uma rua até a rede.
+
 ## Decisões em aberto
 
 - "Quadrante" = lote 4×4? (assumido que sim)

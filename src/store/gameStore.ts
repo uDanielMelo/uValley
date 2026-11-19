@@ -19,8 +19,10 @@ import { buyFertilizer, buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, se
 import { plotOfTile, tileCoords, tileIndex, tilesInRect } from '../game/grid';
 import {
   DEFAULT_SETTINGS,
+  SAVE_KEY,
   clearStorage,
   deserialize,
+  isOutdatedSave,
   loadFromStorage,
   writeToStorage,
   type GraphicsQuality,
@@ -223,6 +225,8 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'no-structure': 'Não há construção aqui.',
   'not-demolishable': 'Esta construção não pode ser demolida.',
   road: 'Há uma estrada aqui.',
+  'no-room-for-road': 'Falta espaço para a rua em volta: deixe 1 tile de grama livre (ou estrada) ao redor, na sua terra.',
+  'shelter-no-road': 'Nenhum abrigo desta espécie tem acesso por estrada. Ligue a rua dele à estrada de acesso.',
   'already-road': 'Já existe estrada aqui.',
   'no-road': 'Não há nada para demolir aqui.',
   'under-construction': 'Esta construção já está em obra.',
@@ -307,7 +311,11 @@ const spoiledText = (spoiled: Spoiled): string => {
 
 /** Toast text for a site, upgrade or demolition the crew finished. */
 const finishedText = (work: FinishedWork): string => {
-  if (work.kind === 'build') return `${label(work.type)} pronto(a)!`;
+  if (work.kind === 'build') {
+    return work.cutOff
+      ? `${label(work.type)} pronto(a), mas sem acesso por estrada: ligue a rua dele à estrada de acesso.`
+      : `${label(work.type)} pronto(a)!`;
+  }
   if (work.kind === 'upgrade') {
     return `${label(work.type)} reformado(a): agora é ${work.level ? SHELTER_LEVELS[work.level].label.toLowerCase() : 'melhor'}.`;
   }
@@ -326,6 +334,22 @@ const loaded = (() => {
   const s = storage();
   return s ? loadFromStorage(s) : null;
 })();
+
+/** A save from before the bigger map was found: the game starts over (and says why). */
+const outdatedSave = (() => {
+  if (loaded) return false;
+  try {
+    return isOutdatedSave(storage()?.getItem(SAVE_KEY) ?? null);
+  } catch {
+    return false;
+  }
+})();
+
+/** Why a save text could not be loaded, for the toast. */
+export const saveLoadError = (raw: string | null): string =>
+  isOutdatedSave(raw)
+    ? 'Este save é de uma versão antiga, do mapa menor, e não pode mais ser carregado.'
+    : 'Este arquivo não é um save do uValley.';
 
 let toastCounter = 0;
 let sightingCounter = 0;
@@ -355,7 +379,13 @@ export const useGameStore = create<GameStore>()(
       hoveredAnimal: null,
       panel: null,
       pendingPlot: null,
-      toast: null,
+      toast: outdatedSave
+        ? {
+            id: ++toastCounter,
+            text: 'O mapa cresceu e as construções agora precisam de estrada: começamos uma fazenda nova.',
+            kind: 'info',
+          }
+        : null,
       lastSavedAt: null,
       devTimeScale: 1,
       buildMode: null,

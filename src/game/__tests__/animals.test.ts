@@ -43,8 +43,8 @@ const unwrap = (result: ActionResult | QueueResult): GameState => {
 
 const rich = (): GameState => ({ ...createInitialState(), money: 100_000 });
 
-/** A farm with a finished coop at (12, 12), at 7:00, with lots of money. */
-const withCoop = (): GameState => setTimeOfDay(unwrap(placeStructure(rich(), 'chickenCoop', 12, 12)), 7);
+/** A farm with a finished coop at (28, 44), at 7:00, with lots of money. */
+const withCoop = (): GameState => setTimeOfDay(unwrap(placeStructure(rich(), 'chickenCoop', 28, 44)), 7);
 
 const coopOf = (s: GameState) => s.structures.find((x) => x.type === 'chickenCoop');
 
@@ -126,7 +126,7 @@ describe('animals', () => {
     expect(laborMultipliers(spawnAnimals(createInitialState(), 'horse', 6)).walk).toBe(2);
 
     const minutesToTill = (base: GameState) => {
-      const tile = tileIndex(19, 12);
+      const tile = tileIndex(35, 44);
       let s = unwrap(toggleTask(base, 'hoe', tile, 'wheat'));
       for (let m = 1; m < 200; m++) {
         s = tick(s, 1);
@@ -148,18 +148,10 @@ describe('animals', () => {
     expect(sellAnimal(sold, horse.id)).toEqual({ ok: false, error: 'no-animal' });
   });
 
-  it('round-trip in the save and migrate v2 saves', () => {
+  it('round-trip in the save', () => {
     let s = spawnAnimals(createInitialState(), 'pig', 2);
     s = tick(s, 30);
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
-
-    const { animals: _a, ...v2Game } = createInitialState();
-    const { products: _p, ...v2Inventory } = v2Game.inventory;
-    const loaded = deserialize(
-      JSON.stringify({ saveVersion: 2, savedAt: 0, game: { ...v2Game, inventory: v2Inventory }, settings: {} }),
-    );
-    expect(loaded?.game.animals).toEqual([]);
-    expect(loaded?.game.inventory.products).toEqual({});
   });
 });
 
@@ -176,7 +168,7 @@ describe('dev tools', () => {
   });
 
   it('grow, water, finish tasks, hire and ready products', () => {
-    const tile = tileIndex(13, 13);
+    const tile = tileIndex(29, 45);
     let s = createInitialState();
     s = unwrap(toggleTask(s, 'hoe', tile, 'wheat'));
     s = unwrap(toggleTask(s, 'seed', tile, 'wheat'));

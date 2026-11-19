@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
 import { Fog, MathUtils, Vector3, type PerspectiveCamera as PerspCam } from 'three';
 import { CAMERA } from '../data/camera';
+import { START_STRUCTURES, STRUCTURES } from '../data/structures';
 import { GRID_SIZE } from '../data/world';
 import { useGameStore } from '../store/gameStore';
 import { refreshCursor, setDragCursor } from './cursor';
@@ -23,8 +24,20 @@ interface Orbit {
   distance: number;
 }
 
+/** Where the camera starts: over the house, a little toward the fields behind it. */
+const startTarget = (): Vector3 => {
+  const house = START_STRUCTURES.find((p) => p.id === 'house');
+  if (!house) return new Vector3();
+  const def = STRUCTURES.house;
+  return new Vector3(
+    house.x + def.width / 2 - GRID_SIZE / 2,
+    0,
+    house.y + def.depth / 2 - GRID_SIZE / 2 - CAMERA.startNorthOffset,
+  );
+};
+
 const initialOrbit = (): Orbit => ({
-  target: new Vector3(),
+  target: startTarget(),
   azimuth: CAMERA.azimuthDeg * DEG,
   elevation: CAMERA.elevationDeg * DEG,
   distance: CAMERA.initialDistance,

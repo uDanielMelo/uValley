@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { ANIMALS } from '../data/animals';
 import { GITHUB_BONUS } from '../data/social';
 import { communityBonus } from '../game/social';
-import { serialize } from '../game/save';
+import { isOutdatedSave, serialize } from '../game/save';
 import { toClock } from '../game/time';
 import {
   cloudConfig,
@@ -14,7 +14,7 @@ import {
   uploadSave,
   type FarmProfile,
 } from '../services/cloud';
-import { useGameStore } from '../store/gameStore';
+import { saveLoadError, useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
 import { Button, Coins, Panel } from './primitives';
 
@@ -84,8 +84,9 @@ function FileSection() {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    const ok = loadSaveText(await file.text());
-    showMessage(ok ? 'Fazenda carregada do arquivo.' : 'Este arquivo não é um save do uValley.', ok ? 'info' : 'error');
+    const text = await file.text();
+    const ok = loadSaveText(text);
+    showMessage(ok ? 'Fazenda carregada do arquivo.' : saveLoadError(text), ok ? 'info' : 'error');
   };
   return (
     <section className="flex flex-col gap-2 rounded-xl bg-parchment-dark/60 p-3 text-xs font-bold">
@@ -147,7 +148,8 @@ function CloudSection() {
     const raw = await downloadSave(config, session);
     setBusy(false);
     const ok = raw !== null && loadSaveText(raw);
-    showMessage(ok ? '☁️ Fazenda carregada da nuvem.' : 'Nenhum save válido na nuvem.', ok ? 'info' : 'error');
+    const error = raw !== null && isOutdatedSave(raw) ? saveLoadError(raw) : 'Nenhum save válido na nuvem.';
+    showMessage(ok ? '☁️ Fazenda carregada da nuvem.' : error, ok ? 'info' : 'error');
   };
   return (
     <section className="flex flex-col gap-2 rounded-xl bg-parchment-dark/60 p-3 text-xs font-bold">

@@ -8,21 +8,26 @@ import { BUILD_CREW_MAX, type ShelterLevel, type StructureId } from '../data/str
 import { MAX_TASKS } from '../data/workers';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { isWalkable } from './path';
-import { roadError } from './roads';
+import { roadError, roadNetwork } from './roads';
 import { collectShelter, nextShelterLevel, shelterDef } from './shelters';
 import {
   buildCost,
   buildMinutesFor,
   checkDemolish,
+  checkPlacement,
   demolishMinutesFor,
   footprintCells,
   footprintOf,
-  placeStructure,
+  needsRoadAccess,
+  occupyFootprint,
+  placementCost,
   refundFor,
   removeStructure,
+  ringPlan,
   structureAt,
   upgradeCost,
   upgradeMinutes,
+  type RingPlan,
 } from './structures';
 import { dropTasks, lastTaskOn, projectTasks } from './tasks';
 import {
@@ -138,10 +143,53 @@ const startWork = (state: GameState, structureId: number, work: StructureWork): 
 };
 
 /** Why a structure cannot be ordered there, or null when it can (the queue also needs room). */
-export const checkStructureOrder = (state: GameState): ActionError | null =>
-  state.tasks.length + BUILD_CREW_MAX > MAX_TASKS ? 'queue-full' : null;
+export const checkStructureOrder = (state: GameState, extraTasks = 0): ActionError | null =>
+  state.tasks.length + BUILD_CREW_MAX + extraTasks > MAX_TASKS ? 'queue-full' : null;
 
-/** Opens a construction site: pays the cost, reserves the footprint and queues the crew's work. */
+/** What ordering a structure there would mean: why not, the price, its road ring and whether it reaches the network. */
+export interface PlacementPreview {
+  error: ActionError | null;
+  /** The structure plus the new road tiles of its ring. */
+  cost: number;
+  /** Ring tiles inside the map and what each would be. */
+  ring: RingPlan['cells'];
+  /** Ring tiles that still need a road. */
+  newRoads: number[];
+  /** The ring touches a road linked to the access road (counting queued roads), or no road is needed. */
+  connects: boolean;
+}
+
+/** Judges an order on the queued future: the ring may use queued roads, and must reach the network to work. */
+export const previewPlacement = (
+  state: GameState,
+  type: StructureId,
+  x: number,
+  y: number,
+  rotation: Rotation,
+): PlacementPreview => {
+  const future = projectTasks(state).tiles;
+  const plan = ringPlan(future, type, x, y, rotation);
+  const network = roadNetwork(future);
+  const linked = (index: number): boolean => {
+    if (network.has(index)) return true;
+    const { x: cx, y: cy } = tileCoords(index);
+    return SIDES.some((d) => inBounds(cx + d.x, cy + d.y) && network.has(tileIndex(cx + d.x, cy + d.y)));
+  };
+  const error =
+    checkPlacement(state, type, x, y, rotation, future) ?? checkStructureOrder(state, plan.newRoads.length);
+  return {
+    error,
+    cost: placementCost(type, plan.newRoads.length),
+    ring: plan.cells,
+    newRoads: plan.newRoads,
+    connects: !needsRoadAccess(type) || plan.cells.some((c) => c.status !== 'blocked' && linked(c.tile)),
+  };
+};
+
+/**
+ * Opens a construction site: pays for it and for its road ring, reserves the footprint and queues
+ * the crew's work, with one road task (tied to the site) per ring tile still without a road.
+ */
 export const orderStructure = (
   state: GameState,
   type: StructureId,
@@ -149,11 +197,21 @@ export const orderStructure = (
   y: number,
   rotation: Rotation = 0,
 ): ActionResult => {
-  const queueError = checkStructureOrder(state);
-  if (queueError) return fail(queueError);
-  const placed = placeStructure(state, type, x, y, rotation);
-  if (!placed.ok) return placed;
-  return ok(startWork(placed.state, state.nextId, { kind: 'build', done: 0, total: buildMinutesFor(type) }));
+  const preview = previewPlacement(state, type, x, y, rotation);
+  if (preview.error) return fail(preview.error);
+  const siteId = state.nextId;
+  const placed = occupyFootprint(state, type, x, y, rotation, preview.cost);
+  const site = startWork(placed, siteId, { kind: 'build', done: 0, total: buildMinutesFor(type) });
+  let nextId = site.nextId;
+  const roads: Task[] = preview.newRoads.map((tile) => ({
+    id: nextId++,
+    kind: 'build',
+    tile,
+    cropId: null,
+    workerId: null,
+    job: { type: 'road', remove: false, siteId },
+  }));
+  return ok({ ...site, tasks: [...site.tasks, ...roads], nextId });
 };
 
 /** Queues the tear-down of the finished structure covering a tile (paid back when it is done). */
@@ -186,9 +244,13 @@ export const orderUpgrade = (state: GameState, structureId: number): ActionResul
   return ok(startWork(paid, structureId, { kind: 'upgrade', done: 0, total: upgradeMinutes(s.type, toLevel), toLevel }));
 };
 
+const isRingRoadOf = (structureId: number) => (t: Task) =>
+  t.job?.type === 'road' && !t.job.remove && t.job.siteId === structureId;
+
 /**
- * Cancels a structure's work: a site is cleared with a full refund, a demolition is called off and
- * an upgrade is called off with a full refund.
+ * Cancels a structure's work: a site is cleared with a full refund (its queued ring roads too; the
+ * ones already opened stay), a demolition is called off and an upgrade is called off with a full
+ * refund.
  */
 export const cancelWork = (state: GameState, structureId: number): ActionResult => {
   const s = state.structures.find((x) => x.id === structureId);
@@ -199,8 +261,10 @@ export const cancelWork = (state: GameState, structureId: number): ActionResult 
     const called = withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined);
     return ok({ ...called, money: called.money + refund });
   }
-  const removed = removeStructure(dropTasks(state, isTaskOn(structureId)), structureId);
-  return ok({ ...removed, money: removed.money + buildCost(s.type) });
+  const roads = state.tasks.filter(isRingRoadOf(structureId)).length;
+  const cleared = dropTasks(state, (t) => isTaskOn(structureId)(t) || isRingRoadOf(structureId)(t));
+  const removed = removeStructure(cleared, structureId);
+  return ok({ ...removed, money: removed.money + buildCost(s.type) + roads * ROAD_COST });
 };
 
 /**
@@ -336,9 +400,10 @@ export const demolishClick = (state: GameState, tile: number): DemolishClick => 
     const result = cancelWork(state, found.id);
     if (!result.ok) return result;
     const { kind, toLevel } = found.work;
+    const ringRefund = state.tasks.filter(isRingRoadOf(found.id)).length * ROAD_COST;
     const change: DemolishChange =
       kind === 'build'
-        ? { kind: 'build-cancelled', type: found.type, refund: buildCost(found.type) }
+        ? { kind: 'build-cancelled', type: found.type, refund: buildCost(found.type) + ringRefund }
         : kind === 'upgrade'
           ? { kind: 'upgrade-cancelled', type: found.type, refund: toLevel ? upgradeCost(found.type, toLevel) : 0 }
           : { kind: 'demolish-cancelled', type: found.type };
@@ -360,14 +425,15 @@ export const demolishClick = (state: GameState, tile: number): DemolishClick => 
 
 /** "Cancel everything": empties the queue, calls off every site and demolition and refunds roads. */
 export const cancelAllOrders = (state: GameState): GameState => {
-  const roadRefund = state.tasks.filter((t) => t.job?.type === 'road' && !t.job.remove).length * ROAD_COST;
-  let next: GameState = { ...state, money: state.money + roadRefund };
+  // Sites first: they refund their own ring roads.
+  let next: GameState = state;
   for (const s of state.structures) {
     if (!s.work) continue;
     const result = cancelWork(next, s.id);
     if (result.ok) next = result.state;
   }
-  return dropTasks(next, () => true);
+  const roadRefund = next.tasks.filter((t) => t.job?.type === 'road' && !t.job.remove).length * ROAD_COST;
+  return dropTasks({ ...next, money: next.money + roadRefund }, () => true);
 };
 
 /**
