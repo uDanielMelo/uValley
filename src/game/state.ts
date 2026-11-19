@@ -33,11 +33,12 @@ export const createInitialState = (): GameState => {
     tiles: withAccessRoad(stampStructures(tiles, structures)),
     unlockedPlots,
     plotsPurchased: 0,
-    inventory: { seeds: { ...STARTING_SEEDS }, produce: {}, products: {} },
+    inventory: { seeds: { ...STARTING_SEEDS }, produce: {}, products: {}, medicine: {} },
     workers,
     candidates,
     tasks: [],
     animals: [],
+    carcasses: [],
     structures,
     nextId,
   };

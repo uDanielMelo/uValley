@@ -4,6 +4,7 @@ import { MINUTES_PER_DAY } from '../data/world';
 import { ANIMALS, COLLECT_MINUTES } from '../data/animals';
 import { MAX_TASKS, TASK_MINUTES, WALK_SPEED, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { laborMultipliers } from './animals';
+import { careMinutes } from './health';
 import { mainSpecies } from './shelters';
 import { addWork, cancelAllOrders, roadTaskMinutes, workSpot } from './construction';
 import { inBounds, tileCoords, tileIndex } from './grid';
@@ -185,7 +186,7 @@ export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoi
 
 /** Work minutes (at speed 1) of a task that is done in one go (structure work accumulates on the site). */
 export const taskMinutes = (task: Task): number => {
-  if (task.kind === 'tend') return COLLECT_MINUTES;
+  if (task.kind === 'tend') return careMinutes(task.job) ?? COLLECT_MINUTES;
   if (task.kind === 'build') return roadTaskMinutes(task.job?.type === 'road' && task.job.remove);
   return TASK_MINUTES[task.kind];
 };
@@ -238,6 +239,12 @@ export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' |
   if (task.kind === 'seed') return { kind: task.kind, cropId: task.cropId };
   if (task.kind === 'tend') {
     const job = task.job;
+    if (job?.type === 'medicate') {
+      return { kind: task.kind, cropId: null, animalId: state.animals.find((a) => a.id === job.animalId)?.kind ?? null };
+    }
+    if (job?.type === 'carcass') {
+      return { kind: task.kind, cropId: null, animalId: state.carcasses.find((c) => c.id === job.carcassId)?.kind ?? null };
+    }
     return { kind: task.kind, cropId: null, animalId: job?.type === 'shelter' ? mainSpecies(state, job.structureId) : null };
   }
   if (task.kind === 'hoe' || task.kind === 'build') return { kind: task.kind, cropId: null };
@@ -249,14 +256,14 @@ export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' |
  * task id): a crop when harvesting, the main product when collecting at a shelter.
  */
 const effectivenessBonus = (state: GameState, worker: Worker, task: Task, context: TaskContext): GameState => {
-  if (task.kind !== 'hand' && task.kind !== 'tend') return state;
+  if (task.kind !== 'hand' && task.job?.type !== 'shelter') return state;
   if (hash01(task.id * 7 + 3) >= harvestBonusChance(workEffectiveness(worker, context))) return state;
   const { inventory } = state;
   if (task.kind === 'hand' && context.cropId) {
     return { ...state, inventory: { ...inventory, produce: addCount(inventory.produce, context.cropId, 1) } };
   }
   const product = context.animalId ? ANIMALS[context.animalId].product : null;
-  if (task.kind === 'tend' && product) {
+  if (task.kind === 'tend' && task.job?.type === 'shelter' && product) {
     return { ...state, inventory: { ...inventory, products: addCount(inventory.products, product, 1) } };
   }
   return state;

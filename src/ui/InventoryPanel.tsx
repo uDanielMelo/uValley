@@ -1,4 +1,5 @@
 import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
+import { MEDICINES, MEDICINE_IDS } from '../data/health';
 import { CROPS, CROP_IDS } from '../data/crops';
 import { produceValue } from '../game/economy';
 import { useGameStore } from '../store/gameStore';
@@ -78,6 +79,21 @@ function SeedList() {
   );
 }
 
+function MedicineList() {
+  const medicine = useGameStore((s) => s.game.inventory.medicine);
+  return (
+    <ul className="grid grid-cols-2 gap-2">
+      {MEDICINE_IDS.map((id) => (
+        <li key={id} className="rounded-xl bg-parchment-dark/60 p-2 text-center text-sm font-black" title={MEDICINES[id].note}>
+          <div className="text-xl">{MEDICINES[id].icon}</div>
+          {MEDICINES[id].label}
+          <div className="tabular-nums">×{medicine[id] ?? 0}</div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function InventoryPanel() {
   const close = useGameStore((s) => s.closePanel);
   const total = useGameStore((s) => produceValue(s.game));
@@ -92,6 +108,8 @@ export function InventoryPanel() {
       </Button>
       <h3 className="mt-5 mb-2 font-black">Sementes</h3>
       <SeedList />
+      <h3 className="mt-5 mb-2 font-black">Remédios</h3>
+      <MedicineList />
     </Panel>
   );
 }

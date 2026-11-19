@@ -9,10 +9,12 @@ import {
   type AnimalId,
   type BreedId,
 } from '../data/animals';
+import { MEDICINES, MEDICINE_IDS, type MedicineId } from '../data/health';
 import { STRUCTURES } from '../data/structures';
 import { CROPS, CROP_IDS, type CropId } from '../data/crops';
 import { PLOT_SIZE } from '../data/world';
 import { purchasePrice, type PurchaseAge } from '../game/animals';
+import { freeMedicine } from '../game/health';
 import { freeSlots, housesKind, pastureCapacity, pastureUsed, sheltersFor } from '../game/shelters';
 import { isOperational } from '../game/structures';
 import { nextPlotCost } from '../game/economy';
@@ -207,6 +209,55 @@ function AnimalsTab() {
   );
 }
 
+function MedicineRow({ id }: { id: MedicineId }) {
+  const def = MEDICINES[id];
+  const money = useGameStore((s) => s.game.money);
+  const owned = useGameStore((s) => s.game.inventory.medicine[id] ?? 0);
+  const free = useGameStore((s) => freeMedicine(s.game, id));
+  const buy = useGameStore((s) => s.buyMedicine);
+  return (
+    <li className="rounded-xl bg-parchment-dark/60 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-base font-black">
+          {def.icon} {def.label}
+        </span>
+        <span className="text-xs font-bold">
+          Você tem {owned}
+          {owned > free ? ` (${owned - free} reservado${owned - free === 1 ? '' : 's'})` : ''}
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs font-bold text-wood/80">{def.note} Uma dose por animal.</p>
+      <div className="mt-2 flex gap-2">
+        {QUANTITIES.map((q) => {
+          const cost = def.price * q;
+          return (
+            <Button key={q} className="flex-1 text-sm" disabled={money < cost} onClick={() => buy(id, q)}>
+              {q}× <Coins value={formatCoins(cost)} />
+            </Button>
+          );
+        })}
+      </div>
+    </li>
+  );
+}
+
+function MedicineTab() {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs font-bold text-wood/80">
+        Quando a fazenda percebe um animal doente ou ferido e há remédio no estoque, a equipe com 🪣 Tratar animais vai
+        medicar sozinha. Quem tem a habilidade Animais percebe a doença mais cedo. Abrigos melhores adoecem menos e
+        protegem dos predadores à noite.
+      </p>
+      <ul className="flex flex-col gap-2">
+        {MEDICINE_IDS.map((id) => (
+          <MedicineRow key={id} id={id} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function LandTab() {
   const cost = useGameStore((s) => nextPlotCost(s.game));
   const money = useGameStore((s) => s.game.money);
@@ -228,7 +279,7 @@ function LandTab() {
 }
 
 export function ShopPanel() {
-  const [tab, setTab] = useState<'seeds' | 'animals' | 'land'>('seeds');
+  const [tab, setTab] = useState<'seeds' | 'animals' | 'medicine' | 'land'>('seeds');
   const close = useGameStore((s) => s.closePanel);
   return (
     <Panel title="🛒 Loja" onClose={close}>
@@ -238,6 +289,9 @@ export function ShopPanel() {
         </Button>
         <Button variant={tab === 'animals' ? 'wood' : 'ghost'} className="flex-1" onClick={() => setTab('animals')}>
           Animais
+        </Button>
+        <Button variant={tab === 'medicine' ? 'wood' : 'ghost'} className="flex-1" onClick={() => setTab('medicine')}>
+          Remédios
         </Button>
         <Button variant={tab === 'land' ? 'wood' : 'ghost'} className="flex-1" onClick={() => setTab('land')}>
           Terrenos
@@ -251,6 +305,7 @@ export function ShopPanel() {
         </ul>
       )}
       {tab === 'animals' && <AnimalsTab />}
+      {tab === 'medicine' && <MedicineTab />}
       {tab === 'land' && <LandTab />}
     </Panel>
   );

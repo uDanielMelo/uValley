@@ -12,6 +12,7 @@ import {
   type BreedId,
 } from '../data/animals';
 import { CROP_IDS, type CropId } from '../data/crops';
+import { DISEASE_IDS, MEDICINE_IDS, type DiseaseId, type MedicineId } from '../data/health';
 import { ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X } from '../data/roads';
 import { SHELTER_LEVEL_IDS, START_STRUCTURES, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
 import {
@@ -26,10 +27,13 @@ import { GRID_SIZE, MINUTES_PER_DAY, SPEED_OPTIONS, type GameSpeed } from '../da
 import { PLOT_COUNT, TILE_COUNT, inBounds, isValidTileIndex, tileIndex } from './grid';
 import type {
   Animal,
+  AnimalHealth,
   Candidate,
+  Carcass,
   GameState,
   GridPoint,
   ItemCounts,
+  MedicineCounts,
   ProductCounts,
   Rotation,
   Specialty,
@@ -52,7 +56,7 @@ import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -74,16 +78,16 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * v8 housed animals in shelters (`Animal.shelterId`, `path` instead of `target`, products in
  * `StructureInstance.stock`) and added the 'tend' activity; v9 added shelter levels
  * (`StructureInstance.level`, 'upgrade' work with `toLevel`); v10 gave animals a breed, stars and a
- * birth time (`bornAt`).
+ * birth time (`bornAt`); v11 added health (`Animal.health`), medicine in the inventory and carcasses.
  */
-export interface SaveDataV10 {
-  saveVersion: 10;
+export interface SaveDataV11 {
+  saveVersion: 11;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV10;
+export type SaveData = SaveDataV11;
 
 export interface LoadedSave {
   game: GameState;
@@ -212,6 +216,12 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
     );
     return { ...data, game: { ...game, animals } };
   },
+  // v10 → v11: everyone healthy (no `health`), no medicine and no carcasses yet.
+  10: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    const inventory = isRecord(game.inventory) ? game.inventory : {};
+    return { ...data, game: { ...game, inventory: { ...inventory, medicine: {} }, carcasses: [] } };
+  },
 };
 
 /** The v2–v5 family, as it was saved before v6. */
@@ -322,6 +332,19 @@ const parseProducts = (v: unknown): ProductCounts | null => {
   return counts;
 };
 
+const isMedicineId = (v: unknown): v is MedicineId => MEDICINE_IDS.some((id) => id === v);
+const isDiseaseId = (v: unknown): v is DiseaseId => DISEASE_IDS.some((id) => id === v);
+
+const parseMedicine = (v: unknown): MedicineCounts | null => {
+  if (!isRecord(v)) return null;
+  const counts: MedicineCounts = {};
+  for (const [key, value] of Object.entries(v)) {
+    if (!isMedicineId(key) || !isFiniteNumber(value) || value < 0) return null;
+    if (value > 0) counts[key] = Math.floor(value);
+  }
+  return counts;
+};
+
 const parseCounts = (v: unknown): ItemCounts | null => {
   if (!isRecord(v)) return null;
   const counts: ItemCounts = {};
@@ -426,6 +449,8 @@ const parseJob = (v: unknown): TaskJob | null => {
   if (v.type === 'structure' && isId(v.structureId)) return { type: 'structure', structureId: v.structureId };
   if (v.type === 'shelter' && isId(v.structureId)) return { type: 'shelter', structureId: v.structureId };
   if (v.type === 'road' && typeof v.remove === 'boolean') return { type: 'road', remove: v.remove };
+  if (v.type === 'medicate' && isId(v.animalId)) return { type: 'medicate', animalId: v.animalId };
+  if (v.type === 'carcass' && isId(v.carcassId)) return { type: 'carcass', carcassId: v.carcassId };
   return null;
 };
 
@@ -463,6 +488,8 @@ const parseAnimal = (v: unknown): Animal | null => {
   if (!isFiniteNumber(waitMinutes) || !isFiniteNumber(productMinutes) || typeof fed !== 'boolean') return null;
   const path = parsePath(v.path);
   if (!path) return null;
+  const health = parseHealth(v.health);
+  if (health === null) return null;
   return {
     id,
     kind,
@@ -476,7 +503,24 @@ const parseAnimal = (v: unknown): Animal | null => {
     waitMinutes: Math.max(0, waitMinutes),
     productMinutes: Math.max(0, productMinutes),
     fed,
+    ...(health ? { health } : {}),
   };
+};
+
+/** Health, or undefined when the field is absent (null when it is invalid). */
+const parseHealth = (v: unknown): AnimalHealth | undefined | null => {
+  if (v === undefined) return undefined;
+  if (!isRecord(v) || !isDiseaseId(v.disease) || !isFiniteNumber(v.since) || typeof v.noticed !== 'boolean') return null;
+  return { disease: v.disease, since: v.since, noticed: v.noticed };
+};
+
+const parseCarcass = (v: unknown): Carcass | null => {
+  if (!isRecord(v)) return null;
+  const { id, kind, breed, x, y, diedAt, shelterId } = v;
+  if (!isId(id) || !isAnimalId(kind) || !isBreedId(breed) || BREEDS[breed].species !== kind) return null;
+  if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(diedAt)) return null;
+  if (!isFiniteNumber(shelterId) || !Number.isInteger(shelterId)) return null;
+  return { id, kind, breed, x, y, diedAt, shelterId };
 };
 
 const ROTATIONS: readonly Rotation[] = [0, 1, 2, 3];
@@ -553,19 +597,22 @@ const parseGame = (v: unknown): GameState | null => {
   const seeds = parseCounts(inventory.seeds);
   const produce = parseCounts(inventory.produce);
   const products = parseProducts(inventory.products);
-  if (!seeds || !produce || !products) return null;
+  const medicine = parseMedicine(inventory.medicine);
+  if (!seeds || !produce || !products || !medicine) return null;
   const workers = parseList(v.workers, parseWorker);
   const tasks = parseList(v.tasks, parseTask);
   const animals = parseList(v.animals, parseAnimal);
   const structures = parseList(v.structures, parseStructure);
   const candidates = parseList(v.candidates, parseCandidate);
-  if (!workers || !candidates || !tasks || !animals || !structures || !isId(nextId)) return null;
+  const carcasses = parseList(v.carcasses, parseCarcass);
+  if (!workers || !candidates || !tasks || !animals || !carcasses || !structures || !isId(nextId)) return null;
   const maxId = Math.max(
     0,
     ...workers.map((w) => w.id),
     ...candidates.map((c) => c.id),
     ...tasks.map((t) => t.id),
     ...animals.map((a) => a.id),
+    ...carcasses.map((c) => c.id),
     ...structures.map((s) => s.id),
   );
 
@@ -577,11 +624,12 @@ const parseGame = (v: unknown): GameState | null => {
     tiles: stampStructures(parsedTiles, structures),
     unlockedPlots: plots,
     plotsPurchased: Math.floor(plotsPurchased),
-    inventory: { seeds, produce, products },
+    inventory: { seeds, produce, products, medicine },
     workers,
     candidates,
     tasks,
     animals,
+    carcasses,
     structures,
     nextId: Math.max(nextId, maxId + 1),
   }));

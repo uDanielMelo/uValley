@@ -291,6 +291,14 @@ export const BREED_TINTS: Record<BreedId, string> = {
   mangalarga: '#b9a48c',
 };
 
+/** Sick animals turn greenish, wounded ones reddish. */
+export type Condition = 'sick' | 'wound' | null;
+export const CONDITION_TINTS: Record<Exclude<Condition, null>, string> = { sick: '#8fbf5a', wound: '#c2524a' };
+
+/** Carcasses fade toward this dull brown. */
+export const CARCASS_TINT = '#6f6253';
+export const CARCASS_STAIN = '#4a2a20';
+
 /** Old animals fade toward this grey. */
 export const OLD_TINT = '#b8b8b8';
 

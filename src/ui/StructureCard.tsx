@@ -2,6 +2,7 @@ import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
 import { SHELTER_LEVELS, SHELTER_LEVEL_IDS, STRUCTURES, type ShelterLevel, type StructureId } from '../data/structures';
 import { BUNKHOUSE_BEDS } from '../data/workers';
 import { workProgress } from '../game/construction';
+import { isKnownSick } from '../game/health';
 import {
   maxShelterLevel,
   nextShelterLevel,
@@ -80,6 +81,8 @@ function ShelterSection({ type }: { type: StructureId }) {
       .map((p) => `${ANIMAL_PRODUCTS[p].icon} ${items[p] ?? 0}`)
       .join('  ');
   }, '');
+  const sick = useSelected((s, game) => game.animals.filter((a) => a.shelterId === s.id && isKnownSick(a)).length, 0);
+  const carcasses = useSelected((s, game) => game.carcasses.filter((c) => c.shelterId === s.id).length, 0);
   const money = useGameStore((s) => s.game.money);
   const id = useGameStore((s) => s.selectedStructure);
   const upgrade = useGameStore((s) => s.upgradeShelter);
@@ -106,6 +109,19 @@ function ShelterSection({ type }: { type: StructureId }) {
       <p className="flex justify-between text-xs font-bold">
         <span className="text-wood/70">Animais</span>
         <span className="tabular-nums">{heads}</span>
+      </p>
+      <p className="flex justify-between text-xs font-bold">
+        <span className="text-wood/70">Saúde</span>
+        <span className={sick > 0 || carcasses > 0 ? 'text-red-700' : ''}>
+          {sick === 0 && carcasses === 0
+            ? 'todos bem'
+            : [
+                sick > 0 && `🤒 ${sick} doente${sick === 1 ? '' : 's'}`,
+                carcasses > 0 && `☠️ ${carcasses} carcaça${carcasses === 1 ? '' : 's'}`,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+        </span>
       </p>
       <p className="flex justify-between text-xs font-bold">
         <span className="text-wood/70">Para coletar</span>

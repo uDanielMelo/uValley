@@ -1,9 +1,11 @@
 import { Canvas } from '@react-three/fiber';
 import { PCFShadowMap } from 'three';
 import { Animals } from './Animals';
+import { Carcasses } from './Carcasses';
 import { BuildGhost } from './BuildGhost';
 import { CameraRig } from './CameraRig';
 import { Car } from './Car';
+import { Predators } from './Predators';
 import { CropLayer } from './CropLayer';
 import { DayNightLight } from './DayNightLight';
 import { Environment } from './Environment';
@@ -48,6 +50,8 @@ export function GameCanvas() {
       <Structures />
       <Workers />
       <Animals />
+      <Carcasses />
+      <Predators />
       <Car />
       <PostFx />
     </Canvas>

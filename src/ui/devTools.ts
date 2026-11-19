@@ -1,16 +1,23 @@
 import { ANIMAL_IDS, type AnimalId } from '../data/animals';
+import { DISEASE_IDS, PREDATORS, PREDATOR_IDS, type DiseaseId } from '../data/health';
+import { shelterDef, shelterDoor } from '../game/shelters';
+import { frontPoint } from '../game/structures';
 import {
+  addMedicine,
   addMoney,
   ageAnimals,
   addProduce,
   addSeeds,
   finishAllTasks,
   finishWorks,
+  forceRaid,
   growAll,
+  healAll,
   hireFree,
   readyAllProducts,
   setMoney,
   setTimeOfDay,
+  sickenAnimal,
   skipMinutes,
   spawnAnimals,
   unlockAll,
@@ -22,6 +29,9 @@ import { useGameStore } from '../store/gameStore';
 /** Dev tools are on in `npm run dev`, or in any build opened with `?dev` in the URL. */
 export const DEV_ENABLED =
   import.meta.env.DEV || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('dev'));
+
+/** Which predator the next attack preview shows. */
+let previewTurn = -1;
 
 const apply = (transform: (g: GameState) => GameState, message?: string) =>
   useGameStore.getState().devApply(transform, message);
@@ -46,6 +56,11 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.spawn('cow', 3)    cria animais: ${ANIMAL_IDS.join(', ')}
   dev.products()         todos os animais com produto pronto
   dev.age(24)            envelhece os animais 24 h reais (12 filhote→jovem, 72 adulto→idoso, 96 morre)
+  dev.sick('flu')        adoece um animal saudável (worms, flu, infection, wound), já percebido
+  dev.heal()             cura todos os animais
+  dev.attack()           um predador ataca o abrigo com mais animais (a câmera vai até lá)
+  dev.preview()          só a animação do ataque, sem ferir ninguém (alterna raposa, cachorro-do-mato, onça)
+  dev.medicine(5)        +5 doses de cada remédio
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -78,6 +93,41 @@ const devApi = {
   },
   products: () => apply(readyAllProducts, 'Produtos prontos'),
   age: (hours = 24) => apply((g) => ageAnimals(g, hours), `Animais +${hours} h de idade`),
+  sick: (disease: DiseaseId = 'flu') => {
+    if (!DISEASE_IDS.includes(disease)) {
+      console.warn(`Doença desconhecida: ${disease}. Use: ${DISEASE_IDS.join(', ')}`);
+      return;
+    }
+    apply((g) => sickenAnimal(g, disease), `Animal doente (${disease})`);
+  },
+  heal: () => apply(healAll, 'Todos curados'),
+  attack: () => {
+    const { game, devApply, reportAttacks, showMessage } = useGameStore.getState();
+    const raid = forceRaid(game);
+    if (!raid.attack) {
+      showMessage('🛠️ Nenhum animal para atacar', 'info');
+      return;
+    }
+    devApply(() => raid.state);
+    reportAttacks([raid.attack]);
+    useGameStore.getState().focusCamera(raid.attack.x, raid.attack.y);
+  },
+  preview: () => {
+    const { game, showSighting, focusCamera, showMessage } = useGameStore.getState();
+    // The shelter with most animals (else any shelter, else the house door).
+    const shelters = game.structures.filter((s) => shelterDef(s.type));
+    const heads = (id: number) => game.animals.filter((a) => a.shelterId === id).length;
+    const shelter = shelters.sort((a, b) => heads(b.id) - heads(a.id))[0];
+    const house = game.structures.find((s) => s.type === 'house');
+    const spot = shelter ? shelterDoor(shelter) : house ? frontPoint(house, 0.6) : { x: 16, y: 18 };
+    previewTurn = (previewTurn + 1) % PREDATOR_IDS.length;
+    const predator = PREDATOR_IDS[previewTurn] ?? 'fox';
+    focusCamera(spot.x, spot.y);
+    // A beat later, so the camera is already there when it appears.
+    window.setTimeout(() => showSighting(predator, spot.x, spot.y), 400);
+    showMessage(`🛠️ Prévia: ${PREDATORS[predator].label.toLowerCase()} (ninguém se feriu)`, 'info');
+  },
+  medicine: (amount = 5) => apply((g) => addMedicine(g, amount), `+${amount} doses de cada remédio`),
   state: () => useGameStore.getState().game,
 };
 

@@ -147,6 +147,13 @@ export function DevPanel() {
             ))}
             <DevButton onClick={dev.products}>✨ Produtos prontos</DevButton>
             <DevButton onClick={() => dev.age(24)}>⏳ +24 h de idade</DevButton>
+            <DevButton onClick={() => dev.sick('flu')}>🤧 Adoecer um</DevButton>
+            <DevButton onClick={dev.heal}>💚 Curar todos</DevButton>
+            <DevButton onClick={dev.attack}>🦊 Ataque</DevButton>
+            <DevButton onClick={dev.preview} title="Mostra a animação do ataque sem ferir nenhum animal">
+              🎬 Ver ataque
+            </DevButton>
+            <DevButton onClick={() => dev.medicine(5)}>💊 +5 remédios</DevButton>
           </Section>
 
           <p className="text-[11px] text-white/60">

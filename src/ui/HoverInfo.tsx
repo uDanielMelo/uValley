@@ -1,4 +1,5 @@
 import { ANIMALS, ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS, BREEDS, LIFE_STAGES } from '../data/animals';
+import { DISEASES } from '../data/health';
 import { CROPS } from '../data/crops';
 import { STRUCTURES } from '../data/structures';
 import { animalActivity, animalProduct, lifeStage } from '../game/animals';
@@ -112,10 +113,17 @@ function ShelterDetails({ tileIndex }: { tileIndex: number }) {
     const found = structureAt(s.game, tileIndex);
     return !!found && stockCap(found) > 0 && stockTotal(found.stock) >= stockCap(found);
   });
+  const sick = useGameStore((s) => {
+    const found = structureAt(s.game, tileIndex);
+    return found ? s.game.animals.filter((a) => a.shelterId === found.id && a.health?.noticed).length : 0;
+  });
   if (summary === null) return null;
   return (
     <div className="mt-1 text-xs font-bold">
-      <p>Animais: {summary}</p>
+      <p>
+        Animais: {summary}
+        {sick > 0 && <span className="text-red-700"> · 🤒 {sick} doente{sick === 1 ? '' : 's'}</span>}
+      </p>
       <p className={full ? 'text-red-700' : 'text-wood/80'}>
         {stock ? `Para coletar: ${stock}${full ? ' · cheio, a produção parou' : ''}` : 'Nada para coletar.'}
       </p>
@@ -151,6 +159,10 @@ function AnimalInfo({ id }: { id: number }) {
     return a ? animalActivity(s.game, a) : null;
   });
   const fed = useGameStore((s) => s.game.animals.find((a) => a.id === id)?.fed ?? true);
+  const disease = useGameStore((s) => {
+    const a = s.game.animals.find((x) => x.id === id);
+    return a?.health?.noticed ? a.health.disease : null;
+  });
   const home = useGameStore((s) => {
     const shelterId = s.game.animals.find((a) => a.id === id)?.shelterId;
     const shelter = s.game.structures.find((x) => x.id === shelterId);
@@ -178,6 +190,12 @@ function AnimalInfo({ id }: { id: number }) {
         {ACTIVITY_LABELS[activity]}
         {home && ` · mora no ${home.toLowerCase()}`}
         {!fed && <span className="font-black text-red-700"> · com fome</span>}
+        {disease && (
+          <span className="font-black text-red-700">
+            {' '}
+            · {DISEASES[disease].icon} {DISEASES[disease].label.toLowerCase()}
+          </span>
+        )}
       </p>
       {product && (
         <div className="mt-1">

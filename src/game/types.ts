@@ -1,4 +1,5 @@
 import type { AnimalId, AnimalProductId, BreedId } from '../data/animals';
+import type { DiseaseId, MedicineId } from '../data/health';
 import type { CropId } from '../data/crops';
 import type { ShelterLevel, StructureId } from '../data/structures';
 import type { SkillId } from '../data/workers';
@@ -60,12 +61,15 @@ export interface StructureInstance {
 
 export type ItemCounts = Partial<Record<CropId, number>>;
 export type ProductCounts = Partial<Record<AnimalProductId, number>>;
+export type MedicineCounts = Partial<Record<MedicineId, number>>;
 
 export interface Inventory {
   seeds: ItemCounts;
   produce: ItemCounts;
   /** Animal products (eggs, milk, wool…). */
   products: ProductCounts;
+  /** Medicine bought for sick animals. */
+  medicine: MedicineCounts;
 }
 
 /** What a 'build' or 'tend' task works on. */
@@ -75,7 +79,11 @@ export type TaskJob =
   /** Opening (or removing) the road on the task tile. */
   | { type: 'road'; remove: boolean }
   /** Collecting a shelter's products ('tend'); the task tile is the footprint tile by the door. */
-  | { type: 'shelter'; structureId: number };
+  | { type: 'shelter'; structureId: number }
+  /** Medicating a sick animal ('tend'); the task tile is where the animal was when it was queued. */
+  | { type: 'medicate'; animalId: number }
+  /** Taking a carcass away ('tend'); the task tile is under the carcass. */
+  | { type: 'carcass'; carcassId: number };
 
 /** A queued order on a tile, executed by a worker. */
 export interface Task {
@@ -160,6 +168,29 @@ export interface Animal {
   productMinutes: number;
   /** Fed today (feed is paid at midnight). */
   fed: boolean;
+  /** Absent while healthy. */
+  health?: AnimalHealth;
+}
+
+/** A sickness (or wound). Its stage (incubating, with symptoms) is derived from `since`. */
+export interface AnimalHealth {
+  disease: DiseaseId;
+  /** Game minute it caught it. */
+  since: number;
+  /** The farm knows (the card, the tint and medicating follow from this). */
+  noticed: boolean;
+}
+
+/** What a predator (or a disease) left on the ground, until the crew takes it away. */
+export interface Carcass {
+  id: number;
+  kind: AnimalId;
+  breed: BreedId;
+  x: number;
+  y: number;
+  diedAt: number;
+  /** The shelter it lived in (its animals risk infection while the carcass lies there). */
+  shelterId: number;
 }
 
 export type AnimalActivity = 'walking' | 'grazing' | 'sleeping';
@@ -181,9 +212,10 @@ export interface GameState {
   /** Work queue, oldest first. Tasks on the same tile run in queue order. */
   tasks: Task[];
   animals: Animal[];
+  carcasses: Carcass[];
   /** Placed structures, including the starting house and shipping bin. */
   structures: StructureInstance[];
-  /** Next id for tasks, workers, candidates, animals and structures. */
+  /** Next id for tasks, workers, candidates, animals, carcasses and structures. */
   nextId: number;
 }
 
@@ -230,7 +262,9 @@ export type ActionError =
   | 'shelter-full'
   | 'pasture-full'
   | 'shelter-in-use'
-  | 'max-level';
+  | 'max-level'
+  | 'no-medicine'
+  | 'not-sick';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 

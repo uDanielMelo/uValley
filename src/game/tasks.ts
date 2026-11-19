@@ -1,5 +1,6 @@
 import { CROP_IDS } from '../data/crops';
 import { applyTool, plant } from './actions';
+import { medicateAnimal, removeCarcass } from './health';
 import { layRoad, removeRoad } from './roads';
 import { collectShelter } from './shelters';
 import { fail, ok, type ActionResult, type GameState, type Task } from './types';
@@ -21,6 +22,8 @@ export const applyTask = (state: GameState, task: TaskOrder): ActionResult => {
     const collected = collectShelter(state, job.structureId);
     return collected.ok || collected.error === 'no-product' ? ok(collected.ok ? collected.state : state) : collected;
   }
+  if (job.type === 'medicate') return medicateAnimal(state, job.animalId);
+  if (job.type === 'carcass') return removeCarcass(state, job.carcassId);
   if (job.type === 'road') return job.remove ? removeRoad(state, task.tile) : layRoad(state, task.tile);
   return state.structures.some((s) => s.id === job.structureId && s.work) ? ok(state) : fail('no-structure');
 };

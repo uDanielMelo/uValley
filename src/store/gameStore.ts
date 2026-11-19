@@ -3,6 +3,7 @@ import { subscribeWithSelector } from 'zustand/middleware';
 import { ANIMALS, BREEDS, type AnimalId, type AnimalProductId, type BreedId } from '../data/animals';
 import type { CropId } from '../data/crops';
 import { SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures';
+import { DISEASES, MEDICINES, PREDATORS, type MedicineId, type PredatorId } from '../data/health';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
 import { animalSalePrice, buyAnimal, sellAnimal, type PurchaseAge } from '../game/animals';
 import { buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
@@ -16,11 +17,12 @@ import {
   type SaveSettings,
 } from '../game/save';
 import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type DemolishChange } from '../game/construction';
+import { buyMedicine, medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
 import { advanceGame, type FinishedWork } from '../game/simulation';
 import { createInitialState } from '../game/state';
 import { anchorFor, structureAt, upgradeCost } from '../game/structures';
 import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/staff';
-import type { ActionError, ActionResult, GameState, Rotation, TaskKind, ToolId } from '../game/types';
+import type { ActionError, ActionResult, Animal, GameState, Rotation, TaskKind, ToolId } from '../game/types';
 import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
 
 export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | null;
@@ -38,6 +40,16 @@ export interface Toast {
   id: number;
   text: string;
   kind: 'error' | 'info';
+}
+
+/** A predator seen running off after an attack (scene only, never saved). */
+export interface PredatorSighting {
+  id: number;
+  predator: PredatorId;
+  x: number;
+  y: number;
+  /** performance.now() / 1000 when it was seen. */
+  at: number;
 }
 
 export interface GameStore {
@@ -115,6 +127,16 @@ export interface GameStore {
   selectedAnimal: number | null;
   selectAnimal: (id: number | null) => void;
   sellProduct: (product: AnimalProductId, quantity: number) => void;
+  buyMedicine: (id: MedicineId, quantity: number) => void;
+  /** Recent predator attacks, for the figure running away. */
+  sightings: PredatorSighting[];
+  /** Shows the toast and the fleeing predator for attacks (also used by the dev tools). */
+  reportAttacks: (attacks: readonly PredatorAttack[]) => void;
+  /** Shows a predator running off from a spot (tile space), without any attack. */
+  showSighting: (predator: PredatorId, x: number, y: number) => void;
+  /** Last request to move the camera to a spot (tile space); the camera rig follows new ids. */
+  cameraFocus: { id: number; x: number; y: number } | null;
+  focusCamera: (x: number, y: number) => void;
   /** Dev tools: applies a state transform directly. */
   devApply: (transform: (game: GameState) => GameState, message?: string) => void;
   setDevTimeScale: (scale: number) => void;
@@ -164,6 +186,8 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'pasture-full': 'O pasto está lotado. Compre um lote ou deixe mais grama livre.',
   'shelter-in-use': 'Há animais morando neste abrigo. Venda-os antes de demolir.',
   'max-level': 'Este abrigo já está no nível mais alto disponível.',
+  'no-medicine': 'Sem remédio para este animal. Compre na loja.',
+  'not-sick': 'Este animal não está doente.',
 };
 
 const label = (type: StructureId): string => STRUCTURES[type].label;
@@ -184,6 +208,33 @@ const demolishText = (change: DemolishChange): string => {
     case 'road-removal-queued':
       return 'Remoção da estrada na fila.';
   }
+};
+
+/** "vaca Gir" */
+const animalName = (a: Pick<Animal, 'kind' | 'breed'>): string => `${ANIMALS[a.kind].label.toLowerCase()} ${BREEDS[a.breed].label}`;
+
+const shelterName = (game: GameState, shelterId: number): string => {
+  const shelter = game.structures.find((x) => x.id === shelterId);
+  return shelter ? STRUCTURES[shelter.type].label.toLowerCase() : 'abrigo';
+};
+
+const attackText = (game: GameState, attack: PredatorAttack): string => {
+  const who = PREDATORS[attack.predator].label;
+  const where = shelterName(game, attack.victim.shelterId);
+  return attack.outcome === 'eaten'
+    ? `${who} atacou o ${where} e matou: ${animalName(attack.victim)}. A carcaça ficou no chão.`
+    : `${who} atacou o ${where} e feriu: ${animalName(attack.victim)}. Trate com antibiótico.`;
+};
+
+/** Toast text for a sickness the farm just noticed. */
+const sickText = (game: GameState, animal: Animal): string => {
+  if (!animal.health) return '';
+  const disease = DISEASES[animal.health.disease];
+  const medicine = medicineFor(animal);
+  const care = medicateTaskFor(game.tasks, animal.id)
+    ? 'A equipe vai medicar.'
+    : `Compre ${medicine ? MEDICINES[medicine].label.toLowerCase() : 'remédio'} na loja.`;
+  return `${disease.icon} ${disease.label}: ${animalName(animal)} está doente. ${care}`;
 };
 
 /** Toast text for a site, upgrade or demolition the crew finished. */
@@ -209,6 +260,7 @@ const loaded = (() => {
 })();
 
 let toastCounter = 0;
+let sightingCounter = 0;
 
 export const useGameStore = create<GameStore>()(
   subscribeWithSelector((set, get) => {
@@ -247,11 +299,21 @@ export const useGameStore = create<GameStore>()(
         const { settings, game, devTimeScale } = get();
         if (settings.speed === 0 || realSeconds <= 0) return;
         const dt = realSeconds * GAME_MINUTES_PER_REAL_SECOND * settings.speed * devTimeScale;
-        const { state, workersLeft, hungryAnimals, tempsLeft, worksFinished, animalsDied } = advanceGame(game, dt);
+        const tick = advanceGame(game, dt);
+        const { state, workersLeft, hungryAnimals, tempsLeft, worksFinished, animalsDied } = tick;
         set({ game: state });
+        for (const animal of tick.sickNoticed) get().showMessage(sickText(state, animal), 'error');
+        if (tick.predatorAttacks.length > 0) get().reportAttacks(tick.predatorAttacks);
+        if (tick.diedOfSickness.length > 0) {
+          const names = tick.diedOfSickness
+            .map((a) => `${animalName(a)} (${a.health ? DISEASES[a.health.disease].label.toLowerCase() : 'doença'})`)
+            .join(', ');
+          get().showMessage(`Morreu sem tratamento: ${names}. A carcaça ficou no chão.`, 'error');
+          if (tick.diedOfSickness.some((a) => a.id === get().selectedAnimal)) set({ selectedAnimal: null });
+        }
         for (const work of worksFinished) get().showMessage(finishedText(work), 'info');
         if (animalsDied.length > 0) {
-          const names = animalsDied.map((a) => `${ANIMALS[a.kind].label.toLowerCase()} ${BREEDS[a.breed].label}`).join(', ');
+          const names = animalsDied.map(animalName).join(', ');
           get().showMessage(`Morreu de velhice: ${names}.`, 'info');
           if (animalsDied.some((a) => a.id === get().selectedAnimal)) set({ selectedAnimal: null });
         }
@@ -449,6 +511,25 @@ export const useGameStore = create<GameStore>()(
       },
       sellProduct: (product, quantity) => {
         commit(sellAnimalProduct(get().game, product, quantity));
+      },
+      buyMedicine: (id, quantity) => {
+        commit(buyMedicine(get().game, id, quantity), `${MEDICINES[id].label}: +${quantity}.`);
+      },
+      sightings: [],
+      showSighting: (predator, x, y) => {
+        const now = performance.now() / 1000;
+        const fresh = get().sightings.filter((s) => now - s.at < 30);
+        set({ sightings: [...fresh, { id: ++sightingCounter, predator, x, y, at: now }] });
+      },
+      cameraFocus: null,
+      focusCamera: (x, y) => set((s) => ({ cameraFocus: { id: (s.cameraFocus?.id ?? 0) + 1, x, y } })),
+      reportAttacks: (attacks) => {
+        const game = get().game;
+        for (const attack of attacks) get().showMessage(attackText(game, attack), 'error');
+        for (const a of attacks) get().showSighting(a.predator, a.x, a.y);
+        const eaten = new Set(attacks.filter((a) => a.outcome === 'eaten').map((a) => a.victim.id));
+        const selected = get().selectedAnimal;
+        if (selected !== null && eaten.has(selected)) set({ selectedAnimal: null });
       },
       devApply: (transform, message) => {
         set((s) => ({ game: transform(s.game) }));

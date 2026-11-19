@@ -72,9 +72,14 @@ Grande demais para uma entrega: dividida em sub-etapas, cada uma com branch e ve
   fase. **O animal morre de velhice** no fim do ciclo. Sem reprodução por enquanto. Feito: 2 raças por
   espécie (comum e nobre), estrelas 1–3, filhote 12 h → jovem 12 h → adulto 48 h → idoso 24 h (tempo real
   em 1×), compra de filhote ou adulto, venda pelo card do animal. Save v10.
-- **3d, saúde e predadores**: doença por hora (conforto, lotação, fome, idade), incubação percebida antes
+- **3d, saúde e predadores** ✅: doença por hora (conforto, lotação, fome, idade), incubação percebida antes
   por quem tem a habilidade, remédio comprado e tarefa de medicar, visual de doente. Predador à noite por
-  abrigo, com chance × (1 − segurança). Sorteios determinísticos (`hash01`).
+  abrigo, com chance × (1 − segurança). Sorteios determinísticos (`hash01`). Feito: verminose, gripe (contagiosa)
+  e infecção, mais o ferimento de predador; sem remédio, gripe, infecção e ferimento matam. Vermífugo e antibiótico
+  na loja, medicar e recolher carcaça viram tarefas automáticas de Tratar animais. Predadores atacam todos os
+  abrigos à noite (mais animais e animais fora do abrigo atraem mais; filhotes são alvo preferido): comem os
+  pequenos e filhotes (a carcaça fica no chão e aumenta a chance de infecção) e ferem os grandes. Evento raro.
+  Save v11.
 - **3e, esterco e adubo**: esterco no abrigo, coletado pela equipe, e adubar acelera ou melhora a planta
   (versão simples; a etapa 7 amplia).
 

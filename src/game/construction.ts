@@ -378,9 +378,14 @@ export const repairSiteTasks = (state: GameState): GameState => {
   const sites = new Set(state.structures.filter((s) => s.work).map((s) => s.id));
   const shelters = new Set(state.structures.filter((s) => shelterDef(s.type)).map((s) => s.id));
   let next = dropTasks(state, (t) => {
-    if (t.kind === 'tend') return t.job?.type !== 'shelter' || !shelters.has(t.job.structureId);
+    const job = t.job;
+    // Animal care (medicate, carcass) is checked by queueAnimalCare as the game runs.
+    if (t.kind === 'tend') {
+      if (!job || job.type === 'structure' || job.type === 'road') return true;
+      return job.type === 'shelter' && !shelters.has(job.structureId);
+    }
     if (t.kind !== 'build') return false;
-    return !t.job || t.job.type === 'shelter' || (t.job.type === 'structure' && !sites.has(t.job.structureId));
+    return !job || (job.type !== 'structure' && job.type !== 'road') || (job.type === 'structure' && !sites.has(job.structureId));
   });
   for (const s of next.structures) if (s.work) next = addSiteTasks(next, s);
   return next;

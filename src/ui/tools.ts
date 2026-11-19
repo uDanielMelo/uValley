@@ -1,3 +1,4 @@
+import { ANIMALS } from '../data/animals';
 import { STRUCTURES } from '../data/structures';
 import type { GameState, Task, TaskKind, ToolId } from '../game/types';
 
@@ -42,7 +43,7 @@ export const TASK_VERBS: Record<TaskKind, string> = {
   seed: 'Plantando',
   water: 'Regando',
   hand: 'Colhendo',
-  tend: 'Coletando',
+  tend: 'Cuidando dos animais',
   build: 'Em obra',
 };
 
@@ -50,6 +51,12 @@ export const TASK_VERBS: Record<TaskKind, string> = {
 const jobWords = (game: GameState, task: Task): [string, string] => {
   const job = task.job;
   if (job?.type === 'road') return job.remove ? ['Remover estrada', 'Removendo estrada'] : ['Abrir estrada', 'Abrindo estrada'];
+  if (job?.type === 'medicate') {
+    const animal = game.animals.find((a) => a.id === job.animalId);
+    const name = animal ? ANIMALS[animal.kind].label.toLowerCase() : 'animal';
+    return [`Medicar ${name}`, `Medicando ${name}`];
+  }
+  if (job?.type === 'carcass') return ['Recolher carcaça', 'Recolhendo carcaça'];
   const target = job ? game.structures.find((s) => s.id === job.structureId) : undefined;
   if (!target) return [TASK_LABELS[task.kind], TASK_VERBS[task.kind]];
   const name = STRUCTURES[target.type].label.toLowerCase();

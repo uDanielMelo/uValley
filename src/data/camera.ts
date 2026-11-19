@@ -19,6 +19,8 @@ export const CAMERA = {
   /** Close enough to see people (≈0.5 tile tall) and chickens. */
   minDistance: 3.5,
   maxDistance: 70,
+  /** Zoom used when the camera is sent to a spot (e.g. the dev attack preview). */
+  focusDistance: 6,
   zoomSensitivity: 0.0015,
   /** Smoothing rate for camera motion (higher = snappier). */
   damping: 12,

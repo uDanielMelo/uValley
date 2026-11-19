@@ -54,6 +54,8 @@ export function CameraRig() {
   const pointer = useRef({ x: 0, y: 0, inside: false, drag: null as DragMode, button: -1 });
   const keys = useRef(new Set<string>());
   const panRef = useRef<((dx: number, dy: number, viewHeight: number) => void) | null>(null);
+  /** Id of the last camera focus request already followed. */
+  const focused = useRef(useGameStore.getState().cameraFocus?.id ?? 0);
 
   useEffect(() => {
     const el = gl.domElement;
@@ -179,6 +181,14 @@ export function CameraRig() {
       const dirY = p.y < m ? -1 : p.y > height - m ? 1 : 0;
       const step = CAMERA.edgePanSpeed * dt;
       if (dirX || dirY) panRef.current(-dirX * step, -dirY * step, height);
+    }
+
+    // Sent to a spot (dev tools): center it and come closer.
+    const focus = useGameStore.getState().cameraFocus;
+    if (focus && focus.id !== focused.current) {
+      focused.current = focus.id;
+      g.target.set(focus.x - GRID_SIZE / 2, 0, focus.y - GRID_SIZE / 2);
+      g.distance = Math.min(g.distance, CAMERA.focusDistance);
     }
 
     let keyDir = 0;

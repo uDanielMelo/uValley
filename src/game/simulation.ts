@@ -2,6 +2,7 @@ import { WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { GROWTH_STEP_MINUTES } from '../data/world';
 import { growTiles } from './growth';
 import { payFeed, removeDeadAnimals, stepAnimals } from './animals';
+import { queueAnimalCare, stepHealth, type PredatorAttack } from './health';
 import { queueShelterChores } from './shelters';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
 import type { Animal, GameState, StructureInstance, StructureWorkKind } from './types';
@@ -21,6 +22,11 @@ export interface TickResult {
   worksFinished: FinishedWork[];
   /** Animals that died of old age. */
   animalsDied: Animal[];
+  /** Sicknesses the farm just noticed. */
+  sickNoticed: Animal[];
+  /** Animals that died of a sickness or wound left untreated (their carcass stays). */
+  diedOfSickness: Animal[];
+  predatorAttacks: PredatorAttack[];
 }
 
 export interface FinishedWork {
@@ -50,19 +56,33 @@ const finishedWorks = (before: readonly StructureInstance[], after: readonly Str
 /**
  * Advances the game by dtMinutes: crop growth (in GROWTH_STEP_MINUTES steps, so the tiles array
  * only changes on step boundaries or when a task finishes), workers (including construction) and animals,
- * then queues a collection at every shelter with products. Then, for each
+ * then health (sickness, predators) and the standing orders: collecting at shelters with products,
+ * medicating noticed sick animals and taking carcasses away. Then, for each
  * full hour that ended: wages for the hours of the shift, day laborers leaving when it ends, and
  * at midnight the feed and a new hiring board.
  */
 export const advanceGame = (state: GameState, dtMinutes: number): TickResult => {
-  if (dtMinutes <= 0) return { state, workersLeft: [], hungryAnimals: 0, tempsLeft: 0, worksFinished: [], animalsDied: [] };
+  if (dtMinutes <= 0) {
+    return {
+      state,
+      workersLeft: [],
+      hungryAnimals: 0,
+      tempsLeft: 0,
+      worksFinished: [],
+      animalsDied: [],
+      sickNoticed: [],
+      diedOfSickness: [],
+      predatorAttacks: [],
+    };
+  }
   const gameMinutes = state.gameMinutes + dtMinutes;
   const from = Math.floor(state.gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const to = Math.floor(gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const tiles = to > from ? growTiles(state.tiles, from, to) : state.tiles;
   const aged = removeDeadAnimals(stepAnimals(stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes), dtMinutes));
   const animalsDied = aged.died;
-  let next = queueShelterChores(aged.state);
+  const health = stepHealth(aged.state, state.gameMinutes);
+  let next = queueAnimalCare(queueShelterChores(health.state));
   const worksFinished = finishedWorks(state.structures, next.structures);
 
   const workersLeft: string[] = [];
@@ -89,7 +109,17 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       hungryAnimals = fed.hungry;
     }
   }
-  return { state: next, workersLeft, hungryAnimals, tempsLeft, worksFinished, animalsDied };
+  return {
+    state: next,
+    workersLeft,
+    hungryAnimals,
+    tempsLeft,
+    worksFinished,
+    animalsDied,
+    sickNoticed: health.noticed,
+    diedOfSickness: health.died,
+    predatorAttacks: health.attacks,
+  };
 };
 
 /** advanceGame without the events. */

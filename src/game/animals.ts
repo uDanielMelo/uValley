@@ -22,7 +22,9 @@ import {
   WANDER_RADIUS,
   type AnimalId,
 } from '../data/animals';
+import { SICK_RESALE } from '../data/health';
 import { MINUTES_PER_DAY } from '../data/world';
+import { healthFactor, healthMoveSpeed, isKnownSick } from './disease';
 import { findPath, segmentClear } from './path';
 import { hash01 } from './random';
 import {
@@ -112,21 +114,28 @@ export const animalProduct = (animal: Pick<Animal, 'kind' | 'breed'>): AnimalPro
 export const productionRate = (gameMinutes: number, animal: Pick<Animal, 'breed' | 'stars' | 'bornAt'>): number =>
   BREEDS[animal.breed].production * ANIMAL_STARS[animal.stars].production * LIFE_STAGES[lifeStage(gameMinutes, animal)].production;
 
-/** Draft strength (ox, horse) from breed, stars and life stage. */
-export const draftStrength = (gameMinutes: number, animal: Pick<Animal, 'breed' | 'stars' | 'bornAt'>): number =>
-  BREEDS[animal.breed].labor * ANIMAL_STARS[animal.stars].production * LIFE_STAGES[lifeStage(gameMinutes, animal)].labor;
+/** Draft strength (ox, horse) from breed, stars, life stage and health. */
+export const draftStrength = (gameMinutes: number, animal: Pick<Animal, 'breed' | 'stars' | 'bornAt' | 'health'>): number =>
+  BREEDS[animal.breed].labor *
+  ANIMAL_STARS[animal.stars].production *
+  LIFE_STAGES[lifeStage(gameMinutes, animal)].labor *
+  healthFactor(gameMinutes, animal);
 
 /** Price to buy one: species price × breed, half for a baby. */
 export const purchasePrice = (kind: AnimalId, breed: BreedId, age: PurchaseAge): number =>
   Math.round(ANIMALS[kind].purchaseCost * BREEDS[breed].price * (age === 'baby' ? BABY_PRICE : 1));
 
-/** What selling it gives back: breed, stars and life stage set the price (the old fetch little). */
-export const animalSalePrice = (gameMinutes: number, animal: Pick<Animal, 'kind' | 'breed' | 'stars' | 'bornAt'>): number =>
+/** What selling it gives back: breed, stars and life stage set the price (the old and the sick fetch little). */
+export const animalSalePrice = (
+  gameMinutes: number,
+  animal: Pick<Animal, 'kind' | 'breed' | 'stars' | 'bornAt' | 'health'>,
+): number =>
   Math.round(
     purchasePrice(animal.kind, animal.breed, 'adult') *
       ANIMAL_RESALE *
       ANIMAL_STARS[animal.stars].resale *
-      LIFE_STAGES[lifeStage(gameMinutes, animal)].resale,
+      LIFE_STAGES[lifeStage(gameMinutes, animal)].resale *
+      (isKnownSick(animal) ? SICK_RESALE : 1),
   );
 
 const STAR_IDS: readonly Stars[] = [1, 2, 3];
@@ -300,7 +309,7 @@ const followPath = (from: Pick<Animal, 'x' | 'y' | 'path'>, distance: number): P
  * Moves every animal for `minutes`. Awake: wander over pasture near the shelter, with pauses (and
  * walk back when too far). At night: walk home and sleep inside. Fed animals produce; products go
  * to the shelter's stock (production waits while it is full, is faster in better shelters and
- * slows on crowded pasture).
+ * slows on crowded pasture and with sickness).
  */
 export const stepAnimals = (state: GameState, minutes: number): GameState => {
   if (minutes <= 0 || state.animals.length === 0) return state;
@@ -318,7 +327,8 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
     const product = animalProduct(a);
     if (product && a.fed && shelter) {
       const needed = def.productionHours * 60;
-      const rate = crowd * productionMultiplier(shelter) * productionRate(state.gameMinutes, a);
+      const rate =
+        crowd * productionMultiplier(shelter) * productionRate(state.gameMinutes, a) * healthFactor(state.gameMinutes, a);
       productMinutes = Math.min(needed, productMinutes + minutes * rate);
       if (productMinutes >= needed && stockTotal(shelter.stock) < stockCap(shelter)) {
         world = addStock(world, shelter.id, product);
@@ -341,7 +351,8 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
       }
     }
     if (spot.path.length > 0) {
-      spot = followPath(spot, def.moveSpeed * LIFE_STAGES[lifeStage(state.gameMinutes, a)].moveSpeed * minutes);
+      const pace = LIFE_STAGES[lifeStage(state.gameMinutes, a)].moveSpeed * healthMoveSpeed(state.gameMinutes, a);
+      spot = followPath(spot, def.moveSpeed * pace * minutes);
       if (spot.path.length === 0 && awake) {
         const [min, max] = WANDER_PAUSE;
         waitMinutes = min + hash01(a.id * 131 + tick) * (max - min);

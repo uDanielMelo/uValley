@@ -4,10 +4,12 @@
  */
 import { ANIMAL_PRODUCT_IDS, GAME_MINUTES_PER_REAL_HOUR, type AnimalId } from '../data/animals';
 import { CROP_IDS } from '../data/crops';
+import { DISEASES, MEDICINE_IDS, type DiseaseId } from '../data/health';
 import { STRUCTURES } from '../data/structures';
 import { HOME_POSITION, MAX_WORKERS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { addAnimal, animalProduct } from './animals';
+import { raidShelter, type PredatorAttack } from './health';
 import { addStock, sheltersFor } from './shelters';
 import { findFreeSpot, placeStructure } from './structures';
 import { growthMinutesNeeded } from './crops';
@@ -155,3 +157,42 @@ export const ageAnimals = (state: GameState, realHours: number): GameState => ({
   ...state,
   animals: state.animals.map((a) => ({ ...a, bornAt: a.bornAt - realHours * GAME_MINUTES_PER_REAL_HOUR })),
 });
+
+/**
+ * Makes a healthy animal sick (the first one, or a given id) with symptoms showing now and the
+ * farm aware of it.
+ */
+export const sickenAnimal = (state: GameState, disease: DiseaseId = 'flu', animalId?: number): GameState => {
+  const target = state.animals.find((a) => (animalId === undefined ? !a.health : a.id === animalId));
+  if (!target) return state;
+  const since = state.gameMinutes - DISEASES[disease].incubationRealHours * GAME_MINUTES_PER_REAL_HOUR;
+  return {
+    ...state,
+    animals: state.animals.map((a) => (a.id === target.id ? { ...a, health: { disease, since, noticed: true } } : a)),
+  };
+};
+
+/** Every animal healthy again. */
+export const healAll = (state: GameState): GameState => ({
+  ...state,
+  animals: state.animals.map(({ health: _health, ...a }) => a),
+});
+
+/** Adds doses of every medicine. */
+export const addMedicine = (state: GameState, amount: number): GameState => ({
+  ...state,
+  inventory: {
+    ...state.inventory,
+    medicine: MEDICINE_IDS.reduce((m, id) => addCount(m, id, Math.max(0, Math.floor(amount))), state.inventory.medicine),
+  },
+});
+
+/** A predator raids the shelter with most animals right now. */
+export const forceRaid = (state: GameState): { state: GameState; attack: PredatorAttack | null } => {
+  const counts = new Map<number, number>();
+  for (const a of state.animals) counts.set(a.shelterId, (counts.get(a.shelterId) ?? 0) + 1);
+  const [shelterId] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+  const shelter = state.structures.find((s) => s.id === shelterId);
+  if (!shelter) return { state, attack: null };
+  return raidShelter(state, shelter, (Math.floor(state.gameMinutes) % 97) / 97);
+};
