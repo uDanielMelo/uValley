@@ -27,6 +27,10 @@ import {
 } from '../game/save';
 import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type DemolishChange } from '../game/construction';
 import { buyMedicine, medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
+import { loadCargo, unloadCargo, upgradeVehicle, type Good } from '../game/market';
+import { CAMERA } from '../data/camera';
+import { CITY_SHOPS, type CityShopId } from '../data/city';
+import { TOWN_SHOPS, VEHICLES } from '../data/market';
 import { seasonOf, weatherLook } from '../game/climate';
 import { advanceGame, type FinishedWork } from '../game/simulation';
 import type { Spoiled } from '../game/storage';
@@ -36,7 +40,13 @@ import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/s
 import type { ActionError, ActionResult, Animal, GameState, Rotation, TaskKind, ToolId } from '../game/types';
 import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
 
-export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | null;
+export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | 'market' | 'garage' | null;
+
+/** Shop panel tabs. */
+export type ShopTab = 'seeds' | 'animals' | 'medicine' | 'land';
+
+/** Which world the scene shows. */
+export type View = 'farm' | 'city';
 
 /** Build mode: placing a structure type, painting roads, or demolishing (structures and roads). */
 export type BuildMode = StructureId | 'road' | 'demolish' | null;
@@ -146,9 +156,22 @@ export interface GameStore {
   reportAttacks: (attacks: readonly PredatorAttack[]) => void;
   /** Shows a predator running off from a spot (tile space), without any attack. */
   showSighting: (predator: PredatorId, x: number, y: number) => void;
+  /** Farm or town. Not saved: the game always opens on the farm. */
+  view: View;
+  goToCity: () => void;
+  goToFarm: () => void;
+  /** Opens what a town shop offers. */
+  openCityShop: (id: CityShopId) => void;
+  /** Tab the shop panel opens on. */
+  shopTab: ShopTab;
+  setShopTab: (tab: ShopTab) => void;
+  loadCargo: (good: Good, quantity: number) => void;
+  unloadCargo: (good: Good, quantity: number) => void;
+  upgradeVehicle: () => void;
   /** Last request to move the camera to a spot (tile space); the camera rig follows new ids. */
-  cameraFocus: { id: number; x: number; y: number } | null;
-  focusCamera: (x: number, y: number) => void;
+  cameraFocus: { id: number; x: number; y: number; distance?: number } | null;
+  /** Centers the camera on a spot; `distance` sets the zoom (default: come close). */
+  focusCamera: (x: number, y: number, distance?: number) => void;
   /** Dev tools: applies a state transform directly. */
   devApply: (transform: (game: GameState) => GameState, message?: string) => void;
   setDevTimeScale: (scale: number) => void;
@@ -202,6 +225,7 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'no-fertilizer': 'Sem adubo. Recolha esterco nos abrigos ou compre na loja.',
   'already-fertilized': 'Esta terra já está adubada.',
   'not-fertilizable': 'Só é possível adubar terra arada ou plantada.',
+  'vehicle-full': 'O veículo está cheio. Troque por um maior na concessionária.',
   'not-sick': 'Este animal não está doente.',
 };
 
@@ -345,6 +369,13 @@ export const useGameStore = create<GameStore>()(
           }
         }
         if (tick.spoiled) get().showMessage(`Estragou no estoque: ${spoiledText(tick.spoiled)}.`, 'error');
+        for (const delivery of tick.deliveries) {
+          const orders = delivery.filled.map((o) => TOWN_SHOPS[o.shop].label).join(', ');
+          get().showMessage(
+            `🛻 A carga foi para a cidade: +${delivery.earned} moedas${orders ? ` (pedidos: ${orders})` : ''}.`,
+            'info',
+          );
+        }
         if (tick.predatorAttacks.length > 0) get().reportAttacks(tick.predatorAttacks);
         if (tick.diedOfSickness.length > 0) {
           const names = tick.diedOfSickness
@@ -566,8 +597,48 @@ export const useGameStore = create<GameStore>()(
         const fresh = get().sightings.filter((s) => now - s.at < 30);
         set({ sightings: [...fresh, { id: ++sightingCounter, predator, x, y, at: now }] });
       },
+      view: 'farm',
+      goToCity: () => {
+        set({
+          view: 'city',
+          tool: null,
+          buildMode: null,
+          area: null,
+          activitiesOpen: false,
+          selectedStructure: null,
+          selectedAnimal: null,
+          hoveredTile: null,
+          hoveredAnimal: null,
+          pendingPlot: null,
+          panel: null,
+        });
+        get().focusCamera(16, 16, CAMERA.townDistance);
+      },
+      goToFarm: () => {
+        set({ view: 'farm', panel: null });
+        get().focusCamera(16, 16, CAMERA.initialDistance);
+      },
+      openCityShop: (id) => {
+        const action = CITY_SHOPS[id].action;
+        if (action.panel === 'shop') set({ panel: 'shop', shopTab: action.tab });
+        else set({ panel: action.panel });
+      },
+      shopTab: 'seeds',
+      setShopTab: (shopTab) => set({ shopTab }),
+      loadCargo: (good, quantity) => {
+        commit(loadCargo(get().game, good, quantity));
+      },
+      unloadCargo: (good, quantity) => {
+        commit(unloadCargo(get().game, good, quantity));
+      },
+      upgradeVehicle: () => {
+        const game = get().game;
+        const next = game.vehicleLevel < 3 ? VEHICLES[(game.vehicleLevel + 1) as 2 | 3] : null;
+        commit(upgradeVehicle(game), next ? `${next.icon} Novo veículo: ${next.label.toLowerCase()} (${next.capacity} kg).` : undefined);
+      },
       cameraFocus: null,
-      focusCamera: (x, y) => set((s) => ({ cameraFocus: { id: (s.cameraFocus?.id ?? 0) + 1, x, y } })),
+      focusCamera: (x, y, distance) =>
+        set((s) => ({ cameraFocus: { id: (s.cameraFocus?.id ?? 0) + 1, x, y, ...(distance ? { distance } : {}) } })),
       reportAttacks: (attacks) => {
         const game = get().game;
         for (const attack of attacks) get().showMessage(attackText(game, attack), 'error');

@@ -188,7 +188,7 @@ export function CameraRig() {
     if (focus && focus.id !== focused.current) {
       focused.current = focus.id;
       g.target.set(focus.x - GRID_SIZE / 2, 0, focus.y - GRID_SIZE / 2);
-      g.distance = Math.min(g.distance, CAMERA.focusDistance);
+      g.distance = focus.distance ?? Math.min(g.distance, CAMERA.focusDistance);
     }
 
     let keyDir = 0;

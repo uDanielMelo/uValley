@@ -4,6 +4,7 @@ import { applyDayWeather, type WeatherReport } from './climate';
 import { growTiles } from './growth';
 import { payFeed, removeDeadAnimals, stepAnimals } from './animals';
 import { queueAnimalCare, stepHealth, type PredatorAttack } from './health';
+import { deliverCargo, pickupsBetween, refreshOrders, type Delivery } from './market';
 import { queueShelterChores } from './shelters';
 import { spoilGoods, type Spoiled } from './storage';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
@@ -33,6 +34,8 @@ export interface TickResult {
   weatherReports: WeatherReport[];
   /** Goods that spoiled at midnight (null when nothing did). */
   spoiled: Spoiled | null;
+  /** Loads picked up and paid. */
+  deliveries: Delivery[];
 }
 
 export interface FinishedWork {
@@ -81,6 +84,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       predatorAttacks: [],
       weatherReports: [],
       spoiled: null,
+      deliveries: [],
     };
   }
   const gameMinutes = state.gameMinutes + dtMinutes;
@@ -122,12 +126,20 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       const weather = applyDayWeather(next, day);
       weatherReports.push(weather.report);
       const spoil = spoilGoods(weather.state, day);
-      next = spoil.state;
+      next = refreshOrders(spoil.state, day);
       if (spoil.spoiled.total > 0) spoiled = spoil.spoiled;
     }
   }
+  // The car takes the load to town at its visits.
+  const deliveries: Delivery[] = [];
+  for (const _pickup of pickupsBetween(state.gameMinutes, gameMinutes)) {
+    const done = deliverCargo(next);
+    next = done.state;
+    if (done.delivery) deliveries.push(done.delivery);
+  }
   return {
     state: next,
+    deliveries,
     workersLeft,
     hungryAnimals,
     tempsLeft,

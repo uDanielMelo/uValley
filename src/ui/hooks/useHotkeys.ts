@@ -4,9 +4,9 @@ import { useGameStore } from '../../store/gameStore';
 import { TOOLS } from '../tools';
 
 /**
- * Global keyboard shortcuts: H hand, 1–4 order tools (again: back to the hand), Q/E cycle seeds,
- * Space pause, L shop, I inventory, T workers, B build menu, R rotate the structure being placed,
- * Esc steps back (area, plot, build mode, hub, selection, panel, tool).
+ * Global keyboard shortcuts: H hand, 1–5 order tools (again: back to the hand), Q/E cycle seeds,
+ * Space pause, L shop, I inventory, T workers, B build menu, C town and back, R rotate the
+ * structure being placed, Esc steps back (area, plot, build mode, hub, selection, panel, tool, town).
  */
 export function useHotkeys(): void {
   useEffect(() => {
@@ -15,8 +15,14 @@ export function useHotkeys(): void {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       const store = useGameStore.getState();
 
+      const inTown = store.view === 'city';
+      if (e.key.toLowerCase() === 'c') {
+        if (inTown) store.goToFarm();
+        else store.goToCity();
+        return;
+      }
       const tool = TOOLS.find((t) => t.key === e.key);
-      if (tool) {
+      if (tool && !inTown) {
         store.setTool(tool.id);
         return;
       }
@@ -39,7 +45,7 @@ export function useHotkeys(): void {
           store.openPanel('workers');
           break;
         case 'b':
-          store.openPanel('build');
+          if (!inTown) store.openPanel('build');
           break;
         case 'r':
           if (store.buildMode && store.buildMode !== 'demolish' && store.buildMode !== 'road') store.rotateBuild();
@@ -61,6 +67,7 @@ export function useHotkeys(): void {
           else if (store.selectedAnimal !== null) store.selectAnimal(null);
           else if (store.panel) store.closePanel();
           else if (store.tool !== null) store.setTool(null);
+          else if (inTown) store.goToFarm();
           break;
       }
     };

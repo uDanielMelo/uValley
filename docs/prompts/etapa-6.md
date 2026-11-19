@@ -1,32 +1,30 @@
-# Prompt para continuar: etapa 5 (centro comercial)
+# Prompt para continuar: etapa 6 (construção em planta baixa)
 
 Cole o bloco abaixo numa sessão nova do Claude Code, na pasta do projeto.
 
 ---
 
-Vamos continuar o uValley na **etapa 5: centro comercial (segundo ambiente)**. Leia o contexto, decida o
+Vamos continuar o uValley na **etapa 6: hub de construção em planta baixa**. Leia o contexto, decida o
 desenho (tenho dado autonomia: decida o que for de balanceamento e registre em `docs/roadmap.md`) e siga até
 o fim validando cada parte.
 
 ## Onde estamos
 
 - Leia `CLAUDE.md` (modelo do jogo) e `docs/roadmap.md` (etapas e decisões).
-- As etapas 0–4 estão na `main`. Crie `fase-3b-etapa-5` a partir dela.
-- Save na versão 12. `npm test` e `npm run build` precisam passar.
+- As etapas 0–5 estão na `main`. Crie `fase-3c-etapa-6` a partir dela.
+- Save na versão 13. `npm test` e `npm run build` precisam passar.
 - Commit: faça também o push da branch e, ao fim da etapa, o merge (fast-forward) na `main`.
 
 ## Escopo (do documento de design)
 
-Troca de cena fazenda ↔ cidade, lojas clicáveis, peso dos itens e capacidade do veículo (upgrade), entregas
-pelo carro, contratação na cidade, vendas e pedidos.
+Visual azulado de projeto ao construir estradas e prédios, compra de decoração e iluminação.
 
 ## O que já existe
 
-- A picape (`game/visitors.ts`, `scene/Car.tsx`) é só visual: vem pela rodovia nos `CAR.visitHours`, estaciona
-  perto da caixa de venda e vai embora.
-- Venda direta pela caixa de venda (`InventoryPanel`), loja (`ShopPanel`) com sementes, animais, remédios,
-  adubo e lotes, contratação pelo hub da equipe (`WorkersPanel`).
-- Armazenamento e estragos (etapa 4) já dão motivo para vender.
+- Modo de construção (`buildMode` no store, `BuildPanel`, `BuildGhost`, tecla B, R gira, Esc sai), estradas
+  por clique e arraste, demolir. Obras são feitas pela equipe (`game/construction.ts`).
+- Postes de luz só existem na cidade (`scene/city/CityScene.tsx`); janelas e lampião emissivos à noite
+  (`scene/materials.ts`).
 
 ## Notas práticas (Windows)
 

@@ -1,5 +1,6 @@
 import type { AnimalId, AnimalProductId, BreedId } from '../data/animals';
 import type { DiseaseId, MedicineId } from '../data/health';
+import type { OrderGood, TownShopId, VehicleLevel } from '../data/market';
 import type { CropId } from '../data/crops';
 import type { ShelterLevel, StructureId } from '../data/structures';
 import type { SkillId } from '../data/workers';
@@ -76,6 +77,24 @@ export interface Inventory {
   medicine: MedicineCounts;
   /** Fertilizer (cured manure) units. */
   fertilizer: number;
+}
+
+/** Goods loaded on the vehicle, waiting for the next pickup. */
+export interface Cargo {
+  produce: ItemCounts;
+  products: ProductCounts;
+}
+
+/** A town shop's order: deliver this many units in a load by the end of the due day. */
+export interface Order {
+  id: number;
+  shop: TownShopId;
+  good: OrderGood;
+  quantity: number;
+  /** Coins paid for the whole lot. */
+  reward: number;
+  /** Last day (1-based) to deliver. */
+  dueDay: number;
 }
 
 /** What a 'build' or 'tend' task works on. */
@@ -219,6 +238,12 @@ export interface GameState {
   tasks: Task[];
   animals: Animal[];
   carcasses: Carcass[];
+  /** The farm's vehicle (1 pickup, 2 SUV, 3 truck). */
+  vehicleLevel: VehicleLevel;
+  /** Goods loaded for town. */
+  cargo: Cargo;
+  /** Open town orders. */
+  orders: Order[];
   /** Placed structures, including the starting house and shipping bin. */
   structures: StructureInstance[];
   /** Next id for tasks, workers, candidates, animals, carcasses and structures. */
@@ -273,6 +298,7 @@ export type ActionError =
   | 'no-fertilizer'
   | 'already-fertilized'
   | 'not-fertilizable'
+  | 'vehicle-full'
   | 'not-sick';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };

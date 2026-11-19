@@ -310,7 +310,8 @@ function LandTab() {
 }
 
 export function ShopPanel() {
-  const [tab, setTab] = useState<'seeds' | 'animals' | 'medicine' | 'land'>('seeds');
+  const tab = useGameStore((s) => s.shopTab);
+  const setTab = useGameStore((s) => s.setShopTab);
   const close = useGameStore((s) => s.closePanel);
   return (
     <Panel title="🛒 Loja" onClose={close}>

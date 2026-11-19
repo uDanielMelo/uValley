@@ -21,6 +21,8 @@ export const CAMERA = {
   maxDistance: 70,
   /** Zoom used when the camera is sent to a spot (e.g. the dev attack preview). */
   focusDistance: 6,
+  /** Zoom when arriving in town. */
+  townDistance: 22,
   zoomSensitivity: 0.0015,
   /** Smoothing rate for camera motion (higher = snappier). */
   damping: 12,

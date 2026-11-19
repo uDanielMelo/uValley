@@ -99,7 +99,7 @@ function DockButton({ icon, label, hotkey, active, onClick, expanded }: DockButt
     <button
       type="button"
       onClick={onClick}
-      title={`${label} (${hotkey})`}
+      title={hotkey ? `${label} (${hotkey})` : label}
       aria-expanded={expanded}
       className={`flex h-12 min-w-14 flex-col items-center justify-center rounded-xl px-2 text-[11px] font-extrabold transition ${
         active ? 'bg-coin/50 ring-2 ring-wood/60' : 'hover:bg-parchment-dark'
@@ -116,7 +116,30 @@ function DockButton({ icon, label, hotkey, active, onClick, expanded }: DockButt
 /**
  * Minimal bottom dock: the hand (move the camera, select), the activities hub and the build menu.
  */
+/** In town: back to the farm, and the market. */
+function TownDock() {
+  const goToFarm = useGameStore((s) => s.goToFarm);
+  const openPanel = useGameStore((s) => s.openPanel);
+  const panel = useGameStore((s) => s.panel);
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <Card className="px-3 py-1.5 text-xs font-bold text-wood/80">Clique numa loja para entrar.</Card>
+      <Card className="flex items-center gap-1 p-1">
+        <DockButton icon="🏡" label="Fazenda" hotkey="C" active={false} onClick={goToFarm} />
+        <span className="h-8 w-px bg-wood/20" aria-hidden />
+        <DockButton icon="🏪" label="Mercado" hotkey="" active={panel === 'market'} onClick={() => openPanel('market')} />
+      </Card>
+    </div>
+  );
+}
+
 export function Dock() {
+  const inTown = useGameStore((s) => s.view === 'city');
+  return inTown ? <TownDock /> : <FarmDock />;
+}
+
+function FarmDock() {
+  const goToCity = useGameStore((s) => s.goToCity);
   const tool = useGameStore((s) => s.tool);
   const building = useGameStore((s) => s.buildMode !== null || s.panel === 'build');
   const open = useGameStore((s) => s.activitiesOpen);
@@ -150,6 +173,8 @@ export function Dock() {
           onClick={() => setOpen()}
         />
         <DockButton icon="🔨" label="Construir" hotkey="B" active={building} onClick={() => openPanel('build')} />
+        <span className="h-8 w-px bg-wood/20" aria-hidden />
+        <DockButton icon="🏙️" label="Cidade" hotkey="C" active={false} onClick={goToCity} />
       </Card>
     </div>
   );

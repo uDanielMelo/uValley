@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import type { Group } from 'three';
+import { VEHICLES } from '../data/market';
 import { meters } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
 import { carRoutes, carState } from '../game/visitors';
@@ -8,14 +9,13 @@ import { useGameStore } from '../store/gameStore';
 import { Pickup, WHEEL_RADIUS } from './models/Car';
 
 const HALF = GRID_SIZE / 2;
-/** Body colors, one per visit of the day. */
-const CAR_COLORS = ['#c0392b', '#2e6da4', '#e8e4da', '#3c8d50'] as const;
 
 const angleDelta = (a: number, b: number): number => Math.atan2(Math.sin(b - a), Math.cos(b - a));
 
 /**
- * The visiting pickup. Its position is derived every frame from the game clock and the road
- * network (game/visitors.ts); this component only re-renders when the visit (color) changes.
+ * The farm's vehicle coming back from town to pick up the load. Its position is derived every frame
+ * from the game clock and the road network (game/visitors.ts); its color and size follow the
+ * vehicle level, so it only re-renders on an upgrade.
  */
 export function Car() {
   const tiles = useGameStore((s) => s.game.tiles);
@@ -23,14 +23,14 @@ export function Car() {
   const root = useRef<Group>(null);
   const wheels = useRef<Array<Group | null>>([]);
   const last = useRef({ x: NaN, z: NaN, heading: NaN });
-  const [visit, setVisit] = useState(0);
+  const level = useGameStore((s) => s.game.vehicleLevel);
+  const vehicle = VEHICLES[level];
 
   useFrame((_, delta) => {
     const r = root.current;
     if (!r) return;
     const car = carState(useGameStore.getState().game.gameMinutes, routes);
     r.visible = car.phase !== 'away';
-    if (car.visit !== visit) setVisit(car.visit);
     if (!r.visible) {
       last.current = { x: NaN, z: NaN, heading: NaN };
       return;
@@ -51,7 +51,9 @@ export function Car() {
 
   return (
     <group ref={root} visible={false}>
-      <Pickup color={CAR_COLORS[visit % CAR_COLORS.length] ?? CAR_COLORS[0]} wheels={wheels} />
+      <group scale={vehicle.scale}>
+        <Pickup color={vehicle.color} wheels={wheels} />
+      </group>
     </group>
   );
 }

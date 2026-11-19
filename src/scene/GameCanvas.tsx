@@ -23,6 +23,7 @@ import { TileHighlight } from './TileHighlight';
 import { TileLayer } from './TileLayer';
 import { WindClock } from './wind';
 import { Workers } from './Workers';
+import { WorldSwitch } from './WorldSwitch';
 
 /** The 3D scene. Static composition: HUD state changes never re-render this component. */
 export function GameCanvas() {
@@ -38,23 +39,25 @@ export function GameCanvas() {
       <CameraRig />
       <Sky />
       <DayNightLight />
-      <Environment />
-      <TileLayer />
-      <RoadLayer />
-      <SoilLayer />
-      <GrassLayer />
-      <TileHighlight />
-      <BuildGhost />
-      <TaskMarkers />
-      <Fences />
-      <CropLayer />
-      <Structures />
-      <Workers />
-      <Animals />
-      <Carcasses />
-      <Predators />
+      <WorldSwitch>
+        <Environment />
+        <TileLayer />
+        <RoadLayer />
+        <SoilLayer />
+        <GrassLayer />
+        <TileHighlight />
+        <BuildGhost />
+        <TaskMarkers />
+        <Fences />
+        <CropLayer />
+        <Structures />
+        <Workers />
+        <Animals />
+        <Carcasses />
+        <Predators />
+        <Car />
+      </WorldSwitch>
       <Rain />
-      <Car />
       <PostFx />
     </Canvas>
   );

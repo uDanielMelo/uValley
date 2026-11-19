@@ -39,6 +39,9 @@ export const createInitialState = (): GameState => {
     tasks: [],
     animals: [],
     carcasses: [],
+    vehicleLevel: 1,
+    cargo: { produce: {}, products: {} },
+    orders: [],
     structures,
     nextId,
   };

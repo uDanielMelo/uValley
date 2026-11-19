@@ -25,15 +25,18 @@ import {
 } from '../data/workers';
 import { GRID_SIZE, MINUTES_PER_DAY, SPEED_OPTIONS, type GameSpeed } from '../data/world';
 import { PLOT_COUNT, TILE_COUNT, inBounds, isValidTileIndex, tileIndex } from './grid';
+import { TOWN_SHOP_IDS, VEHICLE_LEVELS, type OrderGood, type TownShopId, type VehicleLevel } from '../data/market';
 import type {
   Animal,
   AnimalHealth,
   Candidate,
+  Cargo,
   Carcass,
   GameState,
   GridPoint,
   ItemCounts,
   MedicineCounts,
+  Order,
   ProductCounts,
   Rotation,
   Specialty,
@@ -56,7 +59,7 @@ import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -79,16 +82,17 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * `StructureInstance.stock`) and added the 'tend' activity; v9 added shelter levels
  * (`StructureInstance.level`, 'upgrade' work with `toLevel`); v10 gave animals a breed, stars and a
  * birth time (`bornAt`); v11 added health (`Animal.health`), medicine in the inventory and carcasses; v12 added fertilizer
- * (`inventory.fertilizer`, `Tile.fertilized`, `StructureInstance.manure`) and the 'fertilize' activity.
+ * (`inventory.fertilizer`, `Tile.fertilized`, `StructureInstance.manure`) and the 'fertilize' activity; v13
+ * added the vehicle, its load for town and town orders (`vehicleLevel`, `cargo`, `orders`).
  */
-export interface SaveDataV12 {
-  saveVersion: 12;
+export interface SaveDataV13 {
+  saveVersion: 13;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV12;
+export type SaveData = SaveDataV13;
 
 export interface LoadedSave {
   game: GameState;
@@ -235,6 +239,11 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
       return { ...w, priorities };
     });
     return { ...data, game: { ...game, workers, inventory: { ...inventory, fertilizer: 0 } } };
+  },
+  // v12 → v13: the starting pickup, nothing loaded and no orders yet.
+  12: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    return { ...data, game: { ...game, vehicleLevel: 1, cargo: { produce: {}, products: {} }, orders: [] } };
   },
 };
 
@@ -531,6 +540,32 @@ const parseHealth = (v: unknown): AnimalHealth | undefined | null => {
   return { disease: v.disease, since: v.since, noticed: v.noticed };
 };
 
+const isVehicleLevel = (v: unknown): v is VehicleLevel => VEHICLE_LEVELS.some((l) => l === v);
+const isTownShop = (v: unknown): v is TownShopId => TOWN_SHOP_IDS.some((id) => id === v);
+
+const parseOrderGood = (v: unknown): OrderGood | null => {
+  if (!isRecord(v)) return null;
+  if (v.kind === 'crop' && isCropId(v.id)) return { kind: 'crop', id: v.id };
+  if (v.kind === 'product' && isProductId(v.id)) return { kind: 'product', id: v.id };
+  return null;
+};
+
+const parseOrder = (v: unknown): Order | null => {
+  if (!isRecord(v)) return null;
+  const { id, shop, quantity, reward, dueDay } = v;
+  const good = parseOrderGood(v.good);
+  if (!isId(id) || !isTownShop(shop) || !good) return null;
+  if (!isId(quantity) || quantity < 1 || !isFiniteNumber(reward) || reward < 0 || !isId(dueDay)) return null;
+  return { id, shop, good, quantity, reward, dueDay };
+};
+
+const parseCargo = (v: unknown): Cargo | null => {
+  if (!isRecord(v)) return null;
+  const produce = parseCounts(v.produce);
+  const products = parseProducts(v.products);
+  return produce && products ? { produce, products } : null;
+};
+
 const parseCarcass = (v: unknown): Carcass | null => {
   if (!isRecord(v)) return null;
   const { id, kind, breed, x, y, diedAt, shelterId } = v;
@@ -627,6 +662,10 @@ const parseGame = (v: unknown): GameState | null => {
   const structures = parseList(v.structures, parseStructure);
   const candidates = parseList(v.candidates, parseCandidate);
   const carcasses = parseList(v.carcasses, parseCarcass);
+  const orders = parseList(v.orders, parseOrder);
+  const cargo = parseCargo(v.cargo);
+  if (!orders || !cargo || !isVehicleLevel(v.vehicleLevel)) return null;
+  const vehicleLevel = v.vehicleLevel;
   if (!workers || !candidates || !tasks || !animals || !carcasses || !structures || !isId(nextId)) return null;
   const maxId = Math.max(
     0,
@@ -635,6 +674,7 @@ const parseGame = (v: unknown): GameState | null => {
     ...tasks.map((t) => t.id),
     ...animals.map((a) => a.id),
     ...carcasses.map((c) => c.id),
+    ...orders.map((o) => o.id),
     ...structures.map((s) => s.id),
   );
 
@@ -652,6 +692,9 @@ const parseGame = (v: unknown): GameState | null => {
     tasks,
     animals,
     carcasses,
+    vehicleLevel,
+    cargo,
+    orders,
     structures,
     nextId: Math.max(nextId, maxId + 1),
   }));

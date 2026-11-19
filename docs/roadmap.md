@@ -101,9 +101,22 @@ Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
 5. Visual: céu cinza, luz mais fraca, relâmpagos, chuva e neve, paisagem tingida pela estação. Sem mudança no
    formato do save (tudo é derivado).
 
-### Etapa 5: centro comercial (segundo ambiente)
+### Etapa 5: centro comercial (segundo ambiente) ✅
 Troca de cena fazenda ↔ cidade, lojas clicáveis, peso dos itens e capacidade do veículo (upgrade),
 entregas pelo carro, contratação na cidade, vendas e pedidos.
+
+Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
+1. Cidade como segunda cena (tecla C ou botão no Dock): uma rua com sete lojas clicáveis. O jogo continua
+   correndo; a fazenda é desmontada e remontada na volta.
+2. Mercado: o jogador carrega o veículo com colheita e produtos (peso por unidade); a picape é o veículo da
+   fazenda e leva a carga 30 min depois de cada visita (7h, 12h e 18h). A cidade paga 25% a mais que a caixa
+   de venda, que continua vendendo na hora pelo preço base.
+3. Pedidos: padaria, restaurante, ateliê e laticínio pedem lotes com prazo de 2 a 4 dias e pagam 1,6 a 2,1×
+   o preço base; a carga que cobre um pedido inteiro o atende primeiro.
+4. Veículo: picape 250 kg, caminhonete 600 kg (3.500) e caminhão 1.500 kg (9.000), trocados na
+   concessionária; a cor e o tamanho do carro na estrada mudam.
+5. Contratação e compras: a agência abre a equipe e as lojas abrem as abas da loja (que continua acessível
+   pelo topo). Save v13.
 
 ### Etapa 6: hub de construção em planta baixa
 Visual azulado de projeto ao construir estradas e prédios, compra de decoração e iluminação.
