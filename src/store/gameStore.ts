@@ -20,6 +20,7 @@ import { plotOfTile, tileCoords, tileIndex, tilesInRect } from '../game/grid';
 import {
   DEFAULT_SETTINGS,
   clearStorage,
+  deserialize,
   loadFromStorage,
   writeToStorage,
   type GraphicsQuality,
@@ -29,6 +30,8 @@ import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type
 import { buyMedicine, medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
 import { loadCargo, unloadCargo, upgradeVehicle, type Good } from '../game/market';
 import { startResearch } from '../game/research';
+import { canSync, isValidLogin, linkGitHub, unlinkGitHub } from '../game/social';
+import { fetchPublicEvents } from '../services/github';
 import { CAMERA } from '../data/camera';
 import { CITY_SHOPS, type CityShopId } from '../data/city';
 import { TOWN_SHOPS, VEHICLES } from '../data/market';
@@ -41,7 +44,7 @@ import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/s
 import type { ActionError, ActionResult, Animal, GameState, Rotation, TaskKind, ToolId } from '../game/types';
 import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
 
-export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | 'market' | 'garage' | null;
+export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | 'market' | 'garage' | 'profile' | null;
 
 /** Shop panel tabs. */
 export type ShopTab = 'seeds' | 'animals' | 'medicine' | 'land';
@@ -170,6 +173,11 @@ export interface GameStore {
   unloadCargo: (good: Good, quantity: number) => void;
   upgradeVehicle: () => void;
   startResearch: (cropId: CropId) => void;
+  /** Links (or re-syncs) a GitHub account: reads its public activity for the community bonus. */
+  syncGitHub: (login: string) => Promise<void>;
+  unlinkGitHub: () => void;
+  /** Replaces the game with a loaded save (import or cloud); false when the text is not a valid save. */
+  loadSaveText: (raw: string) => boolean;
   /** Last request to move the camera to a spot (tile space); the camera rig follows new ids. */
   cameraFocus: { id: number; x: number; y: number; distance?: number } | null;
   /** Centers the camera on a spot; `distance` sets the zoom (default: come close). */
@@ -641,6 +649,51 @@ export const useGameStore = create<GameStore>()(
       },
       unloadCargo: (good, quantity) => {
         commit(unloadCargo(get().game, good, quantity));
+      },
+      syncGitHub: async (login) => {
+        const name = login.trim();
+        if (!isValidLogin(name)) {
+          get().showMessage('Nome de usuário do GitHub inválido.', 'error');
+          return;
+        }
+        const now = Date.now();
+        const link = get().game.github;
+        if (link?.login === name && !canSync(link, now)) {
+          get().showMessage('Já sincronizado há pouco. Tente de novo em alguns minutos.', 'error');
+          return;
+        }
+        const result = await fetchPublicEvents(name);
+        if (!result.ok) {
+          const text = {
+            'not-found': 'Usuário do GitHub não encontrado.',
+            'rate-limited': 'O GitHub limitou as consultas por agora. Tente mais tarde.',
+            network: 'Não foi possível falar com o GitHub.',
+          }[result.error];
+          get().showMessage(text, 'error');
+          return;
+        }
+        set((s) => ({ game: linkGitHub(s.game, name, result.events, Date.now()) }));
+        const days = get().game.github?.activeDays ?? 0;
+        get().showMessage(`🐙 GitHub ${name}: ${days} dia(s) ativo(s) na semana.`, 'info');
+      },
+      unlinkGitHub: () => set((s) => ({ game: unlinkGitHub(s.game) })),
+      loadSaveText: (raw) => {
+        const loaded = deserialize(raw);
+        if (!loaded) return false;
+        set({
+          game: loaded.game,
+          view: 'farm',
+          tool: null,
+          buildMode: null,
+          area: null,
+          panel: null,
+          selectedStructure: null,
+          selectedAnimal: null,
+          selectedWorker: null,
+          pendingPlot: null,
+        });
+        get().save();
+        return true;
       },
       startResearch: (cropId) => {
         const research = CROPS[cropId].research;

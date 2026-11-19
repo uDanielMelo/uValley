@@ -6,6 +6,7 @@ import { payFeed, removeDeadAnimals, stepAnimals } from './animals';
 import { queueAnimalCare, stepHealth, type PredatorAttack } from './health';
 import { deliverCargo, pickupsBetween, refreshOrders, type Delivery } from './market';
 import { stepResearch } from './research';
+import { communityBonus } from './social';
 import type { CropId } from '../data/crops';
 import { queueShelterChores } from './shelters';
 import { spoilGoods, type Spoiled } from './storage';
@@ -95,7 +96,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   const gameMinutes = state.gameMinutes + dtMinutes;
   const from = Math.floor(state.gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const to = Math.floor(gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
-  const tiles = to > from ? growTiles(state.tiles, from, to) : state.tiles;
+  const tiles = to > from ? growTiles(state.tiles, from, to, communityBonus(state)) : state.tiles;
   const aged = removeDeadAnimals(stepAnimals(stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes), dtMinutes));
   const animalsDied = aged.died;
   const studied = stepResearch(aged.state, dtMinutes);

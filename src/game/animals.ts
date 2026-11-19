@@ -26,6 +26,7 @@ import { BABY_MANURE, MANURE_PER_DAY } from '../data/fertilizer';
 import { SICK_RESALE } from '../data/health';
 import { MINUTES_PER_DAY } from '../data/world';
 import { healthFactor, healthMoveSpeed, isKnownSick } from './disease';
+import { communityBonus } from './social';
 import { findPath, segmentClear } from './path';
 import { hash01 } from './random';
 import {
@@ -338,7 +339,11 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
     if (product && a.fed && shelter) {
       const needed = def.productionHours * 60;
       const rate =
-        crowd * productionMultiplier(shelter) * productionRate(state.gameMinutes, a) * healthFactor(state.gameMinutes, a);
+        crowd *
+        productionMultiplier(shelter) *
+        productionRate(state.gameMinutes, a) *
+        healthFactor(state.gameMinutes, a) *
+        communityBonus(state);
       productMinutes = Math.min(needed, productMinutes + minutes * rate);
       if (productMinutes >= needed && stockTotal(shelter.stock) < stockCap(shelter)) {
         world = addStock(world, shelter.id, product);

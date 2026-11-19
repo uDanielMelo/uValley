@@ -200,6 +200,7 @@ function PanelButtons() {
       />
       <IconButton icon="🛒" label="Loja (L)" active={panel === 'shop'} onClick={() => openPanel('shop')} />
       <IconButton icon="🎒" label="Inventário (I)" active={panel === 'inventory'} onClick={() => openPanel('inventory')} />
+      <IconButton icon="🐙" label="Perfil, GitHub e save" active={panel === 'profile'} onClick={() => openPanel('profile')} />
     </>
   );
 }

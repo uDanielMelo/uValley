@@ -39,6 +39,7 @@ import type {
   Order,
   ProductCounts,
   Research,
+  GitHubLink,
   Rotation,
   Specialty,
   Stars,
@@ -61,7 +62,7 @@ import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -86,16 +87,17 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * birth time (`bornAt`); v11 added health (`Animal.health`), medicine in the inventory and carcasses; v12 added fertilizer
  * (`inventory.fertilizer`, `Tile.fertilized`, `StructureInstance.manure`) and the 'fertilize' activity; v13
  * added the vehicle, its load for town and town orders (`vehicleLevel`, `cargo`, `orders`); v14 added
- * crop research (`research`), crop mastery (`cropXp`) and the greenhouse cover (`Tile.cover`).
+ * crop research (`research`), crop mastery (`cropXp`) and the greenhouse cover (`Tile.cover`); v15
+ * added the linked GitHub account (`github`).
  */
-export interface SaveDataV14 {
-  saveVersion: 14;
+export interface SaveDataV15 {
+  saveVersion: 15;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV14;
+export type SaveData = SaveDataV15;
 
 export interface LoadedSave {
   game: GameState;
@@ -252,6 +254,11 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
   13: (data) => {
     const game = isRecord(data.game) ? data.game : {};
     return { ...data, game: { ...game, research: { unlocked: [...STARTING_CROPS], current: null } } };
+  },
+  // v14 → v15: no GitHub account linked yet.
+  14: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    return { ...data, game: { ...game, github: null } };
   },
 };
 
@@ -593,6 +600,13 @@ const parseResearch = (v: unknown): Research | null => {
   return { unlocked, current: { cropId: c.cropId, minutesLeft: Math.max(0, c.minutesLeft) } };
 };
 
+/** The linked GitHub account: null when none, undefined when invalid. */
+const parseGitHub = (v: unknown): GitHubLink | null | undefined => {
+  if (v === null) return null;
+  if (!isRecord(v) || typeof v.login !== 'string' || !isFiniteNumber(v.activeDays) || !isFiniteNumber(v.syncedAt)) return undefined;
+  return { login: v.login, activeDays: Math.max(0, Math.floor(v.activeDays)), syncedAt: v.syncedAt };
+};
+
 const parseCarcass = (v: unknown): Carcass | null => {
   if (!isRecord(v)) return null;
   const { id, kind, breed, x, y, diedAt, shelterId } = v;
@@ -692,7 +706,8 @@ const parseGame = (v: unknown): GameState | null => {
   const orders = parseList(v.orders, parseOrder);
   const cargo = parseCargo(v.cargo);
   const research = parseResearch(v.research);
-  if (!orders || !cargo || !research || !isVehicleLevel(v.vehicleLevel)) return null;
+  const github = parseGitHub(v.github);
+  if (!orders || !cargo || !research || github === undefined || !isVehicleLevel(v.vehicleLevel)) return null;
   const vehicleLevel = v.vehicleLevel;
   if (!workers || !candidates || !tasks || !animals || !carcasses || !structures || !isId(nextId)) return null;
   const maxId = Math.max(
@@ -724,6 +739,7 @@ const parseGame = (v: unknown): GameState | null => {
     cargo,
     orders,
     research,
+    github,
     structures,
     nextId: Math.max(nextId, maxId + 1),
   }));

@@ -9,10 +9,10 @@ import type { Tile } from './types';
  * A field crop only grows while watered; orchard trees (rain-fed) and crops under a greenhouse
  * (self-watering) always grow. Fertilized soil, the season (and the crop's own season) speed it up;
  * under a greenhouse the season does not matter. When watering wears off the tile goes back to
- * 'planted'.
+ * 'planted'. `bonus` multiplies everything (the GitHub community bonus).
  * Returns the same array reference when nothing changed.
  */
-export const growTiles = (tiles: Tile[], from: number, to: number): Tile[] => {
+export const growTiles = (tiles: Tile[], from: number, to: number, bonus = 1): Tile[] => {
   if (to <= from) return tiles;
   let next: Tile[] | null = null;
   const season = seasonGrowth(from);
@@ -26,7 +26,7 @@ export const growTiles = (tiles: Tile[], from: number, to: number): Tile[] => {
     const wateredUntil = tile.state === 'watered' ? (tile.wateredUntil ?? from) : to;
     const climate = tile.cover ? GREENHOUSE_GROWTH : season * (def.season === seasonId ? CROP_SEASON_BONUS : 1);
     const grownFor = Math.max(0, Math.min(to, always ? to : wateredUntil) - from);
-    const effective = grownFor * (tile.fertilized ? FERTILIZER.growth : 1) * climate;
+    const effective = grownFor * (tile.fertilized ? FERTILIZER.growth : 1) * climate * bonus;
     const growthMinutes = Math.min(
       growthMinutesNeeded(tile.crop),
       tile.crop.growthMinutes + effective,
