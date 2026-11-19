@@ -228,13 +228,15 @@ export function HoverInfo() {
   );
   if (hoveredAnimal !== null) return hoveredAnimal === selectedAnimal ? null : <AnimalInfo id={hoveredAnimal} />;
   if (hovered === null || !tile || onSelected) return null;
+  // Greenhouse crops and orchard trees never need the watering can.
+  const selfWatered = tile.state === 'planted' && (tile.cover || (tile.crop && CROPS[tile.crop.cropId].kind === 'orchard'));
   const title = tile.structure
     ? STRUCTURES[tile.structure].label
     : tile.road
       ? tile.state === 'locked'
         ? 'Estrada de acesso'
         : 'Estrada de terra'
-      : `${STATE_LABELS[tile.state]}${tile.fertilized ? ` · ${FERTILIZER.icon} adubado` : ''}`;
+      : `${selfWatered ? 'Plantado' : STATE_LABELS[tile.state]}${tile.fertilized ? ` · ${FERTILIZER.icon} adubado` : ''}${tile.cover ? ' · na estufa' : ''}`;
   return (
     <Card className="w-64 px-4 py-2">
       <p className="font-black">{title}</p>

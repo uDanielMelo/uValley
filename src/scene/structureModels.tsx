@@ -3,7 +3,7 @@ import type { StructureId } from '../data/structures';
 import { footprintOf } from '../game/structures';
 import type { Rotation } from '../game/types';
 import { cornerToWorld } from './coords';
-import { Barn, Bunkhouse, ChickenCoop, ColdRoom, Silo, Warehouse } from './models/Buildings';
+import { Barn, Bunkhouse, ChickenCoop, ColdRoom, Greenhouse, Silo, Warehouse } from './models/Buildings';
 import { Bench, FlowerBed, Fountain, LampPost, PlantedTree, Scarecrow } from './models/Decor';
 import { House } from './models/House';
 import { Corral, Pigsty, Sheepfold, Stable } from './models/Shelters';
@@ -28,6 +28,7 @@ export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   scarecrow: Scarecrow,
   tree: PlantedTree,
   fountain: Fountain,
+  greenhouse: Greenhouse,
 };
 
 export interface PlacedProps {

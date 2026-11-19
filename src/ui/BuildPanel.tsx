@@ -5,7 +5,7 @@ import { useGameStore } from '../store/gameStore';
 import { formatCoins, formatWorkTime } from './format';
 import { Button, Card, Coins, Panel } from './primitives';
 
-const CATEGORIES: readonly StructureCategory[] = ['housing', 'animals', 'storage', 'decor'];
+const CATEGORIES: readonly StructureCategory[] = ['housing', 'farming', 'animals', 'storage', 'decor'];
 
 
 function StructureRow({ id }: { id: StructureId }) {

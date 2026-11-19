@@ -12,7 +12,7 @@ import { homeSpot } from './home';
 import { addCount } from './inventory';
 import { findPath } from './path';
 import { hash01 } from './random';
-import { harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
+import { gainMastery, harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
 import { applyTask, lastTaskOn, projectTasks } from './tasks';
 import {
   type ActionError,
@@ -370,6 +370,8 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
           else if (job?.type === 'road' && !job.remove) world = { ...world, money: world.money + ROAD_COST };
           tasks = tasks.filter((t) => t.id !== task.id);
           w = { ...w, taskId: null, progress: 0 };
+          // Work on a crop builds mastery of it.
+          if (result.ok && context.cropId && task.kind !== 'tend' && task.kind !== 'build') w = gainMastery(w, context.cropId);
         } else {
           w = { ...w, progress };
         }

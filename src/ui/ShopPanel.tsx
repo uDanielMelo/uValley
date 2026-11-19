@@ -12,7 +12,9 @@ import {
 import { FERTILIZER } from '../data/fertilizer';
 import { MEDICINES, MEDICINE_IDS, type MedicineId } from '../data/health';
 import { STRUCTURES } from '../data/structures';
-import { CROPS, CROP_IDS, type CropId } from '../data/crops';
+import { CROPS, CROP_IDS, CROP_SEASON_BONUS, type CropId } from '../data/crops';
+import { SEASONS } from '../data/climate';
+import { isUnlocked, researchProgress } from '../game/research';
 import { PLOT_SIZE } from '../data/world';
 import { purchasePrice, type PurchaseAge } from '../game/animals';
 import { freeMedicine } from '../game/health';
@@ -24,6 +26,60 @@ import { formatCoins, formatHours } from './format';
 import { Button, Coins, Panel } from './primitives';
 
 const QUANTITIES = [1, 5, 10] as const;
+
+const KIND_NOTES: Record<'field' | 'greenhouse' | 'orchard', string> = {
+  field: 'Lavoura: precisa ser regada',
+  greenhouse: 'Só na estufa (rega sozinha)',
+  orchard: 'Pomar: árvore que não precisa de rega e dá frutos de novo',
+};
+
+/** A crop still to be researched: price and time, or the research under way. */
+function ResearchRow({ id }: { id: CropId }) {
+  const def = CROPS[id];
+  const research = def.research;
+  const money = useGameStore((s) => s.game.money);
+  const current = useGameStore((s) => s.game.research.current?.cropId ?? null);
+  const progress = useGameStore((s) => Math.floor((researchProgress(s.game) ?? 0) * 100));
+  const start = useGameStore((s) => s.startResearch);
+  if (!research) return null;
+  const mine = current === id;
+  return (
+    <li className="rounded-xl border-2 border-dashed border-wood/25 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-base font-black text-wood/80">
+          {def.icon} {def.label} <span className="text-xs">🔒</span>
+        </span>
+        <span className="flex items-center gap-1 text-xs font-bold">
+          Vende por <Coins value={def.sellPrice} />
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs font-bold text-wood/70">{KIND_NOTES[def.kind]}.</p>
+      {mine ? (
+        <div className="mt-2 text-xs font-bold">
+          🔬 Pesquisando: {progress}%
+          <div className="mt-1 h-2 overflow-hidden rounded-full bg-wood/20">
+            <div className="h-full bg-leaf" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      ) : (
+        <Button
+          className="mt-2 w-full text-sm"
+          disabled={money < research.cost || current !== null}
+          onClick={() => start(id)}
+          title={current !== null ? 'Uma pesquisa por vez' : undefined}
+        >
+          🔬 Pesquisar ({research.hours} h) <Coins value={formatCoins(research.cost)} />
+        </Button>
+      )}
+    </li>
+  );
+}
+
+/** A known crop's seeds; locked crops show their research instead. */
+function CropRow({ id }: { id: CropId }) {
+  const known = useGameStore((s) => isUnlocked(s.game, id));
+  return known ? <SeedRow id={id} /> : <ResearchRow id={id} />;
+}
 
 function SeedRow({ id }: { id: CropId }) {
   const def = CROPS[id];
@@ -39,7 +95,17 @@ function SeedRow({ id }: { id: CropId }) {
         <span className="text-xs font-bold">Você tem {owned}</span>
       </div>
       <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs font-bold text-wood/80">
-        <span>Cresce em {formatHours(def.growthHours)} regado</span>
+        <span>
+          {def.kind === 'orchard' ? 'Primeira colheita' : 'Cresce'} em {formatHours(def.growthHours)}
+          {def.kind === 'field' ? ' regado' : ''}
+          {def.regrowHours ? `, depois a cada ${formatHours(def.regrowHours)}` : ''}
+        </span>
+        {def.season && (
+          <span>
+            {SEASONS[def.season].icon} +{Math.round((CROP_SEASON_BONUS - 1) * 100)}% no {SEASONS[def.season].label.toLowerCase()}
+          </span>
+        )}
+        {def.kind !== 'field' && <span>{KIND_NOTES[def.kind]}</span>}
         <span className="flex items-center gap-1">
           Vende por <Coins value={def.sellPrice} />
         </span>
@@ -332,7 +398,7 @@ export function ShopPanel() {
       {tab === 'seeds' && (
         <ul className="flex flex-col gap-2">
           {CROP_IDS.map((id) => (
-            <SeedRow key={id} id={id} />
+            <CropRow key={id} id={id} />
           ))}
           <FertilizerRow />
         </ul>

@@ -87,16 +87,17 @@ export const footprintCells = (fp: Footprint): GridPoint[] => {
  */
 export const stampStructures = (tiles: readonly Tile[], structures: readonly StructureInstance[]): Tile[] => {
   const result: Tile[] = tiles.map((tile) => {
-    if (!tile.structure) return tile;
-    const { structure: _removed, ...rest } = tile;
+    if (!tile.structure && !tile.cover) return tile;
+    const { structure: _removed, cover: _uncovered, ...rest } = tile;
     return rest;
   });
   for (const s of structures) {
+    const cover = STRUCTURES[s.type].cover;
     for (const c of footprintCells(footprintOf(s.type, s.x, s.y, s.rotation))) {
       if (!inBounds(c.x, c.y)) continue;
       const index = tileIndex(c.x, c.y);
       const tile = result[index];
-      if (tile) result[index] = { ...tile, structure: s.type };
+      if (tile) result[index] = cover ? { ...tile, cover: true } : { ...tile, structure: s.type };
     }
   }
   return result;
@@ -152,7 +153,7 @@ export const checkPlacement = (
   if (cells.some((c) => !inBounds(c.x, c.y))) return 'out-of-bounds';
   const tiles = cells.map((c) => ({ index: tileIndex(c.x, c.y), tile: state.tiles[tileIndex(c.x, c.y)] }));
   if (tiles.some((t) => !t.tile || t.tile.state === 'locked')) return 'locked';
-  if (tiles.some((t) => t.tile?.structure)) return 'structure';
+  if (tiles.some((t) => t.tile?.structure || t.tile?.cover)) return 'structure';
   if (tiles.some((t) => t.tile?.road)) return 'road';
   if (tiles.some((t) => t.tile?.state !== 'grass')) return 'not-grass';
   if (state.tasks.some((task) => tiles.some((t) => t.index === task.tile))) return 'tile-busy';
@@ -175,7 +176,7 @@ export const findFreeSpot = (
     if (!inBounds(x, y)) return false;
     const index = tileIndex(x, y);
     const tile = state.tiles[index];
-    return !!tile && tile.state === 'grass' && !tile.structure && !tile.road && !busy.has(index);
+    return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.road && !busy.has(index);
   };
   const clear = (x: number, y: number): boolean => {
     const tile = inBounds(x, y) ? state.tiles[tileIndex(x, y)] : undefined;
@@ -253,10 +254,11 @@ export const placeStructure = (
   if (error) return fail(error);
   const fp = footprintOf(type, x, y, rotation);
   const tiles = state.tiles.slice();
+  const cover = STRUCTURES[type].cover;
   for (const c of footprintCells(fp)) {
     const index = tileIndex(c.x, c.y);
     const tile = tiles[index];
-    if (tile) tiles[index] = { ...tile, structure: type };
+    if (tile) tiles[index] = cover ? { ...tile, cover: true } : { ...tile, structure: type };
   }
   const built: StructureInstance = { id: state.nextId, type, x, y, rotation };
   const next: GameState = {
@@ -288,7 +290,14 @@ export const removeStructure = (state: GameState, structureId: number): GameStat
     if (!inBounds(c.x, c.y)) continue;
     const index = tileIndex(c.x, c.y);
     const current = tiles[index];
-    if (current) tiles[index] = { state: current.state };
+    if (!current) continue;
+    if (STRUCTURES[found.type].cover) {
+      // A greenhouse comes off: whatever grows underneath stays.
+      const { cover: _uncovered, ...rest } = current;
+      tiles[index] = rest;
+    } else {
+      tiles[index] = { state: current.state };
+    }
   }
   return { ...state, tiles, structures: state.structures.filter((s) => s.id !== structureId) };
 };

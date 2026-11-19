@@ -14,6 +14,12 @@ export const CROP_SPOILAGE: Record<CropId, number> = {
   wheat: 0,
   corn: 0.02,
   tomato: 0.12,
+  carrot: 0.05,
+  potato: 0.03,
+  pumpkin: 0.03,
+  strawberry: 0.2,
+  orange: 0.08,
+  apple: 0.06,
 };
 
 export const PRODUCT_SPOILAGE: Record<AnimalProductId, number> = {

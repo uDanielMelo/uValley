@@ -34,6 +34,7 @@ const SCAFFOLD_HEIGHT: Partial<Record<StructureId, number>> = {
   scarecrow: 1.5,
   tree: 2,
   fountain: 1.5,
+  greenhouse: 3,
 };
 const DEFAULT_SCAFFOLD = 3;
 const POLE = meters(0.12);

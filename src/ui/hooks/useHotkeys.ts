@@ -53,8 +53,9 @@ export function useHotkeys(): void {
         case 'q':
         case 'e': {
           const step = e.key.toLowerCase() === 'e' ? 1 : -1;
-          const current = CROP_IDS.indexOf(store.selectedCrop);
-          const next = CROP_IDS[(current + step + CROP_IDS.length) % CROP_IDS.length];
+          const known = CROP_IDS.filter((id) => store.game.research.unlocked.includes(id));
+          const current = known.indexOf(store.selectedCrop);
+          const next = known[(current + step + known.length) % known.length];
           if (next) store.setSelectedCrop(next);
           break;
         }

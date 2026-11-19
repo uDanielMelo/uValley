@@ -1,5 +1,6 @@
+import { CROPS, CROP_IDS, MASTERY_LEVELS } from '../../data/crops';
 import { DEFAULT_PRIORITIES, SEVERANCE_HOURS } from '../../data/workers';
-import { severanceFor } from '../../game/staff';
+import { masteryLevel, severanceFor } from '../../game/staff';
 import type { GameState } from '../../game/types';
 import { useGameStore } from '../../store/gameStore';
 import { formatCoins } from '../format';
@@ -80,6 +81,37 @@ function Priorities({ id }: { id: number }) {
   );
 }
 
+/** Crops this worker has mastered by working them (speed and harvest bonus). */
+function Mastery({ id }: { id: number }) {
+  const key = useGameStore((s) => {
+    const w = find(s, id);
+    return w ? CROP_IDS.map((c) => `${c}:${masteryLevel(w, c)}:${w.cropXp?.[c] ?? 0}`).join(',') : '';
+  });
+  const rows = key
+    .split(',')
+    .filter(Boolean)
+    .map((entry) => {
+      const [crop = '', level = '-1', done = '0'] = entry.split(':');
+      return { crop: CROP_IDS.find((c) => c === crop), level: Number(level), done: Number(done) };
+    })
+    .filter((r) => r.crop && r.done > 0);
+  if (rows.length === 0) return <p className="text-xs font-bold text-wood/60">Ainda sem prática em nenhuma cultura.</p>;
+  return (
+    <ul className="flex flex-wrap gap-1 text-[11px] font-bold">
+      {rows.map(({ crop, level, done }) => {
+        if (!crop) return null;
+        const next = MASTERY_LEVELS[level + 1];
+        const title = next ? `${done}/${next.tasks} tarefas para ${next.label.toLowerCase()}` : `${done} tarefas`;
+        return (
+          <li key={crop} className="rounded-full bg-parchment-dark px-2 py-0.5" title={title}>
+            {CROPS[crop].icon} {level >= 0 ? MASTERY_LEVELS[level]?.label : `${done} tarefas`}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** Attributes, activities and dismissal of one worker (opened from the list or by clicking them on the farm). */
 export function WorkerCard({ id }: { id: number }) {
   const age = useGameStore((s) => find(s, id)?.age ?? 0);
@@ -113,6 +145,7 @@ export function WorkerCard({ id }: { id: number }) {
         <dd className="tabular-nums">{buildSpeed(profile)}</dd>
       </dl>
       <SkillChips skills={skills} specialty={specialty} />
+      <Mastery id={id} />
       <Priorities id={id} />
       <Button
         variant="ghost"

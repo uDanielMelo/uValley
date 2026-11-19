@@ -21,10 +21,11 @@ export const STRUCTURE_IDS = [
   'scarecrow',
   'tree',
   'fountain',
+  'greenhouse',
 ] as const;
 export type StructureId = (typeof STRUCTURE_IDS)[number];
 
-export type StructureCategory = 'housing' | 'animals' | 'storage' | 'decor';
+export type StructureCategory = 'housing' | 'farming' | 'animals' | 'storage' | 'decor';
 
 /** Shelter levels: basic, reinforced, comfortable, automated. */
 export type ShelterLevel = 1 | 2 | 3 | 4;
@@ -95,6 +96,11 @@ export interface StructureDef {
   shelter?: ShelterDef;
   /** Present on storage buildings. */
   storage?: StorageDef;
+  /**
+   * A cover over plantable ground (the greenhouse): its tiles get `Tile.cover` instead of
+   * `Tile.structure`, so they can still be tilled, planted and harvested underneath.
+   */
+  cover?: boolean;
   /** Present on lights: shelters whose door is within `radius` tiles gain `safety` (see LIGHT_SAFETY_CAP). */
   light?: { radius: number; safety: number };
   /** Short pt-BR description for the build menu. */
@@ -319,6 +325,18 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     category: 'decor',
     description: 'Chafariz de pedra para enfeitar a fazenda.',
   },
+  greenhouse: {
+    id: 'greenhouse',
+    label: 'Estufa',
+    icon: '🏡',
+    width: 3,
+    depth: 2,
+    cost: 900,
+    buildMinutes: 600,
+    category: 'farming',
+    cover: true,
+    description: 'Cobre 6 tiles plantáveis: rega sozinha, ignora a estação, protege da tempestade e permite morango.',
+  },
 };
 
 /** Most safety lights can add to one shelter. */
@@ -334,6 +352,7 @@ export const CATEGORY_LABELS: Record<StructureCategory, string> = {
   housing: 'Moradia',
   animals: 'Animais',
   storage: 'Armazenamento',
+  farming: 'Lavoura',
   decor: 'Decoração e iluminação',
 };
 

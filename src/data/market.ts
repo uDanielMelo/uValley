@@ -4,7 +4,17 @@ import type { AnimalProductId } from './animals';
 import type { CropId } from './crops';
 
 /** Weight (kg) of one unit of each good, for the vehicle's load. */
-export const CROP_WEIGHT: Record<CropId, number> = { wheat: 10, corn: 10, tomato: 5 };
+export const CROP_WEIGHT: Record<CropId, number> = {
+  wheat: 10,
+  corn: 10,
+  tomato: 5,
+  carrot: 5,
+  potato: 10,
+  pumpkin: 15,
+  strawberry: 2,
+  orange: 5,
+  apple: 5,
+};
 export const PRODUCT_WEIGHT: Record<AnimalProductId, number> = {
   egg: 1,
   duckEgg: 1,
@@ -65,6 +75,8 @@ export const TOWN_SHOPS: Record<TownShopId, TownShopDef> = {
       { kind: 'crop', id: 'wheat' },
       { kind: 'product', id: 'egg' },
       { kind: 'product', id: 'milk' },
+      { kind: 'crop', id: 'strawberry' },
+      { kind: 'crop', id: 'apple' },
     ],
   },
   restaurant: {
@@ -74,6 +86,10 @@ export const TOWN_SHOPS: Record<TownShopId, TownShopDef> = {
     wants: [
       { kind: 'crop', id: 'tomato' },
       { kind: 'crop', id: 'corn' },
+      { kind: 'crop', id: 'carrot' },
+      { kind: 'crop', id: 'potato' },
+      { kind: 'crop', id: 'pumpkin' },
+      { kind: 'crop', id: 'orange' },
       { kind: 'product', id: 'truffle' },
       { kind: 'product', id: 'duckEgg' },
     ],

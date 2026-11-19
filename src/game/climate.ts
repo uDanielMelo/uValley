@@ -13,6 +13,7 @@ import {
   type SeasonId,
   type WeatherId,
 } from '../data/climate';
+import { CROPS } from '../data/crops';
 import { MINUTES_PER_DAY } from '../data/world';
 import { isMature } from './crops';
 import { hash01 } from './random';
@@ -63,7 +64,8 @@ export interface WeatherReport {
   destroyed: number;
 }
 
-const growing = (tile: Tile): boolean => !!tile.crop && !tile.structure && !isMature(tile.crop);
+/** Crops out in the weather (not under a greenhouse) that are still growing. */
+const growing = (tile: Tile): boolean => !!tile.crop && !tile.structure && !tile.cover && !isMature(tile.crop);
 
 /**
  * The weather of a new day hits the farm (at midnight): rain waters every growing crop until
@@ -82,7 +84,8 @@ export const applyDayWeather = (state: GameState, day: number): { state: GameSta
       report.destroyed++;
       return tile.fertilized ? { state: 'tilled' as const, fertilized: true as const } : { state: 'tilled' as const };
     }
-    if (weather.waters && (tile.state !== 'watered' || (tile.wateredUntil ?? 0) < until)) {
+    const rainFed = CROPS[tile.crop.cropId].kind === 'orchard';
+    if (weather.waters && !rainFed && (tile.state !== 'watered' || (tile.wateredUntil ?? 0) < until)) {
       changed = true;
       report.watered++;
       return { ...tile, state: 'watered' as const, wateredUntil: until };

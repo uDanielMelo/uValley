@@ -68,9 +68,10 @@ function AnimalProductList() {
 
 function SeedList() {
   const seeds = useGameStore((s) => s.game.inventory.seeds);
+  const known = useGameStore((s) => s.game.research.unlocked.join(','));
   return (
     <ul className="grid grid-cols-3 gap-2">
-      {CROP_IDS.map((id) => (
+      {CROP_IDS.filter((id) => known.split(',').includes(id) || (seeds[id] ?? 0) > 0).map((id) => (
         <li key={id} className="rounded-xl bg-parchment-dark/60 p-2 text-center text-sm font-black">
           <div className="text-xl">{CROPS[id].icon}</div>
           {CROPS[id].label}

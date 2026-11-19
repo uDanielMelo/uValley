@@ -1,4 +1,5 @@
 import { STARTING_MONEY, STARTING_SEEDS } from '../data/economy';
+import { STARTING_CROPS } from './research';
 import { START_STRUCTURES } from '../data/structures';
 import { MINUTES_PER_DAY, START_HOUR, START_PLOTS } from '../data/world';
 import { TILE_COUNT, plotIndex, tilesInPlot } from './grid';
@@ -42,6 +43,7 @@ export const createInitialState = (): GameState => {
     vehicleLevel: 1,
     cargo: { produce: {}, products: {} },
     orders: [],
+    research: { unlocked: [...STARTING_CROPS], current: null },
     structures,
     nextId,
   };

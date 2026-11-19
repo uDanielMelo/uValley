@@ -1,4 +1,4 @@
-import type { CropId } from '../data/crops';
+import { CROPS, type CropId } from '../data/crops';
 import { FERTILIZER } from '../data/fertilizer';
 import { isMature } from './crops';
 import { isValidTileIndex, withTile } from './grid';
@@ -24,7 +24,8 @@ export const till = (state: GameState, index: number): ActionResult => {
   const check = usableTile(state, index);
   if ('error' in check) return check.error;
   if (check.tile.state !== 'grass') return fail('not-grass');
-  return ok({ ...state, tiles: withTile(state.tiles, index, { state: 'tilled' }) });
+  const tilled: Tile = { ...(check.tile.cover ? { cover: true as const } : {}), state: 'tilled' };
+  return ok({ ...state, tiles: withTile(state.tiles, index, tilled) });
 };
 
 /** Seed: tilled → planted, consumes one seed. */
@@ -33,6 +34,7 @@ export const plant = (state: GameState, index: number, cropId: CropId): ActionRe
   if ('error' in check) return check.error;
   if (check.tile.state !== 'tilled') return fail('not-tilled');
   if ((state.inventory.seeds[cropId] ?? 0) <= 0) return fail('no-seeds');
+  if (CROPS[cropId].kind === 'greenhouse' && !check.tile.cover) return fail('needs-greenhouse');
   return ok({
     ...state,
     tiles: withTile(state.tiles, index, { ...fertilizedOf(check.tile), state: 'planted', crop: { cropId, growthMinutes: 0 } }),
@@ -46,6 +48,8 @@ export const water = (state: GameState, index: number): ActionResult => {
   if ('error' in check) return check.error;
   const { tile } = check;
   if (!tile.crop) return fail('no-crop');
+  // Orchard trees are rain-fed and greenhouses water themselves.
+  if (CROPS[tile.crop.cropId].kind === 'orchard' || tile.cover) return fail('no-water-needed');
   if (tile.state === 'watered') return fail('already-watered');
   if (isMature(tile.crop)) return fail('already-mature');
   return ok({
@@ -59,8 +63,11 @@ export const water = (state: GameState, index: number): ActionResult => {
   });
 };
 
-/** Keeps the fertilized flag when a tile changes state. */
-const fertilizedOf = (tile: Tile): Pick<Tile, 'fertilized'> => (tile.fertilized ? { fertilized: true } : {});
+/** Keeps the soil's flags (fertilized, under a greenhouse) when a tile changes state. */
+const fertilizedOf = (tile: Tile): Pick<Tile, 'fertilized' | 'cover'> => ({
+  ...(tile.fertilized ? { fertilized: true } : {}),
+  ...(tile.cover ? { cover: true } : {}),
+});
 
 /**
  * Hand: harvests a mature crop into the inventory; the tile stays tilled and the fertilizer is
@@ -73,9 +80,16 @@ export const harvest = (state: GameState, index: number): ActionResult => {
   if (!crop) return fail('no-crop');
   if (!isMature(crop)) return fail('not-mature');
   const extra = check.tile.fertilized && hash01(index * 977 + Math.floor(state.gameMinutes) * 13 + 3) < FERTILIZER.harvestBonus;
+  // An orchard tree stays and fruits again after its regrow time.
+  const regrow = CROPS[crop.cropId].regrowHours;
+  const cover = check.tile.cover ? { cover: true as const } : {};
+  const fruiting = Math.max(0, CROPS[crop.cropId].growthHours - (regrow ?? 0)) * 60;
+  const after: Tile = regrow
+    ? { ...cover, state: 'planted', crop: { cropId: crop.cropId, growthMinutes: fruiting } }
+    : { ...cover, state: 'tilled' };
   return ok({
     ...state,
-    tiles: withTile(state.tiles, index, { state: 'tilled' }),
+    tiles: withTile(state.tiles, index, after),
     inventory: { ...state.inventory, produce: addCount(state.inventory.produce, crop.cropId, extra ? 2 : 1) },
   });
 };

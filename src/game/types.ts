@@ -25,6 +25,8 @@ export interface Tile {
   road?: true;
   /** Fertilized worked soil: the crop grows faster and may give more (cleared at harvest). */
   fertilized?: true;
+  /** Under a greenhouse (stamped from the structures, like `structure`). */
+  cover?: true;
 }
 
 /** Quarter turns applied to a placed structure. */
@@ -77,6 +79,12 @@ export interface Inventory {
   medicine: MedicineCounts;
   /** Fertilizer (cured manure) units. */
   fertilizer: number;
+}
+
+/** Crop research: what is unlocked and what is under way. */
+export interface Research {
+  unlocked: CropId[];
+  current: { cropId: CropId; minutesLeft: number } | null;
 }
 
 /** Goods loaded on the vehicle, waiting for the next pickup. */
@@ -147,6 +155,8 @@ export interface WorkerProfile {
   specialty: Specialty | null;
   /** Coins per hour of shift (staff); day laborers pay up front instead. */
   hourlyWage: number;
+  /** Tasks done on each crop (crop mastery). */
+  cropXp?: ItemCounts;
 }
 
 export interface Worker extends WorkerProfile {
@@ -244,6 +254,8 @@ export interface GameState {
   cargo: Cargo;
   /** Open town orders. */
   orders: Order[];
+  /** Crops the farm can grow, and the one being researched. */
+  research: Research;
   /** Placed structures, including the starting house and shipping bin. */
   structures: StructureInstance[];
   /** Next id for tasks, workers, candidates, animals, carcasses and structures. */
@@ -299,6 +311,11 @@ export type ActionError =
   | 'already-fertilized'
   | 'not-fertilizable'
   | 'vehicle-full'
+  | 'needs-greenhouse'
+  | 'not-researched'
+  | 'researching'
+  | 'already-researched'
+  | 'no-water-needed'
   | 'not-sick';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };

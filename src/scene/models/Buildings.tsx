@@ -413,3 +413,80 @@ export function ColdRoom() {
     </Meters>
   );
 }
+
+// ---------- Greenhouse: 3×2 tiles = 10.5 × 7 m, a glass cover over plantable ground ----------
+
+const GH_FRAME = '#e9eef0';
+const GH_W = 10.3;
+const GH_D = 6.8;
+const GH_WALL = 2.4;
+const GH_RISE = 1.6;
+const noRaycast = () => null;
+
+/** Greenhouse: white frame and see-through panels; the crops below stay visible and clickable. */
+export function Greenhouse() {
+  const glass = useMemo(
+    () => (
+      <meshStandardMaterial
+        color="#cfe8f2"
+        transparent
+        opacity={0.22}
+        roughness={0.1}
+        metalness={0.1}
+        depthWrite={false}
+        side={DoubleSide}
+      />
+    ),
+    [],
+  );
+  const posts = [-GH_W / 2, -GH_W / 6, GH_W / 6, GH_W / 2];
+  const slope = Math.atan2(GH_RISE, GH_D / 2);
+  const roofSpan = Math.hypot(GH_RISE, GH_D / 2);
+  return (
+    <Meters>
+      {/* Frame: posts, eaves and ridge */}
+      {posts.flatMap((x) =>
+        [-GH_D / 2, GH_D / 2].map((z) => (
+          <mesh key={`${x}${z}`} position={[x, GH_WALL / 2, z]} raycast={noRaycast} castShadow>
+            <boxGeometry args={[0.1, GH_WALL, 0.1]} />
+            <meshStandardMaterial color={GH_FRAME} flatShading />
+          </mesh>
+        )),
+      )}
+      {[-GH_D / 2, GH_D / 2].map((z) => (
+        <mesh key={z} position={[0, GH_WALL, z]} raycast={noRaycast}>
+          <boxGeometry args={[GH_W, 0.1, 0.1]} />
+          <meshStandardMaterial color={GH_FRAME} flatShading />
+        </mesh>
+      ))}
+      <mesh position={[0, GH_WALL + GH_RISE, 0]} raycast={noRaycast}>
+        <boxGeometry args={[GH_W, 0.12, 0.12]} />
+        <meshStandardMaterial color={GH_FRAME} flatShading />
+      </mesh>
+      {/* Glass walls and roof (they let the pointer through to the soil) */}
+      {[-GH_D / 2, GH_D / 2].map((z) => (
+        <mesh key={`w${z}`} position={[0, GH_WALL / 2, z]} raycast={noRaycast}>
+          <planeGeometry args={[GH_W, GH_WALL]} />
+          {glass}
+        </mesh>
+      ))}
+      {[-GH_W / 2, GH_W / 2].map((x) => (
+        <mesh key={`e${x}`} position={[x, GH_WALL / 2, 0]} rotation={[0, Math.PI / 2, 0]} raycast={noRaycast}>
+          <planeGeometry args={[GH_D, GH_WALL]} />
+          {glass}
+        </mesh>
+      ))}
+      {[-1, 1].map((side) => (
+        <mesh
+          key={`r${side}`}
+          position={[0, GH_WALL + GH_RISE / 2, (side * GH_D) / 4]}
+          rotation={[-Math.PI / 2 + side * slope, 0, 0]}
+          raycast={noRaycast}
+        >
+          <planeGeometry args={[GH_W, roofSpan]} />
+          {glass}
+        </mesh>
+      ))}
+    </Meters>
+  );
+}

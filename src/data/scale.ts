@@ -51,6 +51,12 @@ export const CROP_HEIGHTS: Record<CropId, number> = {
   wheat: 1.0,
   corn: 2.4,
   tomato: 1.3,
+  carrot: 0.35,
+  potato: 0.5,
+  pumpkin: 0.6,
+  strawberry: 0.3,
+  orange: 4,
+  apple: 4.5,
 };
 
 export const PROP_SIZES = {

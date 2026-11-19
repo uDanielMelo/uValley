@@ -129,8 +129,18 @@ Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
 3. O poste acende à noite (brilho no chão) e protege: abrigos a até 4 tiles ganham +10% de segurança contra
    predadores, até +20%. Sem mudança no save.
 
-### Etapa 7: plantações 2.0
+### Etapa 7: plantações 2.0 ✅
 Pesquisa de culturas, culturas de campo e de estrutura (estufa, pomar), adubo, habilidade por cultura.
+
+Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
+1. Seis culturas novas: cenoura, batata e abóbora (lavoura), morango (só na estufa), laranjeira e macieira
+   (pomar: sem rega, frutificam de novo depois da colheita). Cada cultura tem uma estação em que cresce 25%
+   mais rápido.
+2. Pesquisa: as culturas novas custam de 300 a 1.800 e levam de 12 a 42 horas de jogo, uma por vez (aba
+   Sementes da loja).
+3. Estufa (3×2, 900): cobre tiles que continuam plantáveis, rega sozinha, ignora a estação e a tempestade.
+4. Habilidade por cultura: aprendiz, experiente e mestre (15, 50 e 120 tarefas) dão até +30% de ritmo e +15%
+   de efetividade naquela cultura. O adubo já tinha sido feito na 3e. Save v14.
 
 ### Etapa 8: GitHub e social
 Backend (ex.: Supabase com login GitHub), save na nuvem, perfis e amigos, impacto de contribuições na

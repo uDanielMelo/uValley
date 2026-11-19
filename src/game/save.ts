@@ -38,6 +38,7 @@ import type {
   MedicineCounts,
   Order,
   ProductCounts,
+  Research,
   Rotation,
   Specialty,
   Stars,
@@ -54,12 +55,13 @@ import type {
   WorkerProfile,
 } from './types';
 import { repairSiteTasks } from './construction';
+import { STARTING_CROPS } from './research';
 import { rehomeAnimals } from './shelters';
 import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -83,16 +85,17 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * (`StructureInstance.level`, 'upgrade' work with `toLevel`); v10 gave animals a breed, stars and a
  * birth time (`bornAt`); v11 added health (`Animal.health`), medicine in the inventory and carcasses; v12 added fertilizer
  * (`inventory.fertilizer`, `Tile.fertilized`, `StructureInstance.manure`) and the 'fertilize' activity; v13
- * added the vehicle, its load for town and town orders (`vehicleLevel`, `cargo`, `orders`).
+ * added the vehicle, its load for town and town orders (`vehicleLevel`, `cargo`, `orders`); v14 added
+ * crop research (`research`), crop mastery (`cropXp`) and the greenhouse cover (`Tile.cover`).
  */
-export interface SaveDataV13 {
-  saveVersion: 13;
+export interface SaveDataV14 {
+  saveVersion: 14;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV13;
+export type SaveData = SaveDataV14;
 
 export interface LoadedSave {
   game: GameState;
@@ -244,6 +247,11 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
   12: (data) => {
     const game = isRecord(data.game) ? data.game : {};
     return { ...data, game: { ...game, vehicleLevel: 1, cargo: { produce: {}, products: {} }, orders: [] } };
+  },
+  // v13 → v14: the three starting crops are known; nobody has crop mastery yet.
+  13: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    return { ...data, game: { ...game, research: { unlocked: [...STARTING_CROPS], current: null } } };
   },
 };
 
@@ -432,7 +440,17 @@ const parseProfile = (v: Record<string, unknown>): WorkerProfile | null => {
   if (!Array.isArray(skills) || !skills.every(isSkillId)) return null;
   const specialty = parseSpecialty(v.specialty);
   if (specialty === undefined) return null;
-  return { name, age: Math.floor(age), stars, skills: [...new Set(skills)], specialty, hourlyWage };
+  const cropXp = v.cropXp === undefined ? undefined : parseCounts(v.cropXp);
+  if (cropXp === null) return null;
+  return {
+    name,
+    age: Math.floor(age),
+    stars,
+    skills: [...new Set(skills)],
+    specialty,
+    hourlyWage,
+    ...(cropXp && Object.keys(cropXp).length > 0 ? { cropXp } : {}),
+  };
 };
 
 const parseWorker = (v: unknown): Worker | null => {
@@ -566,6 +584,15 @@ const parseCargo = (v: unknown): Cargo | null => {
   return produce && products ? { produce, products } : null;
 };
 
+const parseResearch = (v: unknown): Research | null => {
+  if (!isRecord(v) || !Array.isArray(v.unlocked) || !v.unlocked.every(isCropId)) return null;
+  const unlocked = [...new Set([...STARTING_CROPS, ...v.unlocked])];
+  const c = v.current;
+  if (c === null) return { unlocked, current: null };
+  if (!isRecord(c) || !isCropId(c.cropId) || !isFiniteNumber(c.minutesLeft)) return null;
+  return { unlocked, current: { cropId: c.cropId, minutesLeft: Math.max(0, c.minutesLeft) } };
+};
+
 const parseCarcass = (v: unknown): Carcass | null => {
   if (!isRecord(v)) return null;
   const { id, kind, breed, x, y, diedAt, shelterId } = v;
@@ -664,7 +691,8 @@ const parseGame = (v: unknown): GameState | null => {
   const carcasses = parseList(v.carcasses, parseCarcass);
   const orders = parseList(v.orders, parseOrder);
   const cargo = parseCargo(v.cargo);
-  if (!orders || !cargo || !isVehicleLevel(v.vehicleLevel)) return null;
+  const research = parseResearch(v.research);
+  if (!orders || !cargo || !research || !isVehicleLevel(v.vehicleLevel)) return null;
   const vehicleLevel = v.vehicleLevel;
   if (!workers || !candidates || !tasks || !animals || !carcasses || !structures || !isId(nextId)) return null;
   const maxId = Math.max(
@@ -695,6 +723,7 @@ const parseGame = (v: unknown): GameState | null => {
     vehicleLevel,
     cargo,
     orders,
+    research,
     structures,
     nextId: Math.max(nextId, maxId + 1),
   }));

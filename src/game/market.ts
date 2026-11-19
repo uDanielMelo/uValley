@@ -151,7 +151,9 @@ export const refreshOrders = (state: GameState, day: number): GameState => {
   let nextId = state.nextId;
   if (orders.length < ORDERS.maxOpen && hash01(day * 4111 + 17) < ORDERS.chance) {
     const shop = pick(TOWN_SHOP_IDS, hash01(day * 3001 + 5)) ?? 'bakery';
-    const good = pick(TOWN_SHOPS[shop].wants, hash01(day * 6007 + 9));
+    // Only goods the farm can produce (crops it has researched).
+    const wants = TOWN_SHOPS[shop].wants.filter((g) => g.kind === 'product' || state.research.unlocked.includes(g.id));
+    const good = pick(wants, hash01(day * 6007 + 9));
     if (good) {
       // Cheap goods come in bigger lots.
       const cheapness = Math.min(1, 40 / basePrice(good));

@@ -28,6 +28,7 @@ import {
 import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type DemolishChange } from '../game/construction';
 import { buyMedicine, medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
 import { loadCargo, unloadCargo, upgradeVehicle, type Good } from '../game/market';
+import { startResearch } from '../game/research';
 import { CAMERA } from '../data/camera';
 import { CITY_SHOPS, type CityShopId } from '../data/city';
 import { TOWN_SHOPS, VEHICLES } from '../data/market';
@@ -168,6 +169,7 @@ export interface GameStore {
   loadCargo: (good: Good, quantity: number) => void;
   unloadCargo: (good: Good, quantity: number) => void;
   upgradeVehicle: () => void;
+  startResearch: (cropId: CropId) => void;
   /** Last request to move the camera to a spot (tile space); the camera rig follows new ids. */
   cameraFocus: { id: number; x: number; y: number; distance?: number } | null;
   /** Centers the camera on a spot; `distance` sets the zoom (default: come close). */
@@ -226,6 +228,11 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'already-fertilized': 'Esta terra já está adubada.',
   'not-fertilizable': 'Só é possível adubar terra arada ou plantada.',
   'vehicle-full': 'O veículo está cheio. Troque por um maior na concessionária.',
+  'needs-greenhouse': 'Esta cultura só cresce dentro de uma estufa.',
+  'not-researched': 'Pesquise esta cultura antes de comprar as sementes.',
+  researching: 'Já há uma pesquisa em andamento.',
+  'already-researched': 'Esta cultura já é conhecida.',
+  'no-water-needed': 'Não precisa regar: árvores do pomar e plantas na estufa se viram sozinhas.',
   'not-sick': 'Este animal não está doente.',
 };
 
@@ -367,6 +374,10 @@ export const useGameStore = create<GameStore>()(
           } else if (start) {
             get().showMessage(`${start.trim()} Hoje: ${weather.icon} ${weather.label.toLowerCase()}.`, 'info');
           }
+        }
+        if (tick.researched) {
+          const crop = CROPS[tick.researched];
+          get().showMessage(`🔬 Pesquisa concluída: ${crop.icon} ${crop.label} já pode ser plantado(a).`, 'info');
         }
         if (tick.spoiled) get().showMessage(`Estragou no estoque: ${spoiledText(tick.spoiled)}.`, 'error');
         for (const delivery of tick.deliveries) {
@@ -630,6 +641,13 @@ export const useGameStore = create<GameStore>()(
       },
       unloadCargo: (good, quantity) => {
         commit(unloadCargo(get().game, good, quantity));
+      },
+      startResearch: (cropId) => {
+        const research = CROPS[cropId].research;
+        commit(
+          startResearch(get().game, cropId),
+          research ? `🔬 Pesquisa de ${CROPS[cropId].label.toLowerCase()} começou (${research.hours} h de jogo).` : undefined,
+        );
       },
       upgradeVehicle: () => {
         const game = get().game;

@@ -5,6 +5,8 @@ import { growTiles } from './growth';
 import { payFeed, removeDeadAnimals, stepAnimals } from './animals';
 import { queueAnimalCare, stepHealth, type PredatorAttack } from './health';
 import { deliverCargo, pickupsBetween, refreshOrders, type Delivery } from './market';
+import { stepResearch } from './research';
+import type { CropId } from '../data/crops';
 import { queueShelterChores } from './shelters';
 import { spoilGoods, type Spoiled } from './storage';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
@@ -36,6 +38,8 @@ export interface TickResult {
   spoiled: Spoiled | null;
   /** Loads picked up and paid. */
   deliveries: Delivery[];
+  /** Crop whose research just finished. */
+  researched: CropId | null;
 }
 
 export interface FinishedWork {
@@ -85,6 +89,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       weatherReports: [],
       spoiled: null,
       deliveries: [],
+      researched: null,
     };
   }
   const gameMinutes = state.gameMinutes + dtMinutes;
@@ -93,7 +98,8 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   const tiles = to > from ? growTiles(state.tiles, from, to) : state.tiles;
   const aged = removeDeadAnimals(stepAnimals(stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes), dtMinutes));
   const animalsDied = aged.died;
-  const health = stepHealth(aged.state, state.gameMinutes);
+  const studied = stepResearch(aged.state, dtMinutes);
+  const health = stepHealth(studied.state, state.gameMinutes);
   let next = queueAnimalCare(queueShelterChores(health.state));
   const worksFinished = finishedWorks(state.structures, next.structures);
 
@@ -140,6 +146,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   return {
     state: next,
     deliveries,
+    researched: studied.finished,
     workersLeft,
     hungryAnimals,
     tempsLeft,

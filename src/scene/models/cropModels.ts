@@ -150,7 +150,97 @@ const TOMATO_SPOTS = [
 ] as const;
 const tomato = (stage: number) => cluster(() => tomatoPlant(stage), TOMATO_SPOTS);
 
-export const CROP_MODELS: Record<CropId, (stage: number) => BufferGeometry> = { wheat, corn, tomato };
+const ORANGE = '#f08a24';
+const PUMPKIN = '#e8791f';
+const BROWN = '#8a6239';
+const STRAW_RED = '#e23b3b';
+const APPLE = '#d8342c';
+const TRUNK = '#6e4a2a';
+
+/** Rows of leafy tops; the root (carrot or potato) shows at the base when mature. */
+const rootCrop = (leaf: string, root: string, rootSize: number) => (stage: number): BufferGeometry => {
+  const spots = scatter(stage === 0 ? 6 : 9, 0.38, stage * 17 + 3);
+  return merge(
+    spots.flatMap(([x, z], i) => {
+      const h = stage === 0 ? 0.1 : stage === 1 ? 0.22 : 0.3;
+      const parts = [
+        cone(0.05, h, 4, i % 2 ? leaf : GREEN_DARK, { position: [x, h / 2, z], rotation: [(hash01(i) - 0.5) * 0.4, 0, 0] }),
+        cone(0.04, h * 0.8, 4, leaf, { position: [x + 0.03, h * 0.4, z], rotation: [0, 0, 0.5] }),
+      ];
+      if (stage === 2) parts.push(sphere(rootSize, root, { position: [x, 0.02, z], scale: [1, 0.7, 1] }, 5, 3));
+      return parts;
+    }),
+  );
+};
+
+const carrot = rootCrop(GREEN_LIGHT, ORANGE, 0.05);
+const potato = rootCrop(GREEN, BROWN, 0.07);
+
+/** Sprawling vine with big leaves; round orange pumpkins at maturity. */
+const pumpkin = (stage: number): BufferGeometry => {
+  const leaves = scatter(stage === 0 ? 4 : 8, 0.4, 51).map(([x, z], i) =>
+    box(0.18, 0.03, 0.18, i % 2 ? GREEN : GREEN_DARK, { position: [x, 0.06 + stage * 0.04, z], rotation: [0, hash01(i) * 3, 0.2] }),
+  );
+  if (stage < 2) return merge(leaves);
+  return merge([
+    ...leaves,
+    sphere(0.16, PUMPKIN, { position: [-0.15, 0.13, 0.1], scale: [1.2, 0.85, 1.2] }, 8, 5),
+    sphere(0.13, PUMPKIN, { position: [0.2, 0.11, -0.12], scale: [1.2, 0.85, 1.2] }, 8, 5),
+    cylinder(0.015, 0.02, 0.06, 4, GREEN_DARK, { position: [-0.15, 0.27, 0.1] }),
+  ]);
+};
+
+/** Low rosettes in rows; red berries at maturity. */
+const strawberry = (stage: number): BufferGeometry => {
+  const spots = scatter(8, 0.38, 77);
+  return merge(
+    spots.flatMap(([x, z], i) => {
+      const r = stage === 0 ? 0.05 : stage === 1 ? 0.08 : 0.1;
+      const parts = [sphere(r, i % 2 ? GREEN : GREEN_LIGHT, { position: [x, r * 0.6, z], scale: [1, 0.6, 1] }, 5, 3)];
+      if (stage === 2) parts.push(cone(0.035, 0.06, 5, STRAW_RED, { position: [x + 0.06, 0.04, z], rotation: [Math.PI, 0, 0] }));
+      return parts;
+    }),
+  );
+};
+
+/** Fruit tree: a sapling, a young tree, then a full crown with fruit. */
+const fruitTree = (fruit: string, crown: string) => (stage: number): BufferGeometry => {
+  if (stage === 0) {
+    return merge([
+      box(0.03, 0.3, 0.03, TRUNK, { position: [0, 0.15, 0] }),
+      sphere(0.1, GREEN_LIGHT, { position: [0, 0.32, 0] }, 5, 3),
+    ]);
+  }
+  const h = stage === 1 ? 0.6 : 1;
+  const parts = [
+    cylinder(0.05, 0.08, h * 0.5, 5, TRUNK, { position: [0, h * 0.25, 0] }),
+    sphere(h * 0.38, crown, { position: [0, h * 0.68, 0] }, 7, 5),
+    sphere(h * 0.26, GREEN_DARK, { position: [h * 0.18, h * 0.82, -h * 0.1] }, 6, 4),
+  ];
+  if (stage === 2) {
+    for (let i = 0; i < 9; i++) {
+      const a = hash01(i * 7 + 1) * Math.PI * 2;
+      const y = h * (0.5 + hash01(i * 11 + 2) * 0.4);
+      parts.push(sphere(0.05, fruit, { position: [Math.cos(a) * h * 0.36, y, Math.sin(a) * h * 0.36] }, 5, 3));
+    }
+  }
+  return merge(parts);
+};
+
+const orange = fruitTree(ORANGE, GREEN);
+const apple = fruitTree(APPLE, GREEN);
+
+export const CROP_MODELS: Record<CropId, (stage: number) => BufferGeometry> = {
+  wheat,
+  corn,
+  tomato,
+  carrot,
+  potato,
+  pumpkin,
+  strawberry,
+  orange,
+  apple,
+};
 
 const heightScales = new Map<CropId, number>();
 

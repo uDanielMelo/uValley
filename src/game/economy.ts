@@ -4,12 +4,14 @@ import { FERTILIZER } from '../data/fertilizer';
 import { PLOT_BASE_COST, PLOT_COST_MULTIPLIER } from '../data/economy';
 import { PLOT_COUNT, neighbourPlots, tilesInPlot } from './grid';
 import { addCount } from './inventory';
+import { isUnlocked } from './research';
 import { fail, ok, type ActionResult, type GameState } from './types';
 
 const isPositiveInt = (n: number): boolean => Number.isInteger(n) && n > 0;
 
 export const buySeeds = (state: GameState, cropId: CropId, quantity: number): ActionResult => {
   if (!isPositiveInt(quantity)) return fail('invalid-quantity');
+  if (!isUnlocked(state, cropId)) return fail('not-researched');
   const cost = CROPS[cropId].seedCost * quantity;
   if (state.money < cost) return fail('not-enough-money');
   return ok({

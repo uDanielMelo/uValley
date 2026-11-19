@@ -66,7 +66,7 @@ export const roadError = (state: GameState, index: number): ActionError | null =
   const tile = isValidTileIndex(index) ? state.tiles[index] : undefined;
   if (!tile) return 'out-of-bounds';
   if (tile.state === 'locked') return 'locked';
-  if (tile.structure) return 'structure';
+  if (tile.structure || tile.cover) return 'structure';
   if (tile.road) return 'already-road';
   if (tile.state !== 'grass') return 'not-grass';
   return null;

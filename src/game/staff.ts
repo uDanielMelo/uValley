@@ -1,5 +1,5 @@
 import { ANIMAL_IDS, type AnimalId } from '../data/animals';
-import { CROP_IDS, type CropId } from '../data/crops';
+import { CROP_IDS, MASTERY_LEVELS, type CropId } from '../data/crops';
 import {
   AGE_BANDS,
   CANDIDATE_COUNT,
@@ -28,6 +28,7 @@ import {
   type WorkerTemplate,
 } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
+import { addCount } from './inventory';
 import { hash01 } from './random';
 import { bedCount } from './structures';
 import {
@@ -77,14 +78,34 @@ const matches = (profile: WorkerProfile, task: TaskContext): { skill: boolean; s
   specialty: specialtyMatches(profile.specialty, task),
 });
 
-/** Multiplier on work speed for a task (1 = normal): age, stars, skill and specialty. */
+/** Crop mastery level (index in MASTERY_LEVELS) of a person on a crop, or -1 below the first. */
+export const masteryLevel = (profile: Pick<WorkerProfile, 'cropXp'>, cropId: CropId): number => {
+  const done = profile.cropXp?.[cropId] ?? 0;
+  let level = -1;
+  MASTERY_LEVELS.forEach((l, i) => {
+    if (done >= l.tasks) level = i;
+  });
+  return level;
+};
+
+const mastery = (profile: WorkerProfile, task: TaskContext) =>
+  task.cropId ? MASTERY_LEVELS[masteryLevel(profile, task.cropId)] : undefined;
+
+/** One more task done on a crop (seed, water, harvest or fertilize). */
+export const gainMastery = <T extends WorkerProfile>(profile: T, cropId: CropId): T => ({
+  ...profile,
+  cropXp: addCount(profile.cropXp ?? {}, cropId, 1),
+});
+
+/** Multiplier on work speed for a task (1 = normal): age, stars, skill, specialty and crop mastery. */
 export const workSpeed = (profile: WorkerProfile, task: TaskContext): number => {
   const m = matches(profile, task);
   return (
     ageBand(profile.age).speed *
     STAR_LEVELS[profile.stars].speed *
     (m.skill ? SKILL_BONUS.speed : 1) *
-    (m.specialty ? SPECIALTY_BONUS.speed : 1)
+    (m.specialty ? SPECIALTY_BONUS.speed : 1) *
+    (mastery(profile, task)?.speed ?? 1)
   );
 };
 
@@ -95,7 +116,8 @@ export const workEffectiveness = (profile: WorkerProfile, task: TaskContext): nu
     ageBand(profile.age).effectiveness *
     STAR_LEVELS[profile.stars].effectiveness *
     (m.skill ? SKILL_BONUS.effectiveness : 1) *
-    (m.specialty ? SPECIALTY_BONUS.effectiveness : 1)
+    (m.specialty ? SPECIALTY_BONUS.effectiveness : 1) *
+    (mastery(profile, task)?.effectiveness ?? 1)
   );
 };
 

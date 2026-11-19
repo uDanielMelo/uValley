@@ -7,10 +7,11 @@ function SeedChips() {
   const selected = useGameStore((s) => s.selectedCrop);
   const tool = useGameStore((s) => s.tool);
   const seeds = useGameStore((s) => s.game.inventory.seeds);
+  const known = useGameStore((s) => s.game.research.unlocked.join(','));
   const select = useGameStore((s) => s.setSelectedCrop);
   return (
-    <div className="flex items-center gap-1">
-      {CROP_IDS.map((id) => {
+    <div className="flex flex-wrap items-center gap-1">
+      {CROP_IDS.filter((id) => known.split(',').includes(id)).map((id) => {
         const count = seeds[id] ?? 0;
         const active = tool === 'seed' && id === selected;
         return (
