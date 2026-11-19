@@ -6,6 +6,7 @@ import { BuildGhost } from './BuildGhost';
 import { CameraRig } from './CameraRig';
 import { Car } from './Car';
 import { Predators } from './Predators';
+import { Rain } from './Rain';
 import { CropLayer } from './CropLayer';
 import { DayNightLight } from './DayNightLight';
 import { Environment } from './Environment';
@@ -52,6 +53,7 @@ export function GameCanvas() {
       <Animals />
       <Carcasses />
       <Predators />
+      <Rain />
       <Car />
       <PostFx />
     </Canvas>

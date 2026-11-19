@@ -1,21 +1,23 @@
 import { FERTILIZER } from '../data/fertilizer';
+import { seasonGrowth } from './climate';
 import { growthMinutesNeeded } from './crops';
 import type { Tile } from './types';
 
 /**
  * Applies growth to every watered tile for the game interval [from, to).
- * A crop only grows while watered (faster on fertilized soil); when watering wears off the tile
- * goes back to 'planted'.
+ * A crop only grows while watered (faster on fertilized soil and in good seasons); when watering
+ * wears off the tile goes back to 'planted'.
  * Returns the same array reference when nothing changed.
  */
 export const growTiles = (tiles: Tile[], from: number, to: number): Tile[] => {
   if (to <= from) return tiles;
   let next: Tile[] | null = null;
+  const season = seasonGrowth(from);
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i];
     if (!tile || tile.state !== 'watered' || !tile.crop) continue;
     const wateredUntil = tile.wateredUntil ?? from;
-    const effective = Math.max(0, Math.min(to, wateredUntil) - from) * (tile.fertilized ? FERTILIZER.growth : 1);
+    const effective = Math.max(0, Math.min(to, wateredUntil) - from) * (tile.fertilized ? FERTILIZER.growth : 1) * season;
     const growthMinutes = Math.min(
       growthMinutesNeeded(tile.crop),
       tile.crop.growthMinutes + effective,

@@ -5,6 +5,7 @@ import { fertilize, harvest, plant, till, water } from '../actions';
 import { addAnimal, stepAnimals } from '../animals';
 import { growthMinutesNeeded } from '../crops';
 import { addFertilizer, fillManure, setTimeOfDay } from '../dev';
+import { seasonGrowth } from '../climate';
 import { buyFertilizer } from '../economy';
 import { tileIndex } from '../grid';
 import { growTiles } from '../growth';
@@ -83,8 +84,8 @@ describe('fertilizing', () => {
     const from = base.gameMinutes;
     const plainGrowth = growTiles(base.tiles, from, from + 60)[TILE]?.crop?.growthMinutes ?? 0;
     const richGrowth = growTiles(rich.tiles, from, from + 60)[TILE]?.crop?.growthMinutes ?? 0;
-    expect(plainGrowth).toBe(60);
-    expect(richGrowth).toBeCloseTo(60 * FERTILIZER.growth);
+    expect(plainGrowth).toBeCloseTo(60 * seasonGrowth(from));
+    expect(richGrowth).toBeCloseTo(plainGrowth * FERTILIZER.growth);
   });
 
   it('sometimes gives an extra unit at harvest (fertilized only)', () => {

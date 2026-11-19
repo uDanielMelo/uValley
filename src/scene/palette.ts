@@ -53,6 +53,13 @@ export const PALETTE = {
   taskWater: '#5ab4f0',
   taskHand: '#ffd23f',
   taskFertilize: '#a0632f',
+  /** Landscape tint per season (multiplies vertex colors). */
+  seasonSpring: '#ffffff',
+  seasonSummer: '#fff3d2',
+  seasonAutumn: '#f6c88c',
+  seasonWinter: '#cfd9de',
+  rain: '#b9d2e6',
+  snow: '#ffffff',
   /** Fertilized soil is darkened toward this. */
   fertilizedSoil: '#3b2614',
   /** Road being opened, and road being removed. */

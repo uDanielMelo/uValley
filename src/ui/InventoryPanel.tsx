@@ -1,6 +1,7 @@
 import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
 import { FERTILIZER } from '../data/fertilizer';
 import { MEDICINES, MEDICINE_IDS } from '../data/health';
+import { StorageSummary } from './StorageSummary';
 import { CROPS, CROP_IDS } from '../data/crops';
 import { produceValue } from '../game/economy';
 import { useGameStore } from '../store/gameStore';
@@ -110,7 +111,8 @@ export function InventoryPanel() {
   const sellAll = useGameStore((s) => s.sellAll);
   return (
     <Panel title="🎒 Inventário" onClose={close}>
-      <h3 className="mb-2 font-black">Colheitas</h3>
+      <StorageSummary />
+      <h3 className="mt-3 mb-2 font-black">Colheitas</h3>
       <ProduceList />
       <AnimalProductList />
       <Button variant="leaf" className="mt-3 w-full" disabled={total <= 0} onClick={sellAll}>

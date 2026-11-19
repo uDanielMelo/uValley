@@ -1,12 +1,13 @@
 import type { ThreeEvent } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { BoxGeometry, Color, Matrix4, type InstancedMesh } from 'three';
+import { BoxGeometry, Color, Matrix4, type InstancedMesh, type MeshStandardMaterial } from 'three';
 import { TILE_COUNT, tileCoords } from '../game/grid';
 import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { TILE_HEIGHT, hash01, indexToWorld } from './coords';
 import { fbm } from './noise';
 import { PALETTE } from './palette';
+import { addSeasonal } from './season';
 
 const C = {
   grassA: new Color(PALETTE.grassA),
@@ -65,6 +66,12 @@ export function TileLayer() {
   const meshRef = useRef<InstancedMesh>(null);
   const tiles = useGameStore((s) => s.game.tiles);
   const geometry = useMemo(() => new BoxGeometry(1, TILE_HEIGHT, 1), []);
+  // The ground follows the season's tint.
+  const unregister = useRef<(() => void) | null>(null);
+  const seasonalRef = (material: MeshStandardMaterial | null) => {
+    unregister.current?.();
+    unregister.current = material ? addSeasonal(material) : null;
+  };
 
   useLayoutEffect(() => {
     const mesh = meshRef.current;
@@ -143,7 +150,7 @@ export function TileLayer() {
       onPointerUp={onUp}
       onClick={onClick}
     >
-      <meshStandardMaterial roughness={1} />
+      <meshStandardMaterial ref={seasonalRef} roughness={1} />
     </instancedMesh>
   );
 }

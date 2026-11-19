@@ -86,8 +86,20 @@ Grande demais para uma entrega: dividida em sub-etapas, cada uma com branch e ve
   mais. Atividade Adubar (tecla 5): +30% de crescimento e 35% de chance de uma unidade extra na colheita; o
   adubo também é vendido na loja. Decisões tomadas por mim com a autonomia dada pelo usuário. Save v12.
 
-### Etapa 4: armazenamento e clima
+### Etapa 4: armazenamento e clima ✅
 O celeiro guarda produtos agrícolas e animais. Capacidade por construção, intempéries e estações, perda e conservação por nível, refrigeração.
+
+Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
+1. Capacidade: despensa da casa 30, silo 80 só de grãos, armazém 60, celeiro 100 e a nova câmara fria 30
+   (refrigerada). Sementes, remédio e adubo não ocupam espaço.
+2. Estragos à meia-noite: tomate, ovos, leite e trufa perdem uma fração por dia (trigo e lã não); no silo e na
+   câmara fria nada estraga; o que não cabe fica ao relento e perde 25% ou mais por noite.
+3. Estações de 7 dias (primavera, verão, outono, inverno): crescimento ×1,15 / ×1,1 / ×1 / ×0,6 e estragos
+   ×1 / ×1,5 / ×1 / ×0,6.
+4. Clima do dia (sol, nublado, chuva, tempestade) sorteado pela estação, sem salvar: a chuva rega a lavoura e
+   a tempestade destrói 12% das plantas em crescimento. No inverno a chuva vira neve.
+5. Visual: céu cinza, luz mais fraca, relâmpagos, chuva e neve, paisagem tingida pela estação. Sem mudança no
+   formato do save (tudo é derivado).
 
 ### Etapa 5: centro comercial (segundo ambiente)
 Troca de cena fazenda ↔ cidade, lojas clicáveis, peso dos itens e capacidade do veículo (upgrade),

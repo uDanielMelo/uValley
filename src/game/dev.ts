@@ -4,11 +4,13 @@
  */
 import { ANIMAL_PRODUCT_IDS, GAME_MINUTES_PER_REAL_HOUR, type AnimalId } from '../data/animals';
 import { CROP_IDS } from '../data/crops';
+import type { WeatherId } from '../data/climate';
 import { DISEASES, MEDICINE_IDS, type DiseaseId } from '../data/health';
 import { STRUCTURES } from '../data/structures';
 import { HOME_POSITION, MAX_WORKERS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { addAnimal, animalProduct } from './animals';
+import { applyDayWeather, dayOf, weatherOf } from './climate';
 import { raidShelter, type PredatorAttack } from './health';
 import { addStock, manureCap, shelterDef, sheltersFor } from './shelters';
 import { findFreeSpot, placeStructure } from './structures';
@@ -170,6 +172,17 @@ export const sickenAnimal = (state: GameState, disease: DiseaseId = 'flu', anima
     ...state,
     animals: state.animals.map((a) => (a.id === target.id ? { ...a, health: { disease, since, noticed: true } } : a)),
   };
+};
+
+/** Jumps the clock (without simulating) to the same hour of the next day with this weather. */
+export const skipToWeather = (state: GameState, weather: WeatherId): GameState => {
+  const today = dayOf(state.gameMinutes);
+  for (let day = today + 1; day < today + 200; day++) {
+    if (weatherOf(day) !== weather) continue;
+    // The day's rain or storm hits the farm, as it would at midnight.
+    return applyDayWeather({ ...state, gameMinutes: state.gameMinutes + (day - today) * MINUTES_PER_DAY }, day).state;
+  }
+  return state;
 };
 
 /** Adds fertilizer units. */

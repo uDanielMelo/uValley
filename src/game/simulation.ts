@@ -1,9 +1,11 @@
 import { WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { GROWTH_STEP_MINUTES } from '../data/world';
+import { applyDayWeather, type WeatherReport } from './climate';
 import { growTiles } from './growth';
 import { payFeed, removeDeadAnimals, stepAnimals } from './animals';
 import { queueAnimalCare, stepHealth, type PredatorAttack } from './health';
 import { queueShelterChores } from './shelters';
+import { spoilGoods, type Spoiled } from './storage';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
 import type { Animal, GameState, StructureInstance, StructureWorkKind } from './types';
 import type { ShelterLevel, StructureId } from '../data/structures';
@@ -27,6 +29,10 @@ export interface TickResult {
   /** Animals that died of a sickness or wound left untreated (their carcass stays). */
   diedOfSickness: Animal[];
   predatorAttacks: PredatorAttack[];
+  /** The weather of each day that started (rain watered, storms destroyed). */
+  weatherReports: WeatherReport[];
+  /** Goods that spoiled at midnight (null when nothing did). */
+  spoiled: Spoiled | null;
 }
 
 export interface FinishedWork {
@@ -59,7 +65,7 @@ const finishedWorks = (before: readonly StructureInstance[], after: readonly Str
  * then health (sickness, predators) and the standing orders: collecting at shelters with products,
  * medicating noticed sick animals and taking carcasses away. Then, for each
  * full hour that ended: wages for the hours of the shift, day laborers leaving when it ends, and
- * at midnight the feed and a new hiring board.
+ * at midnight the feed, a new hiring board, the new day's weather and spoilage.
  */
 export const advanceGame = (state: GameState, dtMinutes: number): TickResult => {
   if (dtMinutes <= 0) {
@@ -73,6 +79,8 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       sickNoticed: [],
       diedOfSickness: [],
       predatorAttacks: [],
+      weatherReports: [],
+      spoiled: null,
     };
   }
   const gameMinutes = state.gameMinutes + dtMinutes;
@@ -88,6 +96,8 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   const workersLeft: string[] = [];
   let hungryAnimals = 0;
   let tempsLeft = 0;
+  const weatherReports: WeatherReport[] = [];
+  let spoiled: Spoiled | null = null;
   const firstHour = Math.floor(state.gameMinutes / 60) + 1;
   const lastHour = Math.floor(gameMinutes / 60);
   for (let h = firstHour; h <= lastHour; h++) {
@@ -107,6 +117,13 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       const fed = payFeed(next);
       next = refreshCandidates(fed.state);
       hungryAnimals = fed.hungry;
+      // A new day: its weather hits the farm and stored goods spoil a little.
+      const day = Math.floor(h / 24) + 1;
+      const weather = applyDayWeather(next, day);
+      weatherReports.push(weather.report);
+      const spoil = spoilGoods(weather.state, day);
+      next = spoil.state;
+      if (spoil.spoiled.total > 0) spoiled = spoil.spoiled;
     }
   }
   return {
@@ -119,6 +136,8 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
     sickNoticed: health.noticed,
     diedOfSickness: health.died,
     predatorAttacks: health.attacks,
+    weatherReports,
+    spoiled,
   };
 };
 

@@ -1,9 +1,12 @@
 import { useFrame, useThree } from '@react-three/fiber';
 import { useEffect, useRef } from 'react';
 import { Color, Fog, MathUtils, Vector3, type AmbientLight, type DirectionalLight, type HemisphereLight } from 'three';
+import { SEASONS, WEATHERS } from '../data/climate';
+import { dayOf, seasonOf, weatherAt } from '../game/climate';
 import { dayFraction, daylight } from '../game/time';
 import { useGameStore } from '../store/gameStore';
 import { LAMP_MATERIAL, WINDOW_MATERIAL, nightState } from './materials';
+import { SEASON_TINTS, paintSeasonal, seasonTint } from './season';
 import { skyUniforms } from './Sky';
 
 // Sky palette: [top, horizon] for day, golden hour and night.
@@ -20,6 +23,9 @@ const MOON = new Color('#8fa8e8');
 const HEMI_GROUND_DAY = new Color('#6b7a3a');
 const WARM_WHITE = new Color('#fff6e8');
 const HEMI_GROUND_NIGHT = new Color('#24304a');
+/** Sky colors of a fully overcast day. */
+const GRAY_TOP = new Color('#7f8b96');
+const GRAY_HORIZON = new Color('#b4bcc3');
 
 /** Hours of sunrise and sunset; the sun follows an arc between them. */
 const SUNRISE = 5;
@@ -34,6 +40,8 @@ const tmpColor = new Color();
 const sunDir = new Vector3();
 const lightDir = new Vector3();
 const shadowDir = new Vector3();
+/** Eased weather, so the sky changes smoothly at midnight. */
+const weather = { overcast: 0, flash: 0, nextFlash: 0 };
 
 /**
  * Sun/moon, sky dome, fog and night lights driven by the game clock.
@@ -66,6 +74,19 @@ export function DayNightLight() {
   useFrame(() => {
     const minutes = useGameStore.getState().game.gameMinutes;
     const light = daylight(minutes);
+    const today = WEATHERS[weatherAt(minutes)];
+    weather.overcast = MathUtils.lerp(weather.overcast, today.overcast, 0.02);
+    const overcast = weather.overcast;
+    // Lightning in storms: short random flashes.
+    const now = performance.now() / 1000;
+    if (today.id === 'storm' && now > weather.nextFlash) {
+      weather.flash = 1;
+      weather.nextFlash = now + 2 + Math.random() * 6;
+    }
+    weather.flash *= 0.86;
+    // The landscape follows the season.
+    seasonTint.lerp(SEASON_TINTS[SEASONS[seasonOf(dayOf(minutes))].id], 0.02);
+    paintSeasonal();
     const hour = dayFraction(minutes) * 24;
 
     // Sun arc: 0 at sunrise, PI at sunset.
@@ -87,7 +108,7 @@ export function DayNightLight() {
       lightDir.copy(MOON_DIR).lerp(shadowDir.normalize(), sunWeight).normalize();
       // The target stays at the origin (default), so the shadow frustum covers the whole farm.
       s.position.copy(lightDir).multiplyScalar(LIGHT_DISTANCE);
-      s.intensity = MathUtils.lerp(0.7, 3.1, sunWeight) * (1 - golden * 0.12);
+      s.intensity = MathUtils.lerp(0.7, 3.1, sunWeight) * (1 - golden * 0.12) * (1 - overcast * 0.8);
       tmpColor.copy(SUN_HIGH).lerp(SUN_LOW, golden);
       s.color.copy(MOON).lerp(tmpColor, sunWeight);
     }
@@ -97,19 +118,22 @@ export function DayNightLight() {
     const horizon = skyUniforms.uHorizon.value;
     top.copy(NIGHT_TOP).lerp(DAY_TOP, light).lerp(DUSK_TOP, golden * 0.6);
     horizon.copy(NIGHT_HORIZON).lerp(DAY_HORIZON, light).lerp(DUSK_HORIZON, golden * 0.85);
+    // Clouds gray the sky by day (and darken the night a little).
+    top.lerp(GRAY_TOP, overcast * light * 0.85).multiplyScalar(1 - overcast * (1 - light) * 0.3);
+    horizon.lerp(GRAY_HORIZON, overcast * light * 0.8).multiplyScalar(1 - overcast * (1 - light) * 0.3);
     skyUniforms.uSunDir.value.copy(sunDir);
     skyUniforms.uSunColor.value.copy(SUN_HIGH).lerp(SUN_LOW, golden);
-    skyUniforms.uSunGlow.value = MathUtils.smoothstep(elevation, -0.08, 0.05);
-    skyUniforms.uStars.value = MathUtils.smoothstep(night, 0.6, 1);
+    skyUniforms.uSunGlow.value = MathUtils.smoothstep(elevation, -0.08, 0.05) * (1 - overcast);
+    skyUniforms.uStars.value = MathUtils.smoothstep(night, 0.6, 1) * (1 - overcast);
     if (scene.fog instanceof Fog) scene.fog.color.copy(horizon);
 
     if (hemi.current) {
       // Sky fill, warmed toward white so light walls don't turn blue.
       hemi.current.color.copy(top).lerp(horizon, 0.5).lerp(WARM_WHITE, 0.45 * light);
       hemi.current.groundColor.copy(HEMI_GROUND_NIGHT).lerp(HEMI_GROUND_DAY, light);
-      hemi.current.intensity = MathUtils.lerp(0.6, 1.1, light) + golden * 0.25;
+      hemi.current.intensity = (MathUtils.lerp(0.6, 1.1, light) + golden * 0.25) * (1 - overcast * 0.3);
     }
-    if (ambient.current) ambient.current.intensity = MathUtils.lerp(0.12, 0.25, light);
+    if (ambient.current) ambient.current.intensity = MathUtils.lerp(0.12, 0.25, light) + overcast * 0.12 + weather.flash * 2.5;
 
     const lamps = MathUtils.smoothstep(night, 0.35, 0.8);
     WINDOW_MATERIAL.emissiveIntensity = lamps * 3.5;

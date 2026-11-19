@@ -5,6 +5,7 @@ import { InstancedProps } from './InstancedProps';
 import { bush, flowerTuft, grassTuft, pineTree, rock, roundTree } from './models/natureModels';
 import { fbm } from './noise';
 import { PALETTE } from './palette';
+import { addSeasonal } from './season';
 import { buildTerrain, distanceFromGrid, distanceFromRoad, terrainHeight } from './terrain';
 
 /** Props keep this far (world units) from the off-map road's center line. */
@@ -128,6 +129,7 @@ export function Environment() {
     [],
   );
   const props = useMemo(buildProps, []);
+  useEffect(() => addSeasonal(terrainMaterial), [terrainMaterial]);
   useEffect(
     () => () => {
       terrain.dispose();
@@ -147,6 +149,7 @@ export function Environment() {
           matrices={set.matrices}
           castShadow={set.castShadow}
           wind={set.wind}
+          seasonal
         />
       ))}
     </group>

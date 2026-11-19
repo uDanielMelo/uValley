@@ -94,6 +94,7 @@ export function GrassLayer() {
           capacity={TILE_COUNT * TUFTS_PER_TILE}
           wind={WIND[v]}
           castShadow={v === 'rock' || v === 'tree' || v === 'bush'}
+          seasonal
         />
       ))}
     </group>

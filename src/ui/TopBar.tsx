@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { SPEED_OPTIONS, type GameSpeed } from '../data/world';
+import { SEASONS, SEASON_DAYS, WEATHERS } from '../data/climate';
+import { dayOfSeason, seasonOf, weatherLook, weatherOf, yearOf } from '../game/climate';
 import { daylight, formatClock, toClock } from '../game/time';
 import { useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
@@ -28,6 +30,26 @@ function Clock() {
       <span>Dia {clock.day}</span>
       <span className="text-wood/50">·</span>
       <span>{formatClock(clock)}</span>
+    </div>
+  );
+}
+
+/** Season and today's weather, with tomorrow's forecast on hover. */
+function Season() {
+  const day = useGameStore((s) => toClock(s.game.gameMinutes).day);
+  const season = SEASONS[seasonOf(day)];
+  const today = weatherLook(day);
+  const tomorrow = weatherLook(day + 1);
+  const waters = WEATHERS[weatherOf(day)].waters;
+  const title =
+    `${season.label}, dia ${dayOfSeason(day)} de ${SEASON_DAYS} (ano ${yearOf(day)}). ` +
+    `Hoje: ${today.label.toLowerCase()}${waters ? ' (rega a lavoura)' : ''}. ` +
+    `Amanhã: ${tomorrow.icon} ${tomorrow.label.toLowerCase()}.`;
+  return (
+    <div className="flex items-center gap-1.5 border-l-2 border-wood/20 px-3 text-sm font-black" title={title}>
+      <span aria-hidden>{season.icon}</span>
+      <span className="hidden sm:inline">{season.label}</span>
+      <span aria-label={today.label}>{today.icon}</span>
     </div>
   );
 }
@@ -189,6 +211,7 @@ export function TopBar() {
       <Card className="flex items-center py-1 pr-1">
         <Money />
         <Clock />
+        <Season />
         <SpeedControls />
       </Card>
       <Card className="flex items-center gap-0.5 p-1">

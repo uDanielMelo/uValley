@@ -44,15 +44,17 @@ describe('tile actions', () => {
 
     expect(harvest(s, FREE_TILE)).toEqual({ ok: false, error: 'not-mature' });
 
-    // Wheat needs 20 watered hours; watered at 06:00 lasts until midnight (18h).
-    s = tick(s, 18 * 60);
-    const afterDay = s.tiles[FREE_TILE];
-    expect(afterDay?.state).toBe('planted');
-    expect(afterDay?.crop && isMature(afterDay.crop)).toBe(false);
+    // Wheat needs 20 watered hours, 1.15× faster in spring (about 17.4 h); watered at 06:00 it
+    // lasts until midnight (18 h).
+    s = tick(s, 12 * 60);
+    const midday = s.tiles[FREE_TILE];
+    expect(midday?.state).toBe('watered');
+    expect(midday?.crop && isMature(midday.crop)).toBe(false);
 
-    s = unwrap(water(s, FREE_TILE));
-    s = tick(s, 3 * 60);
+    s = tick(s, 6 * 60);
     const grown = s.tiles[FREE_TILE];
+    // The watering wore off at midnight, but the crop got there first.
+    expect(grown?.state).toBe('planted');
     expect(grown?.crop && isMature(grown.crop)).toBe(true);
     expect(grown?.crop && cropStage(grown.crop)).toBe(2);
 

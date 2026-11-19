@@ -369,3 +369,47 @@ export function Bunkhouse() {
     </Meters>
   );
 }
+
+// ---------- Cold room: 2×2 tiles = 7 × 7 m ----------
+
+const COLD_WALL = '#e9eef1';
+const COLD_TRIM = '#9fb3c2';
+const COLD_STEEL = '#7d8a94';
+/** Insulated box: 5.6 × 3.2 × 5.2 m on a concrete slab. */
+const COLD_W = 5.6;
+const COLD_D = 5.2;
+const COLD_H = 3.2;
+const COLD_Z = -0.4;
+const COLD_FRONT = COLD_Z + COLD_D / 2;
+
+/** Cold room: white insulated panels, a heavy sealed door and a cooling unit on the side. */
+export function ColdRoom() {
+  return (
+    <Meters>
+      <Block position={[0, 0.1, 0]} size={[6.6, 0.2, 6.6]} color={CONCRETE} />
+      <Block position={[0, 0.2 + COLD_H / 2, COLD_Z]} size={[COLD_W, COLD_H, COLD_D]} color={COLD_WALL} />
+      {/* Panel seams */}
+      {[-1.9, -0.6, 0.6, 1.9].map((x) => (
+        <Block
+          key={x}
+          position={[x, 0.2 + COLD_H / 2, COLD_FRONT + 0.01]}
+          size={[0.05, COLD_H, 0.03]}
+          color={COLD_TRIM}
+          shadow={false}
+        />
+      ))}
+      {/* Flat roof with a slight overhang */}
+      <Block position={[0, 0.2 + COLD_H + 0.1, COLD_Z]} size={[COLD_W + 0.3, 0.2, COLD_D + 0.3]} color={COLD_TRIM} />
+      {/* Sealed door (1.4 × 2.2 m) with a steel frame and handle */}
+      <Block position={[0.9, 0.2 + 1.15, COLD_FRONT + 0.05]} size={[1.6, 2.4, 0.1]} color={COLD_STEEL} />
+      <Block position={[0.9, 0.2 + 1.1, COLD_FRONT + 0.11]} size={[1.4, 2.2, 0.04]} color={COLD_WALL} />
+      <Block position={[1.4, 0.2 + 1.1, COLD_FRONT + 0.16]} size={[0.08, 0.5, 0.06]} color={COLD_STEEL} shadow={false} />
+      {/* Cooling unit with a fan grille on the side wall */}
+      <Block position={[COLD_W / 2 + 0.45, 1.4, COLD_Z + 0.8]} size={[0.8, 1.0, 1.4]} color={COLD_STEEL} />
+      <Block position={[COLD_W / 2 + 0.86, 1.4, COLD_Z + 0.8]} size={[0.04, 0.7, 0.7]} color="#3d454b" shadow={false} />
+      {/* Pallets of crates by the door */}
+      <Block position={[-1.6, 0.35, COLD_FRONT + 0.9]} size={[1.2, 0.3, 1.0]} color={WOOD_DARK} />
+      <Block position={[-1.6, 0.8, COLD_FRONT + 0.9]} size={[1.0, 0.6, 0.8]} color={WOOD} />
+    </Meters>
+  );
+}

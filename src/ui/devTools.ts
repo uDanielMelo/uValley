@@ -1,4 +1,5 @@
 import { ANIMAL_IDS, type AnimalId } from '../data/animals';
+import { WEATHERS, WEATHER_IDS, type WeatherId } from '../data/climate';
 import { DISEASE_IDS, PREDATORS, PREDATOR_IDS, type DiseaseId } from '../data/health';
 import { shelterDef, shelterDoor } from '../game/shelters';
 import { frontPoint } from '../game/structures';
@@ -20,6 +21,7 @@ import {
   setMoney,
   setTimeOfDay,
   sickenAnimal,
+  skipToWeather,
   skipMinutes,
   spawnAnimals,
   unlockAll,
@@ -64,6 +66,7 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.preview()          só a animação do ataque, sem ferir ninguém (alterna raposa, cachorro-do-mato, onça)
   dev.medicine(5)        +5 doses de cada remédio
   dev.fertilizer(10)     +10 de adubo
+  dev.weather('rain')    pula para o próximo dia com esse clima (sunny, cloudy, rain, storm)
   dev.manure()           todos os abrigos cheios de esterco
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
@@ -130,6 +133,13 @@ const devApi = {
     // A beat later, so the camera is already there when it appears.
     window.setTimeout(() => showSighting(predator, spot.x, spot.y), 400);
     showMessage(`🛠️ Prévia: ${PREDATORS[predator].label.toLowerCase()} (ninguém se feriu)`, 'info');
+  },
+  weather: (weather: WeatherId = 'rain') => {
+    if (!WEATHER_IDS.includes(weather)) {
+      console.warn(`Clima desconhecido: ${weather}. Use: ${WEATHER_IDS.join(', ')}`);
+      return;
+    }
+    apply((g) => skipToWeather(g, weather), `Pulou para um dia de ${WEATHERS[weather].label.toLowerCase()}`);
   },
   fertilizer: (amount = 10) => apply((g) => addFertilizer(g, amount), `+${amount} de adubo`),
   manure: () => apply(fillManure, 'Abrigos cheios de esterco'),

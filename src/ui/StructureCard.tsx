@@ -22,6 +22,7 @@ import type { GameState, StructureInstance } from '../game/types';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { formatCoins, formatWorkTime } from './format';
 import { Button, Card, Coins } from './primitives';
+import { StorageSummary } from './StorageSummary';
 
 const find = (s: GameStore): StructureInstance | undefined =>
   s.selectedStructure === null ? undefined : s.game.structures.find((x) => x.id === s.selectedStructure);
@@ -183,8 +184,16 @@ function ExtraSection({ type }: { type: StructureId }) {
       </Button>
     );
   }
-  if (STRUCTURES[type].category === 'storage') {
-    return <p className="text-xs font-bold text-wood/70">O armazenamento começa a contar na próxima etapa.</p>;
+  const storage = STRUCTURES[type].storage;
+  if (storage || type === 'house') {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <p className="text-xs font-bold text-wood/70">
+          {storage ? 'Armazenamento da fazenda:' : 'A despensa da casa guarda um pouco. Armazenamento da fazenda:'}
+        </p>
+        <StorageSummary />
+      </div>
+    );
   }
   return null;
 }

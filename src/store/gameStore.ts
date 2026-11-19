@@ -1,8 +1,17 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
-import { ANIMALS, BREEDS, type AnimalId, type AnimalProductId, type BreedId } from '../data/animals';
-import type { CropId } from '../data/crops';
+import {
+  ANIMALS,
+  ANIMAL_PRODUCTS,
+  ANIMAL_PRODUCT_IDS,
+  BREEDS,
+  type AnimalId,
+  type AnimalProductId,
+  type BreedId,
+} from '../data/animals';
+import { CROPS, CROP_IDS, type CropId } from '../data/crops';
 import { SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures';
+import { SEASONS, SEASON_DAYS } from '../data/climate';
 import { DISEASES, MEDICINES, PREDATORS, type MedicineId, type PredatorId } from '../data/health';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
 import { animalSalePrice, buyAnimal, sellAnimal, type PurchaseAge } from '../game/animals';
@@ -18,7 +27,9 @@ import {
 } from '../game/save';
 import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type DemolishChange } from '../game/construction';
 import { buyMedicine, medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
+import { seasonOf, weatherLook } from '../game/climate';
 import { advanceGame, type FinishedWork } from '../game/simulation';
+import type { Spoiled } from '../game/storage';
 import { createInitialState } from '../game/state';
 import { anchorFor, structureAt, upgradeCost } from '../game/structures';
 import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/staff';
@@ -241,6 +252,20 @@ const sickText = (game: GameState, animal: Animal): string => {
   return `${disease.icon} ${disease.label}: ${animalName(animal)} está doente. ${care}`;
 };
 
+/** Toast text for what spoiled overnight, e.g. "2 🍅 tomate, 1 🥛 leite". */
+const spoiledText = (spoiled: Spoiled): string => {
+  const parts: string[] = [];
+  for (const id of CROP_IDS) {
+    const n = spoiled.produce[id];
+    if (n) parts.push(`${n} ${CROPS[id].icon} ${CROPS[id].label.toLowerCase()}`);
+  }
+  for (const id of ANIMAL_PRODUCT_IDS) {
+    const n = spoiled.products[id];
+    if (n) parts.push(`${n} ${ANIMAL_PRODUCTS[id].icon} ${ANIMAL_PRODUCTS[id].label.toLowerCase()}`);
+  }
+  return parts.join(', ');
+};
+
 /** Toast text for a site, upgrade or demolition the crew finished. */
 const finishedText = (work: FinishedWork): string => {
   if (work.kind === 'build') return `${label(work.type)} pronto(a)!`;
@@ -307,6 +332,19 @@ export const useGameStore = create<GameStore>()(
         const { state, workersLeft, hungryAnimals, tempsLeft, worksFinished, animalsDied } = tick;
         set({ game: state });
         for (const animal of tick.sickNoticed) get().showMessage(sickText(state, animal), 'error');
+        for (const report of tick.weatherReports) {
+          const weather = weatherLook(report.day);
+          const season = SEASONS[seasonOf(report.day)];
+          const start = (report.day - 1) % SEASON_DAYS === 0 ? ` ${season.icon} Começou: ${season.label.toLowerCase()}.` : '';
+          if (report.destroyed > 0) {
+            get().showMessage(`${weather.icon} ${weather.label}: destruiu ${report.destroyed} planta(s).${start}`, 'error');
+          } else if (report.watered > 0) {
+            get().showMessage(`${weather.icon} ${weather.label} hoje: a lavoura foi regada.${start}`, 'info');
+          } else if (start) {
+            get().showMessage(`${start.trim()} Hoje: ${weather.icon} ${weather.label.toLowerCase()}.`, 'info');
+          }
+        }
+        if (tick.spoiled) get().showMessage(`Estragou no estoque: ${spoiledText(tick.spoiled)}.`, 'error');
         if (tick.predatorAttacks.length > 0) get().reportAttacks(tick.predatorAttacks);
         if (tick.diedOfSickness.length > 0) {
           const names = tick.diedOfSickness

@@ -3,7 +3,7 @@ import type { StructureId } from '../data/structures';
 import { footprintOf } from '../game/structures';
 import type { Rotation } from '../game/types';
 import { cornerToWorld } from './coords';
-import { Barn, Bunkhouse, ChickenCoop, Silo, Warehouse } from './models/Buildings';
+import { Barn, Bunkhouse, ChickenCoop, ColdRoom, Silo, Warehouse } from './models/Buildings';
 import { House } from './models/House';
 import { Corral, Pigsty, Sheepfold, Stable } from './models/Shelters';
 import { ShippingBin } from './models/ShippingBin';
@@ -20,6 +20,7 @@ export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   silo: Silo,
   warehouse: Warehouse,
   barn: Barn,
+  coldRoom: ColdRoom,
 };
 
 export interface PlacedProps {

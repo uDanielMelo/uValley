@@ -27,6 +27,7 @@ const SCAFFOLD_HEIGHT: Partial<Record<StructureId, number>> = {
   silo: 6.5,
   warehouse: 5,
   barn: 6,
+  coldRoom: 3.6,
 };
 const DEFAULT_SCAFFOLD = 3;
 const POLE = meters(0.12);

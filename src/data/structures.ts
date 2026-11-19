@@ -14,6 +14,7 @@ export const STRUCTURE_IDS = [
   'silo',
   'warehouse',
   'barn',
+  'coldRoom',
 ] as const;
 export type StructureId = (typeof STRUCTURE_IDS)[number];
 
@@ -59,6 +60,15 @@ export interface ShelterDef {
   perks: Partial<Record<ShelterLevel, string>>;
 }
 
+/** Room a storage building adds (units of goods). */
+export interface StorageDef {
+  capacity: number;
+  /** Only grain (the silo). */
+  grainOnly?: boolean;
+  /** Refrigerated: what is kept here does not spoil. */
+  cold?: boolean;
+}
+
 /**
  * Footprints are in tiles of TILE_METERS (3.5 m, see data/scale.ts) and the models are built to
  * match real sizes: bunkhouse 7 × 3.5 m, coop 7 × 3.5 m, pigsty 7 × 3.5 m, sheepfold 7 × 7 m,
@@ -77,6 +87,8 @@ export interface StructureDef {
   category?: StructureCategory;
   /** Present on animal shelters. */
   shelter?: ShelterDef;
+  /** Present on storage buildings. */
+  storage?: StorageDef;
   /** Short pt-BR description for the build menu. */
   description: string;
 }
@@ -193,7 +205,8 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 250,
     buildMinutes: 600,
     category: 'storage',
-    description: 'Guarda grãos e ração.',
+    storage: { capacity: 80, grainOnly: true },
+    description: 'Guarda 80 de grãos (trigo e milho), que não estragam.',
   },
   warehouse: {
     id: 'warehouse',
@@ -204,7 +217,8 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 350,
     buildMinutes: 720,
     category: 'storage',
-    description: 'Estoque extra de colheita e produtos.',
+    storage: { capacity: 60 },
+    description: 'Guarda 60 de colheita e produtos.',
   },
   barn: {
     id: 'barn',
@@ -215,7 +229,20 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cost: 400,
     buildMinutes: 960,
     category: 'storage',
-    description: 'Guarda colheita e produtos animais.',
+    storage: { capacity: 100 },
+    description: 'Guarda 100 de colheita e produtos animais.',
+  },
+  coldRoom: {
+    id: 'coldRoom',
+    label: 'Câmara fria',
+    icon: '🧊',
+    width: 2,
+    depth: 2,
+    cost: 600,
+    buildMinutes: 720,
+    category: 'storage',
+    storage: { capacity: 30, cold: true },
+    description: 'Refrigerada: guarda 30 de perecíveis (leite, ovos, tomate) sem estragar.',
   },
 };
 

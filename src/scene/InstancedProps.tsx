@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { MeshStandardMaterial, type BufferGeometry, type InstancedMesh, type Matrix4 } from 'three';
+import { addSeasonal } from './season';
 import { applyWind } from './wind';
 
 const noRaycast = () => null;
@@ -13,6 +14,8 @@ interface InstancedPropsProps {
   receiveShadow?: boolean;
   /** Wind sway strength (0 = static). */
   wind?: number;
+  /** Tinted by the season (landscape props). */
+  seasonal?: boolean;
 }
 
 /** A vertex-colored, flat-shaded InstancedMesh filled from a list of matrices. Not raycastable. */
@@ -23,6 +26,7 @@ export function InstancedProps({
   castShadow = false,
   receiveShadow = true,
   wind = 0,
+  seasonal = false,
 }: InstancedPropsProps) {
   const ref = useRef<InstancedMesh>(null);
   const material = useMemo(() => {
@@ -31,6 +35,7 @@ export function InstancedProps({
     return m;
   }, [wind]);
   useEffect(() => () => material.dispose(), [material]);
+  useEffect(() => (seasonal ? addSeasonal(material) : undefined), [material, seasonal]);
 
   useLayoutEffect(() => {
     const mesh = ref.current;

@@ -158,6 +158,13 @@ export function DevPanel() {
             <DevButton onClick={dev.manure}>🪣 Esterco cheio</DevButton>
           </Section>
 
+          <Section title="Clima">
+            <DevButton onClick={() => dev.weather('sunny')}>☀️ Sol</DevButton>
+            <DevButton onClick={() => dev.weather('cloudy')}>☁️ Nublado</DevButton>
+            <DevButton onClick={() => dev.weather('rain')}>🌧️ Chuva</DevButton>
+            <DevButton onClick={() => dev.weather('storm')}>⛈️ Tempestade</DevButton>
+          </Section>
+
           <p className="text-[11px] text-white/60">
             Também no console: <code className="text-emerald-300">dev.help()</code>
           </p>
