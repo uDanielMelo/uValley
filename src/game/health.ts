@@ -19,6 +19,7 @@ import {
   type MedicineId,
   type PredatorId,
 } from '../data/health';
+import { MANURE_SICKNESS } from '../data/fertilizer';
 import { MAX_TASKS } from '../data/workers';
 import { GRID_SIZE } from '../data/world';
 import { isAwake, isInside, lifeStage } from './animals';
@@ -26,7 +27,7 @@ import { deathAt, isKnownSick, noticeAt } from './disease';
 import { inBounds, tileIndex } from './grid';
 import { addCount } from './inventory';
 import { hash01 } from './random';
-import { crowdingFactor, residents, shelterComfort, shelterDoor, shelterSafety } from './shelters';
+import { crowdingFactor, manureFull, residents, shelterComfort, shelterDoor, shelterSafety } from './shelters';
 import {
   fail,
   ok,
@@ -62,7 +63,8 @@ const outsideAtNight = (state: GameState, animal: Animal): boolean =>
 
 /**
  * Chance per real hour (at 1×) that a healthy animal falls sick: low comfort, crowded pasture, a
- * full shelter, hunger, being a baby or old, staying out at night and a carcass nearby all raise it.
+ * full shelter, hunger, being a baby or old, staying out at night, a carcass nearby and a shelter
+ * full of manure all raise it.
  */
 export const sicknessRisk = (state: GameState, animal: Animal): number => {
   const r = DISEASE_RISK;
@@ -77,7 +79,8 @@ export const sicknessRisk = (state: GameState, animal: Animal): number => {
     (animal.fed ? 1 : r.hungry) *
     r.stage[lifeStage(state.gameMinutes, animal)] *
     (outsideAtNight(state, animal) ? r.outsideAtNight : 1) *
-    (hasCarcassBy(state, animal.shelterId) ? r.carcass : 1)
+    (hasCarcassBy(state, animal.shelterId) ? r.carcass : 1) *
+    (shelter && manureFull(shelter) ? MANURE_SICKNESS : 1)
   );
 };
 

@@ -9,6 +9,7 @@ import {
   type AnimalId,
   type BreedId,
 } from '../data/animals';
+import { FERTILIZER } from '../data/fertilizer';
 import { MEDICINES, MEDICINE_IDS, type MedicineId } from '../data/health';
 import { STRUCTURES } from '../data/structures';
 import { CROPS, CROP_IDS, type CropId } from '../data/crops';
@@ -209,6 +210,36 @@ function AnimalsTab() {
   );
 }
 
+function FertilizerRow() {
+  const money = useGameStore((s) => s.game.money);
+  const owned = useGameStore((s) => s.game.inventory.fertilizer);
+  const buy = useGameStore((s) => s.buyFertilizer);
+  return (
+    <li className="rounded-xl bg-parchment-dark/60 p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-base font-black">
+          {FERTILIZER.icon} {FERTILIZER.label}
+        </span>
+        <span className="text-xs font-bold">Você tem {owned}</span>
+      </div>
+      <p className="mt-0.5 text-xs font-bold text-wood/80">
+        Cresce {Math.round((FERTILIZER.growth - 1) * 100)}% mais rápido e {Math.round(FERTILIZER.harvestBonus * 100)}% de chance
+        de colher uma a mais. Os abrigos também dão esterco de graça.
+      </p>
+      <div className="mt-2 flex gap-2">
+        {QUANTITIES.map((q) => {
+          const cost = FERTILIZER.price * q;
+          return (
+            <Button key={q} className="flex-1 text-sm" disabled={money < cost} onClick={() => buy(q)}>
+              {q}× <Coins value={formatCoins(cost)} />
+            </Button>
+          );
+        })}
+      </div>
+    </li>
+  );
+}
+
 function MedicineRow({ id }: { id: MedicineId }) {
   const def = MEDICINES[id];
   const money = useGameStore((s) => s.game.money);
@@ -302,6 +333,7 @@ export function ShopPanel() {
           {CROP_IDS.map((id) => (
             <SeedRow key={id} id={id} />
           ))}
+          <FertilizerRow />
         </ul>
       )}
       {tab === 'animals' && <AnimalsTab />}

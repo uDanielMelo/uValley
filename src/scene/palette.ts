@@ -52,6 +52,9 @@ export const PALETTE = {
   taskSeed: '#7fd35a',
   taskWater: '#5ab4f0',
   taskHand: '#ffd23f',
+  taskFertilize: '#a0632f',
+  /** Fertilized soil is darkened toward this. */
+  fertilizedSoil: '#3b2614',
   /** Road being opened, and road being removed. */
   taskRoad: '#e0a45a',
   taskRoadRemove: '#ff6b5a',

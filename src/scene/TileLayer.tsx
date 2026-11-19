@@ -17,6 +17,7 @@ const C = {
   planted: new Color(PALETTE.planted),
   watered: new Color(PALETTE.watered),
   structure: new Color(PALETTE.structureGround),
+  fertilized: new Color(PALETTE.fertilizedSoil),
 };
 
 /** Max pointer travel (px) for a click to count as a click and not a drag. */
@@ -32,6 +33,12 @@ const grassColor = (index: number, target: Color): Color => {
 
 const tileColor = (tile: Tile, index: number, target: Color): Color => {
   if (tile.structure) return target.copy(C.structure);
+  // Fertilized soil is darker and richer.
+  if (tile.fertilized) return soilColor(tile, index, target).lerp(C.fertilized, 0.35);
+  return soilColor(tile, index, target);
+};
+
+const soilColor = (tile: Tile, index: number, target: Color): Color => {
   switch (tile.state) {
     case 'locked':
       return grassColor(index, target).lerp(C.lockedTint, 0.35);

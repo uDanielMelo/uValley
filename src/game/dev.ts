@@ -10,7 +10,7 @@ import { HOME_POSITION, MAX_WORKERS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { addAnimal, animalProduct } from './animals';
 import { raidShelter, type PredatorAttack } from './health';
-import { addStock, sheltersFor } from './shelters';
+import { addStock, manureCap, shelterDef, sheltersFor } from './shelters';
 import { findFreeSpot, placeStructure } from './structures';
 import { growthMinutesNeeded } from './crops';
 import { PLOT_COUNT } from './grid';
@@ -171,6 +171,18 @@ export const sickenAnimal = (state: GameState, disease: DiseaseId = 'flu', anima
     animals: state.animals.map((a) => (a.id === target.id ? { ...a, health: { disease, since, noticed: true } } : a)),
   };
 };
+
+/** Adds fertilizer units. */
+export const addFertilizer = (state: GameState, amount: number): GameState => ({
+  ...state,
+  inventory: { ...state.inventory, fertilizer: state.inventory.fertilizer + Math.max(0, Math.floor(amount)) },
+});
+
+/** Every shelter full of manure. */
+export const fillManure = (state: GameState): GameState => ({
+  ...state,
+  structures: state.structures.map((s) => (shelterDef(s.type) ? { ...s, manure: manureCap(s) } : s)),
+});
 
 /** Every animal healthy again. */
 export const healAll = (state: GameState): GameState => ({

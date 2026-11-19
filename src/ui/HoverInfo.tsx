@@ -1,9 +1,10 @@
 import { ANIMALS, ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS, BREEDS, LIFE_STAGES } from '../data/animals';
+import { FERTILIZER } from '../data/fertilizer';
 import { DISEASES } from '../data/health';
 import { CROPS } from '../data/crops';
 import { STRUCTURES } from '../data/structures';
 import { animalActivity, animalProduct, lifeStage } from '../game/animals';
-import { levelDef, residents, shelterCapacity, shelterDef, stockCap, stockTotal } from '../game/shelters';
+import { levelDef, manureUnits, residents, shelterCapacity, shelterDef, stockCap, stockTotal } from '../game/shelters';
 import { growthProgress, isMature } from '../game/crops';
 import { nextPlotCost, plotStatus } from '../game/economy';
 import { workProgress } from '../game/construction';
@@ -103,11 +104,13 @@ function ShelterDetails({ tileIndex }: { tileIndex: number }) {
   });
   const stock = useGameStore((s) => {
     const found = structureAt(s.game, tileIndex);
-    const stock = found?.stock;
-    if (!stock) return '';
-    return ANIMAL_PRODUCT_IDS.filter((id) => (stock[id] ?? 0) > 0)
-      .map((id) => `${ANIMAL_PRODUCTS[id].icon} ${stock[id] ?? 0}`)
-      .join('  ');
+    if (!found) return '';
+    const stock = found.stock ?? {};
+    const manure = manureUnits(found);
+    return [
+      ...ANIMAL_PRODUCT_IDS.filter((id) => (stock[id] ?? 0) > 0).map((id) => `${ANIMAL_PRODUCTS[id].icon} ${stock[id] ?? 0}`),
+      ...(manure > 0 ? [`${FERTILIZER.icon} ${manure}`] : []),
+    ].join('  ');
   });
   const full = useGameStore((s) => {
     const found = structureAt(s.game, tileIndex);
@@ -231,7 +234,7 @@ export function HoverInfo() {
       ? tile.state === 'locked'
         ? 'Estrada de acesso'
         : 'Estrada de terra'
-      : STATE_LABELS[tile.state];
+      : `${STATE_LABELS[tile.state]}${tile.fertilized ? ` · ${FERTILIZER.icon} adubado` : ''}`;
   return (
     <Card className="w-64 px-4 py-2">
       <p className="font-black">{title}</p>

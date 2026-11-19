@@ -32,13 +32,13 @@ function SeedChips() {
   );
 }
 
-/** The order tools (till, plant, water, harvest) and the seeds, opened from the dock. */
+/** The order tools (till, plant, water, harvest, fertilize) and the seeds, opened from the dock. */
 function ActivitiesHub() {
   const tool = useGameStore((s) => s.tool);
   const setTool = useGameStore((s) => s.setTool);
   return (
     <Card className="flex flex-col gap-2 p-2">
-      <div className="grid grid-cols-4 gap-1">
+      <div className="grid grid-cols-5 gap-1">
         {TOOLS.map((t) => {
           const active = t.id === tool;
           return (
@@ -144,7 +144,7 @@ export function Dock() {
         <DockButton
           icon={current?.icon ?? '🧑‍🌾'}
           label={current ? TASK_LABELS[current.id] : 'Atividades'}
-          hotkey="1–4"
+          hotkey="1–5"
           active={tool !== null || open}
           expanded={open}
           onClick={() => setOpen()}

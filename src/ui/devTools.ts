@@ -3,12 +3,14 @@ import { DISEASE_IDS, PREDATORS, PREDATOR_IDS, type DiseaseId } from '../data/he
 import { shelterDef, shelterDoor } from '../game/shelters';
 import { frontPoint } from '../game/structures';
 import {
+  addFertilizer,
   addMedicine,
   addMoney,
   ageAnimals,
   addProduce,
   addSeeds,
   finishAllTasks,
+  fillManure,
   finishWorks,
   forceRaid,
   growAll,
@@ -61,6 +63,8 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.attack()           um predador ataca o abrigo com mais animais (a câmera vai até lá)
   dev.preview()          só a animação do ataque, sem ferir ninguém (alterna raposa, cachorro-do-mato, onça)
   dev.medicine(5)        +5 doses de cada remédio
+  dev.fertilizer(10)     +10 de adubo
+  dev.manure()           todos os abrigos cheios de esterco
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -127,6 +131,8 @@ const devApi = {
     window.setTimeout(() => showSighting(predator, spot.x, spot.y), 400);
     showMessage(`🛠️ Prévia: ${PREDATORS[predator].label.toLowerCase()} (ninguém se feriu)`, 'info');
   },
+  fertilizer: (amount = 10) => apply((g) => addFertilizer(g, amount), `+${amount} de adubo`),
+  manure: () => apply(fillManure, 'Abrigos cheios de esterco'),
   medicine: (amount = 5) => apply((g) => addMedicine(g, amount), `+${amount} doses de cada remédio`),
   state: () => useGameStore.getState().game,
 };

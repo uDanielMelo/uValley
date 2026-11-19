@@ -56,7 +56,7 @@ import { accessRoadTiles } from './roads';
 import { hourlyWageFor, rollCandidates } from './staff';
 import { footprintCells, footprintOf, stampStructures } from './structures';
 
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 export const SAVE_KEY = 'uvalley.save';
 
 export type GraphicsQuality = 'high' | 'low';
@@ -78,16 +78,17 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * v8 housed animals in shelters (`Animal.shelterId`, `path` instead of `target`, products in
  * `StructureInstance.stock`) and added the 'tend' activity; v9 added shelter levels
  * (`StructureInstance.level`, 'upgrade' work with `toLevel`); v10 gave animals a breed, stars and a
- * birth time (`bornAt`); v11 added health (`Animal.health`), medicine in the inventory and carcasses.
+ * birth time (`bornAt`); v11 added health (`Animal.health`), medicine in the inventory and carcasses; v12 added fertilizer
+ * (`inventory.fertilizer`, `Tile.fertilized`, `StructureInstance.manure`) and the 'fertilize' activity.
  */
-export interface SaveDataV11 {
-  saveVersion: 11;
+export interface SaveDataV12 {
+  saveVersion: 12;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV11;
+export type SaveData = SaveDataV12;
 
 export interface LoadedSave {
   game: GameState;
@@ -221,6 +222,19 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
     const game = isRecord(data.game) ? data.game : {};
     const inventory = isRecord(game.inventory) ? game.inventory : {};
     return { ...data, game: { ...game, inventory: { ...inventory, medicine: {} }, carcasses: [] } };
+  },
+  // v11 → v12: no fertilizer yet; everyone gets 'fertilize' right after 'seed' (or last).
+  11: (data) => {
+    const game = isRecord(data.game) ? data.game : {};
+    const inventory = isRecord(game.inventory) ? game.inventory : {};
+    const workers = (Array.isArray(game.workers) ? game.workers : []).map((w) => {
+      if (!isRecord(w) || !Array.isArray(w.priorities) || w.priorities.includes('fertilize')) return w;
+      const priorities = w.priorities.slice();
+      const seed = priorities.indexOf('seed');
+      priorities.splice(seed < 0 ? priorities.length : seed + 1, 0, 'fertilize');
+      return { ...w, priorities };
+    });
+    return { ...data, game: { ...game, workers, inventory: { ...inventory, fertilizer: 0 } } };
   },
 };
 
@@ -375,10 +389,13 @@ const parseTile = (v: unknown): Tile | null => {
     if (!isFiniteNumber(v.wateredUntil)) return null;
     tile.wateredUntil = v.wateredUntil;
   }
+  if (v.fertilized === true && (v.state === 'tilled' || v.state === 'planted' || v.state === 'watered')) {
+    tile.fertilized = true;
+  }
   return tile;
 };
 
-const TASK_KINDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'tend', 'build'];
+const TASK_KINDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'fertilize', 'tend', 'build'];
 const WORKER_KINDS: readonly WorkerKind[] = ['staff', 'temp'];
 const STARS: readonly Stars[] = [1, 2, 3];
 const isStars = (v: unknown): v is Stars => STARS.some((s) => s === v);
@@ -550,6 +567,8 @@ const parseStructure = (v: unknown): StructureInstance | null => {
   if (stock === null) return null;
   if (v.level !== undefined && !isShelterLevel(v.level)) return null;
   const level = v.level !== undefined && v.level > 1 ? v.level : undefined;
+  if (v.manure !== undefined && (!isFiniteNumber(v.manure) || v.manure < 0)) return null;
+  const manure = isFiniteNumber(v.manure) && v.manure > 0 ? v.manure : undefined;
   return {
     id,
     type,
@@ -559,6 +578,7 @@ const parseStructure = (v: unknown): StructureInstance | null => {
     ...(work ? { work } : {}),
     ...(level ? { level } : {}),
     ...(stock && Object.keys(stock).length > 0 ? { stock } : {}),
+    ...(manure ? { manure } : {}),
   };
 };
 
@@ -599,6 +619,8 @@ const parseGame = (v: unknown): GameState | null => {
   const products = parseProducts(inventory.products);
   const medicine = parseMedicine(inventory.medicine);
   if (!seeds || !produce || !products || !medicine) return null;
+  if (!isFiniteNumber(inventory.fertilizer) || inventory.fertilizer < 0) return null;
+  const fertilizer = Math.floor(inventory.fertilizer);
   const workers = parseList(v.workers, parseWorker);
   const tasks = parseList(v.tasks, parseTask);
   const animals = parseList(v.animals, parseAnimal);
@@ -624,7 +646,7 @@ const parseGame = (v: unknown): GameState | null => {
     tiles: stampStructures(parsedTiles, structures),
     unlockedPlots: plots,
     plotsPurchased: Math.floor(plotsPurchased),
-    inventory: { seeds, produce, products, medicine },
+    inventory: { seeds, produce, products, medicine, fertilizer },
     workers,
     candidates,
     tasks,

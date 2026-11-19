@@ -14,6 +14,7 @@ const COLORS: Record<ToolId, Color> = {
   seed: new Color(PALETTE.taskSeed),
   water: new Color(PALETTE.taskWater),
   hand: new Color(PALETTE.taskHand),
+  fertilize: new Color(PALETTE.taskFertilize),
 };
 const ROAD = new Color(PALETTE.taskRoad);
 const ROAD_REMOVE = new Color(PALETTE.taskRoadRemove);

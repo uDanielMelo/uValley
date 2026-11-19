@@ -1,4 +1,5 @@
 import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
+import { FERTILIZER } from '../data/fertilizer';
 import { MEDICINES, MEDICINE_IDS } from '../data/health';
 import { CROPS, CROP_IDS } from '../data/crops';
 import { produceValue } from '../game/economy';
@@ -81,8 +82,17 @@ function SeedList() {
 
 function MedicineList() {
   const medicine = useGameStore((s) => s.game.inventory.medicine);
+  const fertilizer = useGameStore((s) => s.game.inventory.fertilizer);
   return (
-    <ul className="grid grid-cols-2 gap-2">
+    <ul className="grid grid-cols-3 gap-2">
+      <li
+        className="rounded-xl bg-parchment-dark/60 p-2 text-center text-sm font-black"
+        title="Esterco curtido: adube terra arada ou plantada (tecla 5)"
+      >
+        <div className="text-xl">{FERTILIZER.icon}</div>
+        {FERTILIZER.label}
+        <div className="tabular-nums">×{fertilizer}</div>
+      </li>
       {MEDICINE_IDS.map((id) => (
         <li key={id} className="rounded-xl bg-parchment-dark/60 p-2 text-center text-sm font-black" title={MEDICINES[id].note}>
           <div className="text-xl">{MEDICINES[id].icon}</div>
@@ -108,7 +118,7 @@ export function InventoryPanel() {
       </Button>
       <h3 className="mt-5 mb-2 font-black">Sementes</h3>
       <SeedList />
-      <h3 className="mt-5 mb-2 font-black">Remédios</h3>
+      <h3 className="mt-5 mb-2 font-black">Insumos</h3>
       <MedicineList />
     </Panel>
   );

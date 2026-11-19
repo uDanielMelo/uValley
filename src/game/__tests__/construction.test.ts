@@ -264,7 +264,7 @@ describe('whole queue and saves', () => {
     expect(repaired.tasks).toHaveLength(crewTiles(site(s)).length);
   });
 
-  it('migrates a v6 save: everyone gets the build (and later tend) activity at the end of the list', () => {
+  it('migrates a v6 save: everyone gets the build (and later tend and fertilize) activities at the end of the list', () => {
     const s = createInitialState();
     const v6 = {
       ...s,
@@ -272,7 +272,7 @@ describe('whole queue and saves', () => {
     };
     const raw = JSON.stringify({ saveVersion: 6, savedAt: 0, game: v6, settings: DEFAULT_SETTINGS });
     const loaded = deserialize(raw);
-    expect(loaded?.game.workers.every((w) => w.priorities.join() === 'hand,water,build,tend')).toBe(true);
+    expect(loaded?.game.workers.every((w) => w.priorities.join() === 'hand,water,build,tend,fertilize')).toBe(true);
     expect(loaded?.game.structures.every((x) => x.work === undefined)).toBe(true);
   });
 

@@ -3,6 +3,7 @@
  * each shelter for the crew to collect ('tend' tasks).
  */
 import { ANIMALS, PLOT_PASTURE_UNITS, SHELTER_STOCK_PER_HEAD, type AnimalId, type AnimalProductId } from '../data/animals';
+import { MANURE_PIT_BONUS, SHELTER_MANURE_PER_HEAD } from '../data/fertilizer';
 import {
   SHELTER_LEVELS,
   SHELTER_LEVEL_LIMIT,
@@ -154,20 +155,59 @@ export const addStock = (state: GameState, shelterId: number, product: AnimalPro
   }),
 });
 
-/** Moves everything waiting in a shelter into the inventory (what a finished 'tend' task does). */
+// ---------- manure ----------
+
+/** Manure a shelter holds before it stops piling up. */
+export const manureCap = (s: Pick<StructureInstance, 'type' | 'level'>): number => shelterCapacity(s) * SHELTER_MANURE_PER_HEAD;
+
+/** Whole units of manure waiting in a shelter. */
+export const manureUnits = (s: Pick<StructureInstance, 'manure'>): number => Math.floor((s.manure ?? 0) + 1e-9);
+
+/** The shelter is full of manure (its animals fall sick more often). */
+export const manureFull = (s: Pick<StructureInstance, 'type' | 'level' | 'manure'>): boolean =>
+  manureCap(s) > 0 && (s.manure ?? 0) >= manureCap(s);
+
+/** How much more manure a shelter yields (the pigsty's manure pit, from level 3). */
+export const manureMultiplier = (s: Pick<StructureInstance, 'type' | 'level'>): number =>
+  s.type === 'pigsty' && shelterLevel(s) >= 3 ? MANURE_PIT_BONUS : 1;
+
+/** Adds manure to shelters (by id), up to each one's cap. */
+export const addManure = (state: GameState, amounts: ReadonlyMap<number, number>): GameState => {
+  if (amounts.size === 0) return state;
+  return {
+    ...state,
+    structures: state.structures.map((s) => {
+      const amount = amounts.get(s.id);
+      if (!amount) return s;
+      const manure = Math.min(manureCap(s), (s.manure ?? 0) + amount * manureMultiplier(s));
+      return manure === s.manure ? s : { ...s, manure };
+    }),
+  };
+};
+
+/** Something for the crew to collect: products or a whole unit of manure. */
+export const hasChores = (s: Pick<StructureInstance, 'stock' | 'manure'>): boolean =>
+  stockTotal(s.stock) > 0 || manureUnits(s) > 0;
+
+/**
+ * Moves everything waiting in a shelter into the inventory (what a finished 'tend' task does):
+ * products, and whole units of manure as fertilizer (the fraction stays).
+ */
 export const collectShelter = (state: GameState, shelterId: number): ActionResult => {
   const s = state.structures.find((x) => x.id === shelterId);
   if (!s || !shelterDef(s.type)) return fail('no-structure');
-  if (stockTotal(s.stock) === 0) return fail('no-product');
+  if (!hasChores(s)) return fail('no-product');
   let products = state.inventory.products;
   for (const [id, n] of Object.entries(s.stock ?? {}) as [AnimalProductId, number][]) products = addCount(products, id, n);
+  const manure = manureUnits(s);
   return ok({
     ...state,
-    inventory: { ...state.inventory, products },
+    inventory: { ...state.inventory, products, fertilizer: state.inventory.fertilizer + manure },
     structures: state.structures.map((x) => {
       if (x.id !== shelterId) return x;
-      const { stock: _collected, ...rest } = x;
-      return rest;
+      const { stock: _collected, manure: pile, ...rest } = x;
+      const left = (pile ?? 0) - manure;
+      return left > 1e-9 ? { ...rest, manure: left } : rest;
     }),
   });
 };
@@ -189,11 +229,11 @@ export const mainSpecies = (state: Pick<GameState, 'animals'>, shelterId: number
 
 const isChoreFor = (shelterId: number) => (t: Task) => t.job?.type === 'shelter' && t.job.structureId === shelterId;
 
-/** Standing order: every shelter with products gets a 'tend' task (one at a time) for the crew. */
+/** Standing order: every shelter with products or manure gets a 'tend' task (one at a time) for the crew. */
 export const queueShelterChores = (state: GameState): GameState => {
   let next = state;
   for (const s of state.structures) {
-    if (!shelterDef(s.type) || stockTotal(s.stock) === 0) continue;
+    if (!shelterDef(s.type) || !hasChores(s)) continue;
     if (next.tasks.length >= MAX_TASKS) break;
     if (next.tasks.some(isChoreFor(s.id))) continue;
     const task: Task = {

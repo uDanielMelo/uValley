@@ -131,7 +131,7 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     shelter: {
       species: ['pig'],
       capacity: 4,
-      perks: { 2: 'Piso de concreto na baia', 3: 'Esterqueira: esterco melhor para adubo', 4: 'Comedouro automático' },
+      perks: { 2: 'Piso de concreto na baia', 3: 'Esterqueira: 50% mais esterco para adubo', 4: 'Comedouro automático' },
     },
     description: 'Abrigo coberto e baia de lama para porcos.',
   },

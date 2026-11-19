@@ -23,7 +23,7 @@ const CONTROLS: readonly [string, string][] = [
   ['Botão direito', 'arrastar move a câmera'],
   ['Meio ou Shift + direito', 'girar (ou Z/X)'],
   ['Roda', 'zoom'],
-  ['Atalhos', 'H mão · 1–4 atividades · B construir · T equipe · L loja · I inventário · Espaço pausa'],
+  ['Atalhos', 'H mão · 1–5 atividades · B construir · T equipe · L loja · I inventário · Espaço pausa'],
 ];
 
 /** Controls help, folded into a small "?" button. */

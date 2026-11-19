@@ -22,6 +22,8 @@ export interface Tile {
   structure?: StructureId;
   /** Dirt road on this tile (state stays 'grass', or 'locked' for the access road off the farm). */
   road?: true;
+  /** Fertilized worked soil: the crop grows faster and may give more (cleared at harvest). */
+  fertilized?: true;
 }
 
 /** Quarter turns applied to a placed structure. */
@@ -57,6 +59,8 @@ export interface StructureInstance {
   level?: ShelterLevel;
   /** Animal products waiting in a shelter for the crew to collect. */
   stock?: ProductCounts;
+  /** Manure piled up in a shelter (fractional; whole units are collected as fertilizer). */
+  manure?: number;
 }
 
 export type ItemCounts = Partial<Record<CropId, number>>;
@@ -70,6 +74,8 @@ export interface Inventory {
   products: ProductCounts;
   /** Medicine bought for sick animals. */
   medicine: MedicineCounts;
+  /** Fertilizer (cured manure) units. */
+  fertilizer: number;
 }
 
 /** What a 'build' or 'tend' task works on. */
@@ -219,7 +225,7 @@ export interface GameState {
   nextId: number;
 }
 
-export type ToolId = 'hoe' | 'seed' | 'water' | 'hand';
+export type ToolId = 'hoe' | 'seed' | 'water' | 'hand' | 'fertilize';
 /** Kinds of queued work: the four farm tools, animal care (collecting at shelters) and construction. */
 export type TaskKind = ToolId | 'tend' | 'build';
 
@@ -264,6 +270,9 @@ export type ActionError =
   | 'shelter-in-use'
   | 'max-level'
   | 'no-medicine'
+  | 'no-fertilizer'
+  | 'already-fertilized'
+  | 'not-fertilizable'
   | 'not-sick';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };

@@ -2,6 +2,8 @@ import { useFrame } from '@react-three/fiber';
 import { useEffect, useMemo, useRef } from 'react';
 import { CanvasTexture, SRGBColorSpace, SpriteMaterial, type Sprite } from 'three';
 import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
+import { FERTILIZER } from '../data/fertilizer';
+import { manureUnits } from '../game/shelters';
 import { footprintOf } from '../game/structures';
 import { useGameStore } from '../store/gameStore';
 import { cornerToWorld } from './coords';
@@ -37,7 +39,7 @@ const drawBadge = (ctx: CanvasRenderingContext2D, text: string): number => {
   return width;
 };
 
-/** Floating "🥚 3" over a shelter while products wait there for the crew. Redrawn only when the text changes. */
+/** Floating "🥚 3  💩 1" over a shelter while products or manure wait for the crew. Redrawn only when the text changes. */
 export function ShelterBadge({ id, type, x, y, rotation }: PlacedProps & { id: number }) {
   const sprite = useRef<Sprite>(null);
   const fp = footprintOf(type, x, y, rotation);
@@ -66,12 +68,13 @@ export function ShelterBadge({ id, type, x, y, rotation }: PlacedProps & { id: n
     const s = sprite.current;
     const ctx = canvas.getContext('2d');
     if (!s || !ctx) return;
-    const stock = useGameStore.getState().game.structures.find((x) => x.id === id)?.stock;
-    const next = stock
-      ? ANIMAL_PRODUCT_IDS.filter((p) => (stock[p] ?? 0) > 0)
-          .map((p) => `${ANIMAL_PRODUCTS[p].icon} ${stock[p] ?? 0}`)
-          .join('  ')
-      : '';
+    const shelter = useGameStore.getState().game.structures.find((x) => x.id === id);
+    const stock = shelter?.stock;
+    const manure = shelter ? manureUnits(shelter) : 0;
+    const next = [
+      ...ANIMAL_PRODUCT_IDS.filter((p) => (stock?.[p] ?? 0) > 0).map((p) => `${ANIMAL_PRODUCTS[p].icon} ${stock?.[p] ?? 0}`),
+      ...(manure > 0 ? [`${FERTILIZER.icon} ${manure}`] : []),
+    ].join('  ');
     if (next !== badge.text) {
       badge.text = next;
       if (next) {

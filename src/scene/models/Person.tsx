@@ -58,6 +58,7 @@ const METAL = '#9aa3a8';
 const CAN = '#6f9fb0';
 const SACK = '#d8c08e';
 const BASKET = '#c08a4a';
+const MANURE_BAG = '#7a5230';
 
 /** Tools held in the right hand; only the one for the current task is shown. */
 function Tools({ tools }: { tools: PersonRig['tools'] }) {
@@ -73,6 +74,9 @@ function Tools({ tools }: { tools: PersonRig['tools'] }) {
       </group>
       <group ref={tools.seed} visible={false}>
         <Box size={[0.11, 0.12, 0.08]} position={[0, -0.05, 0.03]} color={SACK} />
+      </group>
+      <group ref={tools.fertilize} visible={false}>
+        <Box size={[0.12, 0.13, 0.09]} position={[0, -0.05, 0.03]} color={MANURE_BAG} />
       </group>
       <group ref={tools.hand} visible={false}>
         <Cyl args={[0.08, 0.06, 0.08, 7]} position={[0, -0.06, 0.04]} color={BASKET} />

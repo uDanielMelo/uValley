@@ -154,6 +154,8 @@ export function DevPanel() {
               🎬 Ver ataque
             </DevButton>
             <DevButton onClick={() => dev.medicine(5)}>💊 +5 remédios</DevButton>
+            <DevButton onClick={() => dev.fertilizer(10)}>💩 +10 adubo</DevButton>
+            <DevButton onClick={dev.manure}>🪣 Esterco cheio</DevButton>
           </Section>
 
           <p className="text-[11px] text-white/60">

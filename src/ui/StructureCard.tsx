@@ -1,9 +1,12 @@
 import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
+import { FERTILIZER } from '../data/fertilizer';
 import { SHELTER_LEVELS, SHELTER_LEVEL_IDS, STRUCTURES, type ShelterLevel, type StructureId } from '../data/structures';
 import { BUNKHOUSE_BEDS } from '../data/workers';
 import { workProgress } from '../game/construction';
 import { isKnownSick } from '../game/health';
 import {
+  manureCap,
+  manureFull,
   maxShelterLevel,
   nextShelterLevel,
   residents,
@@ -81,6 +84,8 @@ function ShelterSection({ type }: { type: StructureId }) {
       .map((p) => `${ANIMAL_PRODUCTS[p].icon} ${items[p] ?? 0}`)
       .join('  ');
   }, '');
+  const manure = useSelected((s) => `${Math.floor(s.manure ?? 0)}/${manureCap(s)}`, '');
+  const manureIsFull = useSelected((s) => manureFull(s), false);
   const sick = useSelected((s, game) => game.animals.filter((a) => a.shelterId === s.id && isKnownSick(a)).length, 0);
   const carcasses = useSelected((s, game) => game.carcasses.filter((c) => c.shelterId === s.id).length, 0);
   const money = useGameStore((s) => s.game.money);
@@ -126,6 +131,13 @@ function ShelterSection({ type }: { type: StructureId }) {
       <p className="flex justify-between text-xs font-bold">
         <span className="text-wood/70">Para coletar</span>
         <span>{stock || 'nada'}</span>
+      </p>
+      <p className="flex justify-between text-xs font-bold" title="Recolhido como adubo pela equipe (Tratar animais)">
+        <span className="text-wood/70">{FERTILIZER.icon} Esterco</span>
+        <span className={`tabular-nums ${manureIsFull ? 'text-red-700' : ''}`}>
+          {manure}
+          {manureIsFull && ' · cheio: mais doença'}
+        </span>
       </p>
       <ul className="flex flex-col gap-0.5 text-xs font-bold">
         {SHELTER_LEVEL_IDS.filter((l) => l >= 2 && l <= ownMax && def.perks[l]).map((l) => (

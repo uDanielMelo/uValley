@@ -11,7 +11,7 @@ import { setHoverCursor } from './cursor';
 import { Person, personScale, type PersonLook, type PersonRig } from './models/Person';
 
 const HALF = GRID_SIZE / 2;
-const TOOL_IDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'tend', 'build'];
+const TOOL_IDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'fertilize', 'tend', 'build'];
 const STRAW = '#e2c27a';
 
 const DEFAULT_LOOK: PersonLook = { shirt: '#3f6fb5', pants: '#4a5a7a', skin: '#e0ac85', hat: STRAW, hair: '#4a3324' };
@@ -77,6 +77,8 @@ const workPose = (kind: TaskKind, t: number): Pose => {
       return { legL: -0.15, legR: 0.15, armL: arm, armR: arm, bend: 0.15 + (1 - swing) * 0.35, bob: 0 };
     }
     case 'seed':
+    case 'fertilize':
+      // Crouched, scattering from the bag.
       return { legL: -0.5, legR: 0.3, armL: -0.3, armR: -0.9 + Math.sin(t * 5) * 0.45, bend: 0.75, bob: -0.05 };
     case 'water':
       return { legL: -0.1, legR: 0.1, armL: 0, armR: -1.0 + Math.sin(t * 2) * 0.12, bend: 0.12, bob: 0 };
@@ -129,6 +131,7 @@ function WorkerFigure({ id }: { id: number }) {
         seed: createRef<Group>(),
         water: createRef<Group>(),
         hand: createRef<Group>(),
+        fertilize: createRef<Group>(),
         tend: createRef<Group>(),
         build: createRef<Group>(),
       },

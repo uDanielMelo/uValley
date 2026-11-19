@@ -20,6 +20,7 @@ export const TASK_SKILL: Record<TaskKind, SkillId> = {
   seed: 'farming',
   water: 'farming',
   hand: 'farming',
+  fertilize: 'farming',
   tend: 'animals',
   build: 'construction',
 };
@@ -132,7 +133,7 @@ export const MAX_WORKERS = 12;
 export const MAX_TASKS = 300;
 
 /** Order in which a new worker picks tasks (editable per worker). */
-export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['water', 'hand', 'tend', 'seed', 'hoe', 'build'];
+export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['water', 'hand', 'tend', 'seed', 'fertilize', 'hoe', 'build'];
 
 /** Workers only work between these game hours; outside them they go home. Wages are paid per hour in between. */
 export const WORK_START_HOUR = 6;
@@ -147,6 +148,7 @@ export const TASK_MINUTES: Record<ToolId, number> = {
   seed: 6,
   water: 4,
   hand: 8,
+  fertilize: 5,
 };
 
 /** Fallback resting spot (in front of the house door) when the farm has no bunkhouse. */

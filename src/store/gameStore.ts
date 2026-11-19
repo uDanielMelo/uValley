@@ -6,7 +6,7 @@ import { SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures
 import { DISEASES, MEDICINES, PREDATORS, type MedicineId, type PredatorId } from '../data/health';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
 import { animalSalePrice, buyAnimal, sellAnimal, type PurchaseAge } from '../game/animals';
-import { buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
+import { buyFertilizer, buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
 import { plotOfTile, tileCoords, tileIndex, tilesInRect } from '../game/grid';
 import {
   DEFAULT_SETTINGS,
@@ -128,6 +128,7 @@ export interface GameStore {
   selectAnimal: (id: number | null) => void;
   sellProduct: (product: AnimalProductId, quantity: number) => void;
   buyMedicine: (id: MedicineId, quantity: number) => void;
+  buyFertilizer: (quantity: number) => void;
   /** Recent predator attacks, for the figure running away. */
   sightings: PredatorSighting[];
   /** Shows the toast and the fleeing predator for attacks (also used by the dev tools). */
@@ -187,6 +188,9 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'shelter-in-use': 'Há animais morando neste abrigo. Venda-os antes de demolir.',
   'max-level': 'Este abrigo já está no nível mais alto disponível.',
   'no-medicine': 'Sem remédio para este animal. Compre na loja.',
+  'no-fertilizer': 'Sem adubo. Recolha esterco nos abrigos ou compre na loja.',
+  'already-fertilized': 'Esta terra já está adubada.',
+  'not-fertilizable': 'Só é possível adubar terra arada ou plantada.',
   'not-sick': 'Este animal não está doente.',
 };
 
@@ -511,6 +515,9 @@ export const useGameStore = create<GameStore>()(
       },
       sellProduct: (product, quantity) => {
         commit(sellAnimalProduct(get().game, product, quantity));
+      },
+      buyFertilizer: (quantity) => {
+        commit(buyFertilizer(get().game, quantity), `Adubo: +${quantity}.`);
       },
       buyMedicine: (id, quantity) => {
         commit(buyMedicine(get().game, id, quantity), `${MEDICINES[id].label}: +${quantity}.`);

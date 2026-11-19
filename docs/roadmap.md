@@ -80,8 +80,11 @@ Grande demais para uma entrega: dividida em sub-etapas, cada uma com branch e ve
   abrigos à noite (mais animais e animais fora do abrigo atraem mais; filhotes são alvo preferido): comem os
   pequenos e filhotes (a carcaça fica no chão e aumenta a chance de infecção) e ferem os grandes. Evento raro.
   Save v11.
-- **3e, esterco e adubo**: esterco no abrigo, coletado pela equipe, e adubar acelera ou melhora a planta
-  (versão simples; a etapa 7 amplia).
+- **3e, esterco e adubo** ✅: esterco no abrigo, coletado pela equipe, e adubar acelera ou melhora a planta
+  (versão simples; a etapa 7 amplia). Feito: esterco por animal no abrigo (fração, teto por vaga; a
+  esterqueira do chiqueiro nível 3 dá +50%), recolhido como adubo pela coleta; abrigo cheio de esterco adoece
+  mais. Atividade Adubar (tecla 5): +30% de crescimento e 35% de chance de uma unidade extra na colheita; o
+  adubo também é vendido na loja. Decisões tomadas por mim com a autonomia dada pelo usuário. Save v12.
 
 ### Etapa 4: armazenamento e clima
 O celeiro guarda produtos agrícolas e animais. Capacidade por construção, intempéries e estações, perda e conservação por nível, refrigeração.

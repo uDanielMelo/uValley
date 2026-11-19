@@ -41,6 +41,8 @@ const COLORS: Partial<Record<Tile['state'], Color>> = {
   watered: new Color(PALETTE.watered).multiplyScalar(0.85),
 };
 
+const FERTILIZED = new Color(PALETTE.fertilizedSoil);
+
 /** Furrows on every worked tile (tilled, planted or watered), rebuilt when tiles change. */
 export function SoilLayer() {
   const ref = useRef<InstancedMesh>(null);
@@ -60,7 +62,10 @@ export function SoilLayer() {
       const [x, z] = indexToWorld(i);
       m.makeTranslation(x, SOIL_TOP, z);
       mesh.setMatrixAt(count, m);
-      mesh.setColorAt(count, color.copy(base).multiplyScalar(0.95 + hash01(i * 7) * 0.1));
+      color.copy(base).multiplyScalar(0.95 + hash01(i * 7) * 0.1);
+      // Fertilized soil: darker, richer furrows.
+      if (tile.fertilized) color.lerp(FERTILIZED, 0.7);
+      mesh.setColorAt(count, color);
       count++;
     });
     mesh.count = count;

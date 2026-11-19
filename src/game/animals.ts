@@ -22,12 +22,14 @@ import {
   WANDER_RADIUS,
   type AnimalId,
 } from '../data/animals';
+import { BABY_MANURE, MANURE_PER_DAY } from '../data/fertilizer';
 import { SICK_RESALE } from '../data/health';
 import { MINUTES_PER_DAY } from '../data/world';
 import { healthFactor, healthMoveSpeed, isKnownSick } from './disease';
 import { findPath, segmentClear } from './path';
 import { hash01 } from './random';
 import {
+  addManure,
   addStock,
   crowdingFactor,
   isPasture,
@@ -317,6 +319,14 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
   const tick = Math.floor(state.gameMinutes * 10);
   const crowd = crowdingFactor(state);
   let world = state;
+  // Manure piles up at each shelter (added once for all its animals).
+  const manure = new Map<number, number>();
+  for (const a of state.animals) {
+    const amount =
+      (MANURE_PER_DAY[a.kind] * minutes * (lifeStage(state.gameMinutes, a) === 'baby' ? BABY_MANURE : 1)) / MINUTES_PER_DAY;
+    manure.set(a.shelterId, (manure.get(a.shelterId) ?? 0) + amount);
+  }
+  world = addManure(world, manure);
   const animals = state.animals.map((a) => {
     const def = ANIMALS[a.kind];
     let { productMinutes, waitMinutes } = a;

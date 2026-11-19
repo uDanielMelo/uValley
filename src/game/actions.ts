@@ -1,7 +1,9 @@
 import type { CropId } from '../data/crops';
+import { FERTILIZER } from '../data/fertilizer';
 import { isMature } from './crops';
 import { isValidTileIndex, withTile } from './grid';
 import { addCount } from './inventory';
+import { hash01 } from './random';
 import { startOfNextDay } from './time';
 import { fail, ok, type ActionResult, type GameState, type Tile, type ToolId } from './types';
 
@@ -33,7 +35,7 @@ export const plant = (state: GameState, index: number, cropId: CropId): ActionRe
   if ((state.inventory.seeds[cropId] ?? 0) <= 0) return fail('no-seeds');
   return ok({
     ...state,
-    tiles: withTile(state.tiles, index, { state: 'planted', crop: { cropId, growthMinutes: 0 } }),
+    tiles: withTile(state.tiles, index, { ...fertilizedOf(check.tile), state: 'planted', crop: { cropId, growthMinutes: 0 } }),
     inventory: { ...state.inventory, seeds: addCount(state.inventory.seeds, cropId, -1) },
   });
 };
@@ -49,6 +51,7 @@ export const water = (state: GameState, index: number): ActionResult => {
   return ok({
     ...state,
     tiles: withTile(state.tiles, index, {
+      ...fertilizedOf(tile),
       state: 'watered',
       crop: tile.crop,
       wateredUntil: startOfNextDay(state.gameMinutes),
@@ -56,17 +59,40 @@ export const water = (state: GameState, index: number): ActionResult => {
   });
 };
 
-/** Hand: harvests a mature crop into the inventory; the tile stays tilled. */
+/** Keeps the fertilized flag when a tile changes state. */
+const fertilizedOf = (tile: Tile): Pick<Tile, 'fertilized'> => (tile.fertilized ? { fertilized: true } : {});
+
+/**
+ * Hand: harvests a mature crop into the inventory; the tile stays tilled and the fertilizer is
+ * used up. A fertilized crop may give one extra unit (rolled from the tile and the clock).
+ */
 export const harvest = (state: GameState, index: number): ActionResult => {
   const check = usableTile(state, index);
   if ('error' in check) return check.error;
   const { crop } = check.tile;
   if (!crop) return fail('no-crop');
   if (!isMature(crop)) return fail('not-mature');
+  const extra = check.tile.fertilized && hash01(index * 977 + Math.floor(state.gameMinutes) * 13 + 3) < FERTILIZER.harvestBonus;
   return ok({
     ...state,
     tiles: withTile(state.tiles, index, { state: 'tilled' }),
-    inventory: { ...state.inventory, produce: addCount(state.inventory.produce, crop.cropId, 1) },
+    inventory: { ...state.inventory, produce: addCount(state.inventory.produce, crop.cropId, extra ? 2 : 1) },
+  });
+};
+
+/** Fertilizer: worked soil (tilled, planted or watered, not yet mature) gets fertilized; uses one unit. */
+export const fertilize = (state: GameState, index: number): ActionResult => {
+  const check = usableTile(state, index);
+  if ('error' in check) return check.error;
+  const { tile } = check;
+  if (tile.state === 'grass') return fail('not-fertilizable');
+  if (tile.fertilized) return fail('already-fertilized');
+  if (tile.crop && isMature(tile.crop)) return fail('already-mature');
+  if (state.inventory.fertilizer < 1) return fail('no-fertilizer');
+  return ok({
+    ...state,
+    tiles: withTile(state.tiles, index, { ...tile, fertilized: true }),
+    inventory: { ...state.inventory, fertilizer: state.inventory.fertilizer - 1 },
   });
 };
 
@@ -86,5 +112,7 @@ export const applyTool = (
       return water(state, index);
     case 'hand':
       return harvest(state, index);
+    case 'fertilize':
+      return fertilize(state, index);
   }
 };
