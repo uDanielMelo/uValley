@@ -30,7 +30,7 @@ export const CITY_SHOPS: Record<CityShopId, CityShopDef> = {
   market: {
     id: 'market',
     label: 'Mercado',
-    hint: 'Vender carga e atender pedidos',
+    hint: 'Preços da cidade e pedidos das lojas',
     size: { width: 14, depth: 9, height: 5 },
     position: [-14, -12],
     facing: 'south',

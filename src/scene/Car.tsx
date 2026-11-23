@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber';
 import { useMemo, useRef } from 'react';
 import type { Group } from 'three';
+import { VEHICLES } from '../data/market';
 import { meters } from '../data/scale';
 import { GRID_SIZE } from '../data/world';
 import { shipmentRoutes } from '../game/shipments';
@@ -18,14 +19,16 @@ const angleDelta = (a: number, b: number): number => Math.atan2(Math.sin(b - a),
  * One vehicle visiting the dock. Its position is derived every frame from its saved shipment and
  * the road network (game/visitors.ts); the routes are only rebuilt when the roads change.
  */
-function ShipmentCar({ id, dockId }: { id: number; dockId: number }) {
+function ShipmentCar({ id, dockId, vehicle }: { id: number; dockId: number; vehicle: number }) {
   const tiles = useGameStore((s) => s.game.tiles);
   const structures = useGameStore((s) => s.game.structures);
   const routes = useMemo(() => shipmentRoutes({ tiles, structures }, dockId), [tiles, structures, dockId]);
   const root = useRef<Group>(null);
   const wheels = useRef<Array<Group | null>>([]);
   const last = useRef({ x: NaN, z: NaN, heading: NaN });
-  const color = CUSTOMER_CAR_COLORS[Math.floor(hash01(id * 31 + 7) * CUSTOMER_CAR_COLORS.length)] ?? '#c0392b';
+  // Hired freight comes with the farm's vehicle (its color and size); customers with their own car.
+  const freight = vehicle === 1 || vehicle === 2 || vehicle === 3 ? VEHICLES[vehicle] : null;
+  const color = freight?.color ?? CUSTOMER_CAR_COLORS[Math.floor(hash01(id * 31 + 7) * CUSTOMER_CAR_COLORS.length)] ?? '#c0392b';
 
   useFrame((_, delta) => {
     const r = root.current;
@@ -54,22 +57,24 @@ function ShipmentCar({ id, dockId }: { id: number; dockId: number }) {
 
   return (
     <group ref={root} visible={false}>
-      <Pickup color={color} wheels={wheels} />
+      <group scale={freight?.scale ?? 1}>
+        <Pickup color={color} wheels={wheels} />
+      </group>
     </group>
   );
 }
 
 /** The vehicles on their way to, parked at or leaving the dock. Re-renders only when one comes or goes. */
 export function Cars() {
-  const list = useGameStore((s) => s.game.shipments.map((x) => `${x.id}:${x.dockId}`).join(','));
+  const list = useGameStore((s) => s.game.shipments.map((x) => `${x.id}:${x.dockId}:${x.vehicle ?? 0}`).join(','));
   return (
     <>
       {list
         .split(',')
         .filter(Boolean)
         .map((entry) => {
-          const [id, dockId] = entry.split(':').map(Number);
-          return id === undefined || dockId === undefined ? null : <ShipmentCar key={id} id={id} dockId={dockId} />;
+          const [id, dockId, vehicle = 0] = entry.split(':').map(Number);
+          return id === undefined || dockId === undefined ? null : <ShipmentCar key={id} id={id} dockId={dockId} vehicle={vehicle} />;
         })}
     </>
   );

@@ -4,14 +4,15 @@ import { applyDayWeather, type WeatherReport } from './climate';
 import { growTiles } from './growth';
 import { payFeed, removeDeadAnimals, stepAnimals } from './animals';
 import { queueAnimalCare, stepHealth, type PredatorAttack } from './health';
-import { deliverCargo, pickupsBetween, refreshOrders, type Delivery } from './market';
+import { expireOffers, generateOffers } from './listings';
+import { refreshOrders } from './market';
 import { stepResearch } from './research';
 import type { CropId } from '../data/crops';
 import { queueShelterChores } from './shelters';
 import { dockEvents, stepShipments, type DockEvent } from './shipments';
 import { spoilGoods, type Spoiled } from './storage';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
-import type { Animal, GameState, StructureInstance, StructureWorkKind } from './types';
+import type { Animal, GameState, Offer, StructureInstance, StructureWorkKind } from './types';
 import type { ShelterLevel, StructureId } from '../data/structures';
 import { hasRoadAccess, refundFor } from './structures';
 import { stepWorkers } from './workers';
@@ -37,8 +38,8 @@ export interface TickResult {
   weatherReports: WeatherReport[];
   /** Goods that spoiled at midnight (null when nothing did). */
   spoiled: Spoiled | null;
-  /** Loads picked up and paid. */
-  deliveries: Delivery[];
+  /** Offers buyers just made on the farm's listings. */
+  newOffers: Offer[];
   /** Crop whose research just finished. */
   researched: CropId | null;
   /** Vehicles that parked at the dock, were loaded and paid, or left without their load. */
@@ -79,7 +80,8 @@ const finishedWorks = (before: readonly StructureInstance[], next: GameState): F
  * then health (sickness, predators) and the standing orders: collecting at shelters with products,
  * medicating noticed sick animals and taking carcasses away, and the vehicles at the dock. Then, for each
  * full hour that ended: wages for the hours of the shift, day laborers leaving when it ends, and
- * at midnight the feed, a new hiring board, the new day's weather and spoilage.
+ * buyers' offers on the listings and at midnight the feed, a new hiring board, the new day's weather
+ * and spoilage.
  */
 export const advanceGame = (state: GameState, dtMinutes: number): TickResult => {
   if (dtMinutes <= 0) {
@@ -95,7 +97,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       predatorAttacks: [],
       weatherReports: [],
       spoiled: null,
-      deliveries: [],
+      newOffers: [],
       researched: null,
       dockEvents: [],
     };
@@ -132,6 +134,8 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       next = releaseTemps(next);
       tempsLeft += before - next.workers.length;
     }
+    // Buyers look at the listings once an hour.
+    next = generateOffers(next, h);
     if (hourOfDay === 0) {
       const fed = payFeed(next);
       next = refreshCandidates(fed.state);
@@ -145,16 +149,11 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       if (spoil.spoiled.total > 0) spoiled = spoil.spoiled;
     }
   }
-  // The car takes the load to town at its visits.
-  const deliveries: Delivery[] = [];
-  for (const _pickup of pickupsBetween(state.gameMinutes, gameMinutes)) {
-    const done = deliverCargo(next);
-    next = done.state;
-    if (done.delivery) deliveries.push(done.delivery);
-  }
+  next = expireOffers(next);
+  const known = new Set(state.offers.map((o) => o.id));
   return {
     state: next,
-    deliveries,
+    newOffers: next.offers.filter((o) => !known.has(o.id)),
     researched: studied.finished,
     dockEvents: dockEvents(state.shipments, next.shipments),
     workersLeft,

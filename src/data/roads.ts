@@ -38,6 +38,4 @@ export const CAR = {
   brakeDistance: 4,
   /** Radius (tiles) of the turn between the highway and the access road. */
   junctionRadius: 1.4,
-  /** Hours of the day when the farm's vehicle takes the town load (see data/market PICKUP_DELAY). */
-  visitHours: [7, 12, 18],
 } as const;

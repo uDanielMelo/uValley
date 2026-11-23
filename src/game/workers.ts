@@ -8,7 +8,7 @@ import { careMinutes } from './health';
 import { mainSpecies } from './shelters';
 import { addWork, cancelAllOrders, roadTaskMinutes, workSpot } from './construction';
 import { loaderSpot } from './dock';
-import { addShipmentWork, cancelAllLoading } from './shipments';
+import { addShipmentWork, cancelAllLoading, repairHaulTasks } from './shipments';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { homeSpot } from './home';
 import { addCount } from './inventory';
@@ -162,8 +162,11 @@ export const applyArea = (
   return { state: { ...state, tasks: [...state.tasks, ...added], nextId }, mode, changed, error };
 };
 
-/** Empties the queue: sites, demolitions and loadings are called off and queued roads refunded. */
-export const clearTasks = (state: GameState): GameState => cancelAllOrders(cancelAllLoading(state));
+/**
+ * Empties the queue: sites, demolitions and customers' loadings are called off and queued roads
+ * refunded. Freight already being loaded keeps its loaders (the sale is closed).
+ */
+export const clearTasks = (state: GameState): GameState => repairHaulTasks(cancelAllOrders(cancelAllLoading(state)));
 
 /** Queued task kinds that no worker has in their list (they would wait forever). */
 export const unstaffedKinds = (state: GameState): TaskKind[] => {

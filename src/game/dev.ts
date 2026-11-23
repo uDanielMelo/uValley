@@ -24,6 +24,7 @@ import { makeWorker, rollProfile } from './staff';
 import { completeAllWork } from './construction';
 import { applyTask } from './tasks';
 import { spawnWalkIn } from './shipments';
+import { OFFERS } from '../data/docks';
 
 export const addMoney = (state: GameState, amount: number): GameState => ({
   ...state,
@@ -218,6 +219,20 @@ export const callCustomer = (state: GameState): GameState =>
     day: Math.floor(state.gameMinutes / MINUTES_PER_DAY),
     slot: Math.floor(state.gameMinutes) % 97,
   });
+
+/** A buyer makes an offer right now on the first listing without one (up to 5 units). */
+export const forceOffer = (state: GameState): GameState => {
+  const listing = state.listings.find((l) => !state.offers.some((o) => o.listingId === l.id));
+  if (!listing) return state;
+  const offer = {
+    id: state.nextId,
+    listingId: listing.id,
+    quantity: Math.min(5, listing.quantity),
+    price: listing.price,
+    expiresAt: state.gameMinutes + OFFERS.validMinutes,
+  };
+  return { ...state, offers: [...state.offers, offer], nextId: state.nextId + 1 };
+};
 
 /** A predator raids the shelter with most animals right now. */
 export const forceRaid = (state: GameState): { state: GameState; attack: PredatorAttack | null } => {

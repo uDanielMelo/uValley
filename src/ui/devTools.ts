@@ -27,6 +27,7 @@ import {
   unlockAll,
   waterAll,
   callCustomer,
+  forceOffer,
 } from '../game/dev';
 import type { GameState } from '../game/types';
 import { useGameStore } from '../store/gameStore';
@@ -70,6 +71,7 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.weather('rain')    pula para o próximo dia com esse clima (sunny, cloudy, rain, storm)
   dev.manure()           todos os abrigos cheios de esterco
   dev.customer()         um cliente sai agora para a doca (se a vaga estiver livre)
+  dev.offer()            um comprador faz oferta agora no primeiro anúncio sem oferta
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -145,6 +147,7 @@ const devApi = {
   },
   fertilizer: (amount = 10) => apply((g) => addFertilizer(g, amount), `+${amount} de adubo`),
   manure: () => apply(fillManure, 'Abrigos cheios de esterco'),
+  offer: () => apply(forceOffer, 'Oferta forçada no primeiro anúncio'),
   customer: () => {
     const before = useGameStore.getState().game.shipments.length;
     apply(callCustomer);

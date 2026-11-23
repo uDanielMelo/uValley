@@ -118,20 +118,21 @@ function DockButton({ icon, label, hotkey, active, onClick, expanded, alert, tit
   );
 }
 
-/** Opens the dock's card; pulses while a customer waits there. */
+/** Opens the dock panel; pulses while a customer waits there or an offer is open. */
 function DockShortcut() {
   const waiting = useGameStore((s) => s.game.shipments.some((x) => x.phase === 'waiting'));
-  const selected = useGameStore((s) => s.game.structures.find((x) => x.id === s.selectedStructure)?.type === 'dock');
-  const focusDock = useGameStore((s) => s.focusDock);
+  const offers = useGameStore((s) => s.game.offers.length > 0);
+  const open = useGameStore((s) => s.panel === 'dock');
+  const openDock = useGameStore((s) => s.openDock);
   return (
     <DockButton
       icon="🚚"
       label="Doca"
-      hotkey=""
-      active={selected}
-      alert={waiting}
-      title={waiting ? 'Doca: cliente esperando' : 'Doca'}
-      onClick={focusDock}
+      hotkey="V"
+      active={open}
+      alert={waiting || offers}
+      title={waiting ? 'Doca: cliente esperando (V)' : offers ? 'Doca: ofertas novas (V)' : 'Doca: vender e pedidos (V)'}
+      onClick={() => openDock(waiting ? 'bay' : offers ? 'sell' : undefined)}
     />
   );
 }

@@ -31,7 +31,7 @@ export const VEHICLE_LEVELS: readonly VehicleLevel[] = [1, 2, 3];
 export interface VehicleDef {
   label: string;
   icon: string;
-  /** Load (kg) it carries to town per trip. */
+  /** Load (kg) the freight takes per trip with this vehicle. */
   capacity: number;
   /** Price to trade up to it at the dealership (0 for the starting pickup). */
   price: number;
@@ -46,10 +46,8 @@ export const VEHICLES: Record<VehicleLevel, VehicleDef> = {
   3: { label: 'Caminhão', icon: '🚚', capacity: 1500, price: 9000, scale: 1.4, color: '#3f7d4a' },
 };
 
-/** The town market pays this much more than the reference price (the goods have to get there). */
+/** Town buyers pay this much more than the reference price (the goods have to get there, by freight). */
 export const MARKET_BONUS = 1.25;
-/** Game minutes after each car visit hour when the load is picked up (and paid). */
-export const PICKUP_DELAY = 30;
 
 // ---------- orders ----------
 

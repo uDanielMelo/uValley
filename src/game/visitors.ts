@@ -204,6 +204,8 @@ export const shipmentCar = (
   gameMinutes: number,
   routes: CarRoutes,
 ): CarState | null => {
+  // Freight that has not set off yet is still out on the highway, out of sight.
+  if (shipment.phase === 'scheduled') return null;
   const arrive = routes.arrive;
   const length = routeLength(arrive);
   if (shipment.phase === 'leaving') {

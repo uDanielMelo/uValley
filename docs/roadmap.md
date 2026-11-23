@@ -147,7 +147,7 @@ Backend, login GitHub, save na nuvem, perfis e amigos. Decidido com o usuário: 
 projeto, de forma web (requisição ao GitHub e atualização pela web). O que havia sido feito localmente
 (bônus de contribuições, painel Perfil, save em arquivo e cliente Supabase) foi removido do código.
 
-### Etapa 9: doca e frete (em andamento: 9a ✅)
+### Etapa 9: doca e frete (em andamento: 9a ✅, 9b ✅)
 A caixa de venda vira uma doca com vagas; vender e comprar passam por veículos, frete e trabalho da equipe
 (carregamento como obra). Desenho completo, decisões do usuário e sub-etapas 9a a 9e em
 `docs/superpowers/specs/2026-11-23-dock-design.md` (aprovado pelo usuário em 2026-11-23).
@@ -160,6 +160,17 @@ instantânea saiu. Save v17. Decidido por mim (as dúvidas do spec): Carga usa C
 avaria de 15%, a doca no lugar da caixa e o cliente só pede o que a fazenda conhece (de preferência o que
 ela tem em estoque). Provisório até a 9b: a carga do Mercado continua sendo levada pelo relógio, sem carro
 na cena (a 9b a troca por anúncios e frete).
+
+9b ✅: venda por anúncio na doca (aba Vender: produto, quantidade e preço; indicador de procura). As ofertas
+chegam entre 7h e 18h, mais vezes quanto mais barato frente ao preço da cidade e nunca a 1,6× ou mais, cabendo
+na demanda do dia; valem 3 h. Fechar a oferta paga o frete (picape: 4 + 0,04/kg; caminhonete 12 + 0,03/kg;
+caminhão 30 + 0,02/kg), separa a mercadoria e agenda o veículo, que só roda das 6h às 19h e tem 5 h para ser
+carregado; chegando, a equipe carrega sozinha e o comprador paga no fim. Pedidos das lojas saem pela aba
+Pedidos do mesmo jeito. Venda que cai devolve a mercadoria (menos a avaria) e o pedido, mas não o frete. O
+Mercado virou vitrine de preços e pedidos; `cargo` e a coleta pelo relógio saíram. Save v18. Decidido por mim:
+a referência dos anúncios é o preço da cidade (o "prêmio de mercado" do spec), o frete é pago ao fechar, a
+carga do frete começa sozinha ao estacionar, o cliente avulso não vem enquanto há frete esperando vaga e a
+estação ainda não muda a demanda (fica para a etapa de economia).
 
 ### Vias e mapa maior (pedido do usuário) ✅
 

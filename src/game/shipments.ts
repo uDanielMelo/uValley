@@ -1,16 +1,22 @@
 /**
- * Vehicles at the dock. A shipment is saved state with phases: it drives in ('enroute'), parks at a
- * bay and waits for the farm ('waiting'), is loaded by the crew like a construction site
- * ('loading': the goods leave the inventory when the player orders it, and the crew adds work
- * minutes to the shipment, not to themselves) and drives off ('leaving') until it is out of sight.
- * A vehicle never waits past its deadline: if it runs out during loading the crew unloads it again
- * and part of the lot is damaged.
+ * Vehicles at the dock. A shipment is saved state with phases: hired freight first waits for
+ * daylight and a free bay ('scheduled'), then every vehicle drives in ('enroute'), parks at a bay
+ * and waits for the farm ('waiting'), is loaded by the crew like a construction site ('loading':
+ * the crew adds work minutes to the shipment, not to themselves) and drives off ('leaving') until
+ * it is out of sight. A vehicle never waits past its deadline: if it runs out during loading the
+ * crew unloads it again and part of the lot is damaged.
  *
- * For now the only vehicles are customers who drive in on their own (walk-ins): at a few hours of
- * the day one may set off for the farm (deterministic by day), wanting one lot of something the
- * farm knows, and pays on the spot when loaded.
+ * Two kinds of vehicles come:
+ * - walk-in customers ('walkin'): at a few hours of the day one may set off for the farm
+ *   (deterministic by day), wanting one lot of something the farm knows. The player orders the
+ *   loading (the lot leaves the inventory then) and they pay on the spot, without freight.
+ * - hired freight ('sale'): the farm closed a deal (an offer on a listing or a town order, see
+ *   listings.ts), paid the freight and set the goods aside. The freight comes when it can, is
+ *   loaded as soon as it parks and the buyer pays when it leaves loaded. If the deal falls through
+ *   the goods come back (minus the damage) and the freight is not refunded.
  */
-import { DOCK, WALK_IN } from '../data/docks';
+import { DOCK, FREIGHT, FREIGHT_RULES, WALK_IN } from '../data/docks';
+import { VEHICLES, type VehicleLevel } from '../data/market';
 import { MAX_TASKS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { animalProduct } from './animals';
@@ -24,6 +30,7 @@ import {
   type ActionError,
   type ActionResult,
   type GameState,
+  type Order,
   type Shipment,
   type ShipmentLine,
   type ShipmentOutcome,
@@ -50,6 +57,17 @@ export const hasGoods = (state: Pick<GameState, 'inventory'>, lines: readonly Sh
 export const damagedUnits = (quantity: number): number =>
   quantity <= 0 ? 0 : Math.min(quantity, Math.max(1, Math.round(quantity * DOCK.damage)));
 
+const takeGoods = (state: GameState, lines: readonly ShipmentLine[]): GameState => ({
+  ...state,
+  inventory: lines.reduce((inv, line) => addTo(inv, line.good, -line.quantity), state.inventory),
+});
+
+/** Puts goods back into the inventory. */
+const restock = (state: GameState, lines: readonly ShipmentLine[]): GameState => ({
+  ...state,
+  inventory: lines.reduce((inv, line) => addTo(inv, line.good, line.quantity), state.inventory),
+});
+
 // ---------- routes ----------
 
 /** The routes of a vehicle parking at a dock (from the road network as it is now). */
@@ -63,6 +81,23 @@ const driveTime = (state: Pick<GameState, 'tiles' | 'structures'>, dockId: numbe
   const routes = shipmentRoutes(state, dockId);
   return routes ? driveMinutes(routeLength(routes.arrive)) : 0;
 };
+
+// ---------- bays ----------
+
+/** Shipments parked at, or driving to, a dock (each one holds a bay). */
+const holdingBay = (state: Pick<GameState, 'shipments'>, dockId: number): number =>
+  state.shipments.filter((s) => s.dockId === dockId && s.phase !== 'leaving' && s.phase !== 'scheduled').length;
+
+const bayFree = (state: GameState, dockId: number): boolean => {
+  const dock = state.structures.find((s) => s.id === dockId);
+  return !!dock && dockWorks(state, dock) && holdingBay(state, dockId) < bayCount(dock);
+};
+
+/** The first working dock with a free bay. */
+const freeDock = (state: GameState): number | null => docksOf(state).find((d) => bayFree(state, d.id))?.id ?? null;
+
+/** The dock the farm's freight goes to: the first one reached by road. */
+export const workingDock = (state: GameState): number | null => docksOf(state).find((d) => dockWorks(state, d))?.id ?? null;
 
 // ---------- walk-in customers ----------
 
@@ -97,7 +132,7 @@ export const knownGoods = (state: Pick<GameState, 'research' | 'animals'>): Good
 
 const pick = <T>(list: readonly T[], roll: number): T | undefined => list[Math.floor(roll * list.length)];
 
-const between = (range: readonly [number, number], roll: number): number => range[0] + (range[1] - range[0]) * roll;
+export const between = (range: readonly [number, number], roll: number): number => range[0] + (range[1] - range[0]) * roll;
 
 /**
  * What a walk-in customer wants: usually something the farm has in stock (they heard about it),
@@ -119,20 +154,9 @@ export const walkInRequest = (
   return { line: { good, quantity }, payment: Math.round(unit * quantity) };
 };
 
-/** Shipments parked at, or driving to, a dock (each one holds a bay). */
-const holdingBay = (state: Pick<GameState, 'shipments'>, dockId: number): number =>
-  state.shipments.filter((s) => s.dockId === dockId && s.phase !== 'leaving').length;
-
-/** The first working dock with a free bay. */
-const freeDock = (state: GameState): number | null => {
-  for (const dock of docksOf(state)) {
-    if (dockWorks(state, dock) && holdingBay(state, dock.id) < bayCount(dock)) return dock.id;
-  }
-  return null;
-};
-
-/** A customer sets off at `at` (skipped when no dock is free). */
+/** A customer sets off at `at` (skipped when no bay is free, or freight is waiting for one). */
 export const spawnWalkIn = (state: GameState, walkIn: WalkInSlot): GameState => {
+  if (state.shipments.some((s) => s.phase === 'scheduled')) return state;
   const dockId = freeDock(state);
   if (dockId === null) return state;
   const request = walkInRequest(state, walkIn.day * 101 + walkIn.slot);
@@ -152,6 +176,68 @@ export const spawnWalkIn = (state: GameState, walkIn: WalkInSlot): GameState => 
   return { ...state, shipments: [...state.shipments, shipment], nextId: state.nextId + 1 };
 };
 
+// ---------- hired freight ----------
+
+/** What the freight costs to take a lot, with the farm's vehicle. */
+export const freightCost = (level: VehicleLevel, lines: readonly ShipmentLine[]): number =>
+  Math.round(FREIGHT[level].base + FREIGHT[level].perKg * linesWeight(lines));
+
+/** Most kg one freight trip takes. */
+export const freightCapacity = (level: VehicleLevel): number => VEHICLES[level].capacity;
+
+const inFreightHours = (gameMinutes: number): boolean => {
+  const hour = (((gameMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY) / 60;
+  return hour >= FREIGHT_RULES.hours[0] && hour < FREIGHT_RULES.hours[1];
+};
+
+/** The first minute, from `at` on, when freight drives (now in the daytime, else the next morning). */
+export const freightStart = (at: number): number => {
+  if (inFreightHours(at)) return at;
+  const day = Math.floor(at / MINUTES_PER_DAY);
+  const morning = day * MINUTES_PER_DAY + FREIGHT_RULES.hours[0] * 60;
+  return at < morning ? morning : morning + MINUTES_PER_DAY;
+};
+
+/** Why a deal cannot be closed and sent now, or null when it can. */
+export const checkSale = (state: GameState, lines: readonly ShipmentLine[]): ActionError | null => {
+  if (workingDock(state) === null) return 'dock-no-road';
+  if (!hasGoods(state, lines)) return 'not-enough-goods';
+  if (linesWeight(lines) > freightCapacity(state.vehicleLevel)) return 'vehicle-full';
+  return state.money < freightCost(state.vehicleLevel, lines) ? 'not-enough-money' : null;
+};
+
+/**
+ * Closes a deal: pays the freight, sets the lot aside and schedules the vehicle. It must be loaded
+ * within FREIGHT_RULES.windowMinutes of the first hour it can drive (a town order: also before its
+ * due day ends).
+ */
+export const scheduleSale = (state: GameState, lines: ShipmentLine[], payment: number, order?: Order): ActionResult => {
+  const error = checkSale(state, lines);
+  if (error) return fail(error);
+  const dockId = workingDock(state);
+  if (dockId === null) return fail('dock-no-road');
+  const freight = freightCost(state.vehicleLevel, lines);
+  const start = freightStart(state.gameMinutes);
+  const due = order ? order.dueDay * MINUTES_PER_DAY : Infinity;
+  const shipment: Shipment = {
+    id: state.nextId,
+    kind: 'sale',
+    dockId,
+    phase: 'scheduled',
+    setOffAt: start,
+    arrivesAt: start,
+    deadline: Math.min(start + FREIGHT_RULES.windowMinutes, due),
+    goods: lines,
+    payment,
+    staged: true,
+    freight,
+    vehicle: state.vehicleLevel,
+    ...(order ? { order } : {}),
+  };
+  const paid = takeGoods({ ...state, money: state.money - freight }, lines);
+  return ok({ ...paid, shipments: [...paid.shipments, shipment], nextId: state.nextId + 1 });
+};
+
 // ---------- phases ----------
 
 const isHaulFor = (shipmentId: number) => (t: Task) => t.job?.type === 'shipment' && t.job.shipmentId === shipmentId;
@@ -161,64 +247,54 @@ const update = (state: GameState, id: number, change: (s: Shipment) => Shipment)
   shipments: state.shipments.map((s) => (s.id === id ? change(s) : s)),
 });
 
-/** Puts goods back into the inventory. */
-const restock = (state: GameState, lines: readonly ShipmentLine[]): GameState => ({
-  ...state,
-  inventory: lines.reduce((inv, line) => addTo(inv, line.good, line.quantity), state.inventory),
-});
+/** A town order whose delivery fell through goes back on the board while it is still due. */
+const giveOrderBack = (state: GameState, shipment: Shipment): GameState => {
+  const order = shipment.order;
+  if (!order || order.dueDay * MINUTES_PER_DAY <= state.gameMinutes) return state;
+  if (state.orders.some((o) => o.id === order.id)) return state;
+  return { ...state, orders: [...state.orders, order] };
+};
 
-/** The vehicle drives off at `at` (its loaders stop). */
-const depart = (state: GameState, shipment: Shipment, outcome: ShipmentOutcome, at: number, lost?: number): GameState => {
-  const dropped = dropTasks(state, isHaulFor(shipment.id));
-  const { work: _work, ...rest } = shipment;
+/**
+ * The vehicle drives off at `at` (its loaders stop); one that never came just goes away. Whatever
+ * was set aside for it goes back to the inventory (`back`, minus the damage) unless it was sold.
+ */
+const depart = (
+  state: GameState,
+  shipment: Shipment,
+  outcome: ShipmentOutcome,
+  at: number,
+  back: readonly ShipmentLine[] = shipment.staged ? shipment.goods : [],
+): GameState => {
+  const restocked = outcome === 'sold' ? state : giveOrderBack(restock(state, back), shipment);
+  const dropped = dropTasks(restocked, isHaulFor(shipment.id));
+  const { work: _work, staged: _staged, ...rest } = shipment;
+  const lost = outcome === 'sold' || !shipment.staged ? 0 : linesUnits(shipment.goods) - linesUnits(back);
+  const drive = shipment.phase === 'scheduled' ? 0 : driveTime(state, shipment.dockId);
   const leaving: Shipment = {
     ...rest,
     phase: 'leaving',
     leftAt: at,
-    goneAt: at + driveTime(state, shipment.dockId),
+    goneAt: at + drive,
     outcome,
-    ...(lost ? { lost } : {}),
+    ...(lost > 0 ? { lost } : {}),
   };
   return update(dropped, shipment.id, () => leaving);
 };
 
 /**
- * The deadline ran out: a vehicle still waiting just leaves; one being loaded is unloaded again,
- * losing part of the lot when the crew had already started.
+ * The deadline ran out (or the freight can no longer make it): the vehicle leaves without its load.
+ * A lot the crew had started loading is unloaded again, losing part of it.
  */
-const expire = (state: GameState, shipment: Shipment): GameState => {
-  if (!shipment.work) return depart(state, shipment, 'expired', shipment.deadline);
-  const started = shipment.work.done > 0;
+const expire = (state: GameState, shipment: Shipment, at: number): GameState => {
+  if (!shipment.staged) return depart(state, shipment, 'expired', at);
+  const started = (shipment.work?.done ?? 0) > 0;
   const back = shipment.goods.map((line) => ({
     good: line.good,
     quantity: line.quantity - (started ? damagedUnits(line.quantity) : 0),
   }));
-  const lost = linesUnits(shipment.goods) - linesUnits(back);
-  return depart(restock(state, back), shipment, 'expired', shipment.deadline, lost);
+  return depart(state, shipment, 'expired', at, back);
 };
-
-/** Moves every shipment along the clock: new customers set off, vehicles park, time out and drive away. */
-export const stepShipments = (state: GameState, from: number): GameState => {
-  const now = state.gameMinutes;
-  let next = state;
-  for (const walkIn of walkInsBetween(from, now)) next = spawnWalkIn(next, walkIn);
-  for (const shipment of next.shipments) {
-    let s = next.shipments.find((x) => x.id === shipment.id);
-    if (s?.phase === 'enroute' && now >= s.arrivesAt) {
-      next = update(next, s.id, (x) => ({ ...x, phase: 'waiting' }));
-      s = next.shipments.find((x) => x.id === shipment.id);
-    }
-    if ((s?.phase === 'waiting' || s?.phase === 'loading') && now >= s.deadline) {
-      next = expire(next, s);
-    }
-  }
-  const gone = next.shipments.filter((s) => s.phase === 'leaving' && now >= (s.goneAt ?? 0));
-  if (gone.length === 0) return next;
-  const ids = new Set(gone.map((s) => s.id));
-  return { ...next, shipments: next.shipments.filter((s) => !ids.has(s.id)) };
-};
-
-// ---------- loading ----------
 
 /** Queues the loaders of a shipment (one per crew tile not already queued). */
 const addHaulTasks = (state: GameState, shipment: Shipment): GameState => {
@@ -234,62 +310,114 @@ const addHaulTasks = (state: GameState, shipment: Shipment): GameState => {
   return added.length === 0 ? state : { ...state, tasks: [...state.tasks, ...added], nextId };
 };
 
+/** Starts loading a parked vehicle whose lot is already set aside. */
+const beginLoading = (state: GameState, shipment: Shipment): GameState => {
+  const loading: Shipment = { ...shipment, phase: 'loading', staged: true, work: { done: 0, total: loadMinutes(shipment.goods) } };
+  return addHaulTasks(update(state, shipment.id, () => loading), loading);
+};
+
+/** Scheduled freight sets off when it may drive and a bay is free, or the deal falls through. */
+const dispatch = (state: GameState, shipment: Shipment, now: number): GameState => {
+  if (now < shipment.setOffAt || !inFreightHours(now)) return state;
+  const drive = driveTime(state, shipment.dockId);
+  if (now + drive + FREIGHT_RULES.minLoadMinutes > shipment.deadline) return expire(state, shipment, now);
+  if (!bayFree(state, shipment.dockId)) return state;
+  return update(state, shipment.id, (s) => ({ ...s, phase: 'enroute', setOffAt: now, arrivesAt: now + drive }));
+};
+
+/** A vehicle parks: a customer waits for the player, hired freight is loaded right away. */
+const park = (state: GameState, shipment: Shipment): GameState => {
+  const parked = update(state, shipment.id, (s) => ({ ...s, phase: 'waiting' }));
+  if (shipment.kind !== 'sale' || state.tasks.length + DOCK.crewMax > MAX_TASKS) return parked;
+  const s = parked.shipments.find((x) => x.id === shipment.id);
+  return s ? beginLoading(parked, s) : parked;
+};
+
+/**
+ * Moves every shipment along the clock: vehicles that drove out of sight are dropped, new
+ * customers set off, freight sets off, vehicles park, time out and drive away.
+ */
+export const stepShipments = (state: GameState, from: number): GameState => {
+  const now = state.gameMinutes;
+  let next: GameState = state;
+  // Dropped one step after leaving, so the step it leaves in still reports it.
+  const gone = next.shipments.filter((s) => s.phase === 'leaving' && (s.goneAt ?? 0) < from);
+  if (gone.length > 0) {
+    const ids = new Set(gone.map((s) => s.id));
+    next = { ...next, shipments: next.shipments.filter((s) => !ids.has(s.id)) };
+  }
+  for (const shipment of next.shipments) {
+    const s = next.shipments.find((x) => x.id === shipment.id);
+    if (s?.phase === 'scheduled') next = dispatch(next, s, now);
+  }
+  for (const walkIn of walkInsBetween(from, now)) next = spawnWalkIn(next, walkIn);
+  for (const shipment of next.shipments) {
+    let s = next.shipments.find((x) => x.id === shipment.id);
+    if (s?.phase === 'enroute' && now >= s.arrivesAt) {
+      next = park(next, s);
+      s = next.shipments.find((x) => x.id === shipment.id);
+    }
+    if ((s?.phase === 'waiting' || s?.phase === 'loading') && now >= s.deadline) next = expire(next, s, s.deadline);
+  }
+  return next;
+};
+
+// ---------- loading ----------
+
 /** Why a parked vehicle cannot be loaded now, or null when it can. */
 export const checkLoading = (state: GameState, shipmentId: number): ActionError | null => {
   const shipment = state.shipments.find((s) => s.id === shipmentId);
   if (!shipment || shipment.phase !== 'waiting') return 'no-shipment';
-  if (!hasGoods(state, shipment.goods)) return 'not-enough-goods';
+  if (!shipment.staged && !hasGoods(state, shipment.goods)) return 'not-enough-goods';
   return state.tasks.length + DOCK.crewMax > MAX_TASKS ? 'queue-full' : null;
 };
 
 /**
- * Orders the crew to load a parked vehicle: the lot leaves the inventory now and the loaders are
- * queued ('haul', the Carga activity).
+ * Orders the crew to load a parked vehicle: a customer's lot leaves the inventory now (freight's
+ * was set aside already) and the loaders are queued ('haul', the Carga activity).
  */
 export const startLoading = (state: GameState, shipmentId: number): ActionResult => {
   const error = checkLoading(state, shipmentId);
   if (error) return fail(error);
   const shipment = state.shipments.find((s) => s.id === shipmentId);
   if (!shipment) return fail('no-shipment');
-  const loading: Shipment = { ...shipment, phase: 'loading', work: { done: 0, total: loadMinutes(shipment.goods) } };
-  const taken: GameState = {
-    ...state,
-    inventory: shipment.goods.reduce((inv, line) => addTo(inv, line.good, -line.quantity), state.inventory),
-  };
-  return ok(addHaulTasks(update(taken, shipmentId, () => loading), loading));
+  return ok(beginLoading(shipment.staged ? state : takeGoods(state, shipment.goods), shipment));
 };
 
-/** Calls the loading off: the lot goes back to the inventory whole and the vehicle keeps waiting. */
+/** Calls a customer's loading off: the lot goes back to the inventory whole and they keep waiting. */
 export const cancelLoading = (state: GameState, shipmentId: number): ActionResult => {
   const shipment = state.shipments.find((s) => s.id === shipmentId);
-  if (!shipment || shipment.phase !== 'loading') return fail('no-shipment');
-  const { work: _work, ...rest } = shipment;
+  if (!shipment || shipment.phase !== 'loading' || shipment.kind !== 'walkin') return fail('no-shipment');
+  const { work: _work, staged: _staged, ...rest } = shipment;
   const back = restock(dropTasks(state, isHaulFor(shipmentId)), shipment.goods);
   return ok(update(back, shipmentId, () => ({ ...rest, phase: 'waiting' })));
 };
 
-/** Sends a vehicle away without its load (whatever was staged for it goes back to the inventory). */
+/**
+ * Sends a vehicle away without its load, or calls off a sale: whatever was set aside goes back to
+ * the inventory (a town order back on the board); freight already paid is not refunded.
+ */
 export const dismissShipment = (state: GameState, shipmentId: number): ActionResult => {
   const shipment = state.shipments.find((s) => s.id === shipmentId);
-  if (!shipment || (shipment.phase !== 'waiting' && shipment.phase !== 'loading')) return fail('no-shipment');
-  const back = shipment.work ? restock(state, shipment.goods) : state;
-  return ok(depart(back, shipment, 'dismissed', state.gameMinutes));
+  if (!shipment || shipment.phase === 'leaving' || shipment.phase === 'enroute') return fail('no-shipment');
+  return ok(depart(state, shipment, 'dismissed', state.gameMinutes));
 };
 
-/** Calls off every loading under way (the "cancel everything" button empties the queue). */
+/** Calls off every customer's loading under way (the "cancel everything" button empties the queue). */
 export const cancelAllLoading = (state: GameState): GameState =>
   state.shipments.reduce((s, x) => {
-    if (x.phase !== 'loading') return s;
+    if (x.phase !== 'loading' || x.kind !== 'walkin') return s;
     const result = cancelLoading(s, x.id);
     return result.ok ? result.state : s;
   }, state);
 
-/** Adds loading work to a shipment; when it is loaded the customer pays and drives off. */
+/** Adds loading work to a shipment; when it is loaded the buyer pays and drives off. */
 export const addShipmentWork = (state: GameState, shipmentId: number, minutes: number): GameState => {
   const shipment = state.shipments.find((s) => s.id === shipmentId);
-  if (!shipment?.work || minutes <= 0) return state;
-  const done = shipment.work.done + minutes;
-  if (done < shipment.work.total) return update(state, shipmentId, (s) => ({ ...s, work: { done, total: shipment.work?.total ?? done } }));
+  const work = shipment?.work;
+  if (!shipment || !work || minutes <= 0) return state;
+  const done = work.done + minutes;
+  if (done < work.total) return update(state, shipmentId, (s) => ({ ...s, work: { done, total: work.total } }));
   return depart({ ...state, money: state.money + shipment.payment }, shipment, 'sold', state.gameMinutes);
 };
 
@@ -298,8 +426,8 @@ export const loadingProgress = (shipment: Pick<Shipment, 'work'>): number | null
   shipment.work ? (shipment.work.total > 0 ? Math.min(1, shipment.work.done / shipment.work.total) : 1) : null;
 
 /**
- * Keeps loaders and shipments consistent (after loading a save): drops loaders without a vehicle
- * being loaded and requeues the loaders of vehicles that lost theirs.
+ * Keeps loaders and shipments consistent (after loading a save, or emptying the queue): drops
+ * loaders without a vehicle being loaded and requeues the loaders of vehicles that lost theirs.
  */
 export const repairHaulTasks = (state: GameState): GameState => {
   const loading = new Set(state.shipments.filter((s) => s.phase === 'loading').map((s) => s.id));
@@ -321,7 +449,8 @@ export const dockEvents = (before: readonly Shipment[], after: readonly Shipment
   const events: DockEvent[] = [];
   for (const s of after) {
     const prev = before.find((x) => x.id === s.id);
-    if (s.phase === 'waiting' && (!prev || prev.phase === 'enroute')) events.push({ kind: 'arrived', shipment: s });
+    const parked = s.phase === 'waiting' || s.phase === 'loading';
+    if (parked && (!prev || prev.phase === 'enroute' || prev.phase === 'scheduled')) events.push({ kind: 'arrived', shipment: s });
     if (s.phase === 'leaving' && prev?.phase !== 'leaving') {
       if (s.outcome === 'sold') events.push({ kind: 'sold', shipment: s });
       else if (s.outcome === 'expired') events.push({ kind: 'expired', shipment: s });
@@ -329,4 +458,3 @@ export const dockEvents = (before: readonly Shipment[], after: readonly Shipment
   }
   return events;
 };
-

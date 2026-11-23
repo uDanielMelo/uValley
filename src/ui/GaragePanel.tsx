@@ -1,4 +1,5 @@
 import { VEHICLES, VEHICLE_LEVELS } from '../data/market';
+import { FREIGHT } from '../data/docks';
 import { nextVehicle } from '../game/market';
 import { useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
@@ -14,7 +15,7 @@ export function GaragePanel() {
   return (
     <Panel title="🚘 Concessionária" onClose={close}>
       <p className="mb-3 text-xs font-bold text-wood/80">
-        O veículo leva a carga da fazenda para a cidade nas visitas (7h, 12h e 18h). Quanto maior, mais peso por viagem.
+        O frete das vendas vem com este veículo. Quanto maior, mais peso por viagem e menos frete por kg.
       </p>
       <ul className="flex flex-col gap-2">
         {VEHICLE_LEVELS.map((l) => {
@@ -29,7 +30,9 @@ export function GaragePanel() {
             >
               <span>
                 {def.icon} {def.label}
-                <span className="block text-xs font-bold text-wood/70">{def.capacity} kg por viagem</span>
+                <span className="block text-xs font-bold text-wood/70">
+                  {def.capacity} kg por viagem · frete {FREIGHT[l].base} + {FREIGHT[l].perKg.toLocaleString('pt-BR')}/kg
+                </span>
               </span>
               {l === level ? (
                 <span className="text-xs">Seu veículo</span>

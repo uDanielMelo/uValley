@@ -44,6 +44,9 @@ export function useHotkeys(): void {
         case 't':
           store.openPanel('workers');
           break;
+        case 'v':
+          store.openDock();
+          break;
         case 'b':
           if (!inTown) store.openPanel('build');
           break;

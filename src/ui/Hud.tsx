@@ -3,6 +3,7 @@ import { useGameStore } from '../store/gameStore';
 import { AnimalCard } from './AnimalCard';
 import { BuildBanner, BuildPanel } from './BuildPanel';
 import { DevPanel } from './DevPanel';
+import { DockPanel } from './DockPanel';
 import { GaragePanel } from './GaragePanel';
 import { MarketPanel } from './MarketPanel';
 import { DEV_ENABLED } from './devTools';
@@ -25,7 +26,7 @@ const CONTROLS: readonly [string, string][] = [
   ['Botão direito', 'arrastar move a câmera'],
   ['Meio ou Shift + direito', 'girar (ou Z/X)'],
   ['Roda', 'zoom'],
-  ['Atalhos', 'H mão · 1–5 atividades · B construir · C cidade · T equipe · L loja · I inventário · Espaço pausa'],
+  ['Atalhos', 'H mão · 1–5 atividades · B construir · V doca · C cidade · T equipe · L loja · I inventário · Espaço pausa'],
 ];
 
 /** Controls help, folded into a small "?" button. */
@@ -75,6 +76,7 @@ export function Hud() {
         {panel === 'build' && <BuildPanel />}
         {panel === 'market' && <MarketPanel />}
         {panel === 'garage' && <GaragePanel />}
+        {panel === 'dock' && <DockPanel />}
       </div>
       <div className="flex items-end justify-between gap-3 p-3">
         <div className="flex w-72 flex-col justify-end gap-2">

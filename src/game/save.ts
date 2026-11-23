@@ -18,7 +18,6 @@ import type {
   Animal,
   AnimalHealth,
   Candidate,
-  Cargo,
   Carcass,
   GameState,
   GridPoint,
@@ -26,9 +25,12 @@ import type {
   MedicineCounts,
   Order,
   ProductCounts,
+  Listing,
+  Offer,
   Research,
   Rotation,
   Shipment,
+  ShipmentKind,
   ShipmentLine,
   ShipmentOutcome,
   ShipmentPhase,
@@ -53,7 +55,7 @@ import { rehomeAnimals } from './shelters';
 import { repairHaulTasks } from './shipments';
 import { stampStructures } from './structures';
 
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 /**
  * Saves older than this were made on the 32x32 map, before buildings needed roads; they cannot be
  * placed on the new map, so loading one starts a new game.
@@ -72,19 +74,21 @@ export interface SaveSettings {
 export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphics: 'high' };
 
 /**
- * v17 replaces the shipping bin with the dock and adds the vehicles visiting it (`shipments`) and
- * the loading activity ('haul'). v16 is the 64x64 map (the farm starts with 32x32 tiles by the
+ * v18 sells through the dock only: listings, offers and hired freight (`listings`, `offers`, sale
+ * shipments with the goods set aside), and the town load (`cargo`) is gone. v17 replaced the
+ * shipping bin with the dock and added the vehicles visiting it (`shipments`) and the loading
+ * activity ('haul'). v16 is the 64x64 map (the farm starts with 32x32 tiles by the
  * south edge), with road rings around the buildings and ring road tasks tied to their site
  * (`job.siteId`). Earlier versions (v1–v15, on the 32x32 map) are not loaded.
  */
-export interface SaveDataV17 {
-  saveVersion: 17;
+export interface SaveDataV18 {
+  saveVersion: 18;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV17;
+export type SaveData = SaveDataV18;
 
 export interface LoadedSave {
   game: GameState;
@@ -113,11 +117,48 @@ const migrateV16 = (data: Record<string, unknown>): Record<string, unknown> => {
   return { ...data, saveVersion: 17, game: { ...game, structures, tiles, workers, shipments: [] } };
 };
 
+/** Adds a record of counts (`{ wheat: 3 }`) into another, ignoring anything that is not a count. */
+const mergeCounts = (into: unknown, from: unknown): unknown => {
+  if (!isRecord(into) || !isRecord(from)) return into;
+  const result: Record<string, unknown> = { ...into };
+  for (const [key, value] of Object.entries(from)) {
+    if (!isFiniteNumber(value) || value <= 0) continue;
+    const had = result[key];
+    result[key] = (isFiniteNumber(had) ? had : 0) + value;
+  }
+  return result;
+};
+
+/**
+ * v17 → v18: what was loaded for town goes back to the inventory (selling is by listing now), no
+ * listings yet, and a customer being loaded has its lot set aside.
+ */
+const migrateV17 = (data: Record<string, unknown>): Record<string, unknown> => {
+  const game = data.game;
+  if (!isRecord(game)) return data;
+  const { cargo, ...rest } = game;
+  const inventory =
+    isRecord(game.inventory) && isRecord(cargo)
+      ? {
+          ...game.inventory,
+          produce: mergeCounts(game.inventory.produce, cargo.produce),
+          products: mergeCounts(game.inventory.products, cargo.products),
+        }
+      : game.inventory;
+  const shipments = Array.isArray(game.shipments)
+    ? game.shipments.map((s: unknown) => (isRecord(s) && s.phase === 'loading' ? { ...s, staged: true } : s))
+    : game.shipments;
+  return { ...data, saveVersion: 18, game: { ...rest, inventory, shipments, listings: [], offers: [] } };
+};
+
 /**
  * Migrations from version N to N + 1. Add an entry here whenever SAVE_VERSION is bumped:
- * `migrations[17] = (v17) => v18`.
+ * `migrations[18] = (v18) => v19`.
  */
-const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = { 16: migrateV16 };
+const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {
+  16: migrateV16,
+  17: migrateV17,
+};
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {
   const data: SaveData = { saveVersion: SAVE_VERSION, savedAt: now, game, settings };
@@ -368,14 +409,25 @@ const parseOrder = (v: unknown): Order | null => {
   return { id, shop, good, quantity, reward, dueDay };
 };
 
-const parseCargo = (v: unknown): Cargo | null => {
+const parseListing = (v: unknown): Listing | null => {
   if (!isRecord(v)) return null;
-  const produce = parseCounts(v.produce);
-  const products = parseProducts(v.products);
-  return produce && products ? { produce, products } : null;
+  const { id, price, quantity, postedAt, offered } = v;
+  const good = parseOrderGood(v.good);
+  if (!isId(id) || !good || !isId(price) || price < 1 || !isId(quantity) || quantity < 1 || !isFiniteNumber(postedAt)) return null;
+  if (!isRecord(offered) || !isId(offered.day) || !isId(offered.units)) return null;
+  return { id, good, price, quantity, postedAt, offered: { day: offered.day, units: offered.units } };
 };
 
-const SHIPMENT_PHASES: readonly ShipmentPhase[] = ['enroute', 'waiting', 'loading', 'leaving'];
+const parseOffer = (v: unknown): Offer | null => {
+  if (!isRecord(v)) return null;
+  const { id, listingId, quantity, price, expiresAt } = v;
+  if (!isId(id) || !isId(listingId) || !isId(quantity) || quantity < 1 || !isId(price) || !isFiniteNumber(expiresAt)) return null;
+  return { id, listingId, quantity, price, expiresAt };
+};
+
+const SHIPMENT_PHASES: readonly ShipmentPhase[] = ['scheduled', 'enroute', 'waiting', 'loading', 'leaving'];
+const SHIPMENT_KINDS: readonly ShipmentKind[] = ['walkin', 'sale'];
+const isShipmentKind = (v: unknown): v is ShipmentKind => SHIPMENT_KINDS.some((k) => k === v);
 const SHIPMENT_OUTCOMES: readonly ShipmentOutcome[] = ['sold', 'expired', 'dismissed'];
 const isShipmentPhase = (v: unknown): v is ShipmentPhase => SHIPMENT_PHASES.some((p) => p === v);
 const isShipmentOutcome = (v: unknown): v is ShipmentOutcome => SHIPMENT_OUTCOMES.some((o) => o === v);
@@ -394,17 +446,30 @@ const parseShipmentWork = (v: unknown): ShipmentWork | undefined | null => {
 
 const parseShipment = (v: unknown): Shipment | null => {
   if (!isRecord(v)) return null;
-  const { id, dockId, phase, setOffAt, arrivesAt, deadline, payment } = v;
-  if (!isId(id) || v.kind !== 'walkin' || !isId(dockId) || !isShipmentPhase(phase)) return null;
+  const { id, kind, dockId, phase, setOffAt, arrivesAt, deadline, payment } = v;
+  if (!isId(id) || !isShipmentKind(kind) || !isId(dockId) || !isShipmentPhase(phase)) return null;
   if (!isFiniteNumber(setOffAt) || !isFiniteNumber(arrivesAt) || !isFiniteNumber(deadline)) return null;
   if (!isFiniteNumber(payment) || payment < 0) return null;
   const goods = parseList(v.goods, parseLine);
   const work = parseShipmentWork(v.work);
   if (!goods || goods.length === 0 || work === null) return null;
-  // Goods being loaded already left the inventory: a loading shipment always has its work.
+  // A loading shipment always has its work, and its goods already left the inventory.
   if ((phase === 'loading') !== (work !== undefined)) return null;
-  const shipment: Shipment = { id, kind: 'walkin', dockId, phase, setOffAt, arrivesAt, deadline, goods, payment };
+  const staged = v.staged === true;
+  if (phase === 'loading' && !staged) return null;
+  const shipment: Shipment = { id, kind, dockId, phase, setOffAt, arrivesAt, deadline, goods, payment };
   if (work) shipment.work = work;
+  if (staged && phase !== 'leaving') shipment.staged = true;
+  if (kind === 'sale') {
+    if (!isFiniteNumber(v.freight) || v.freight < 0 || !isVehicleLevel(v.vehicle)) return null;
+    shipment.freight = v.freight;
+    shipment.vehicle = v.vehicle;
+    if (v.order !== undefined) {
+      const order = parseOrder(v.order);
+      if (!order) return null;
+      shipment.order = order;
+    }
+  }
   if (phase === 'leaving') {
     if (!isFiniteNumber(v.leftAt) || !isFiniteNumber(v.goneAt) || !isShipmentOutcome(v.outcome)) return null;
     shipment.leftAt = v.leftAt;
@@ -521,11 +586,13 @@ const parseGame = (v: unknown): GameState | null => {
   const candidates = parseList(v.candidates, parseCandidate);
   const carcasses = parseList(v.carcasses, parseCarcass);
   const orders = parseList(v.orders, parseOrder);
-  const cargo = parseCargo(v.cargo);
   const research = parseResearch(v.research);
   const allShipments = parseList(v.shipments, parseShipment);
-  if (!allShipments) return null;
-  if (!orders || !cargo || !research || !isVehicleLevel(v.vehicleLevel)) return null;
+  const listings = parseList(v.listings, parseListing);
+  const allOffers = parseList(v.offers, parseOffer);
+  if (!allShipments || !listings || !allOffers) return null;
+  if (!orders || !research || !isVehicleLevel(v.vehicleLevel)) return null;
+  const offers = allOffers.filter((o) => listings.some((l) => l.id === o.listingId));
   const vehicleLevel = v.vehicleLevel;
   if (!workers || !candidates || !tasks || !animals || !carcasses || !structures || !isId(nextId)) return null;
   const maxId = Math.max(
@@ -538,6 +605,8 @@ const parseGame = (v: unknown): GameState | null => {
     ...orders.map((o) => o.id),
     ...structures.map((s) => s.id),
     ...allShipments.map((s) => s.id),
+    ...listings.map((l) => l.id),
+    ...allOffers.map((o) => o.id),
   );
   // A vehicle whose dock is gone is dropped (the dock cannot be demolished, so this only guards bad data).
   const docks = new Set(structures.filter((s) => s.type === 'dock').map((s) => s.id));
@@ -559,8 +628,9 @@ const parseGame = (v: unknown): GameState | null => {
     animals,
     carcasses,
     vehicleLevel,
-    cargo,
     orders,
+    listings,
+    offers,
     research,
     structures,
     shipments,

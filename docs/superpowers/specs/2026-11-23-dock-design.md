@@ -1,6 +1,6 @@
 # Doca e frete: design
 
-Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **9a implementada** (branch `fase-4a-etapa-9a`); próximas: 9b–9e, uma sub-etapa por vez. As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
+Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **9a e 9b implementadas** (branches `fase-4a-etapa-9a` e `fase-4b-etapa-9b`); próximas: 9c–9e, uma sub-etapa por vez. As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
 
 Este documento é a memória do que foi conversado e decidido. Tudo que está em "Decidido pelo usuário" veio da conversa; o que está em "Minhas escolhas" são propostas minhas, provisórias, para o usuário confirmar ou ajustar.
 
@@ -133,8 +133,17 @@ interface HeldPurchase { id: number; goods: ShipmentGood[]; since: number }   //
 
 Diferenças da 9a para o modelo proposto: `Shipment` tem `setOffAt` (para desenhar o carro na ida), `leftAt`/`goneAt` e `outcome` em vez da fase `done`; a viagem só tem o tipo `walkin` e não tem `vehicle`, `freight` nem `direction` (entram na 9b/9c). O cliente que não encontra vaga livre não vem. A venda instantânea do inventário foi removida já na 9a; a carga manual do Mercado fica até a 9b.
 
+## Como ficou a 9b
+
+- `Listing { id, good, price, quantity, postedAt, offered: { day, units } }` e `Offer { id, listingId, quantity, price, expiresAt }` como no modelo; `HeldPurchase` fica para a 9c.
+- `Shipment.kind` é `walkin` ou `sale` (oferta ou pedido; o pedido vai em `order` para voltar à lista se a venda cair). Fase nova `scheduled` (frete contratado esperando o horário e a vaga). `staged` marca o lote fora do inventário; `freight` e `vehicle` ficam na viagem.
+- Referência dos anúncios: o preço da cidade (`marketPrice` = base × `MARKET_BONUS`), que é o "prêmio de mercado"; a oferta paga o preço do anúncio. Chance por hora: `OFFERS.hourlyChance × min(maxBoost, ((teto − razão)/(teto − 1))²)`, zero a partir de 1,6×.
+- Demanda diária por `hash01(dia, bem)`, escalada pelo preço do bem como os pedidos; a estação ainda não entra.
+- O frete é pago ao fechar e roda das 6h às 19h; prazo de 5 h a partir do primeiro horário possível. Ele só sai com a vaga livre e 40 min de folga para carregar; senão a venda cai (a mercadoria volta, o frete não). Ao estacionar, a carga começa sozinha.
+- O cliente avulso não vem enquanto há frete esperando vaga (o frete tem prioridade).
+
 ## Como retomar numa nova sessão
 
 1. Ler este documento e `docs/roadmap.md` (seção "Etapa 9").
-2. Se o usuário aprovou (ou ajustou as dúvidas acima), invocar `superpowers:writing-plans` para a sub-etapa 9a e implementar. Do contrário, perguntar as dúvidas pendentes uma a uma.
+2. Implementar a próxima sub-etapa (9c: compras por frete) quando o usuário pedir.
 3. Cada sub-etapa termina atualizando `CLAUDE.md` e `docs/roadmap.md`, com testes e `npm run build`.

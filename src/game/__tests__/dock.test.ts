@@ -144,7 +144,8 @@ describe('walk-in customers', () => {
     const leaving = late.shipments.find((s) => s.id === shipment.id);
     expect(leaving).toMatchObject({ phase: 'leaving', outcome: 'expired' });
     expect(late.money).toBe(money);
-    const gone = stepShipments({ ...late, gameMinutes: leaving?.goneAt ?? 0 }, (leaving?.goneAt ?? 0) - 1);
+    const goneAt = leaving?.goneAt ?? 0;
+    const gone = stepShipments({ ...late, gameMinutes: goneAt + 2 }, goneAt + 1);
     expect(gone.shipments.find((s) => s.id === shipment.id)).toBeUndefined();
   });
 

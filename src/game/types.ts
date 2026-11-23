@@ -87,12 +87,6 @@ export interface Research {
   current: { cropId: CropId; minutesLeft: number } | null;
 }
 
-/** Goods loaded on the vehicle, waiting for the next pickup. */
-export interface Cargo {
-  produce: ItemCounts;
-  products: ProductCounts;
-}
-
 /** A town shop's order: deliver this many units in a load by the end of the due day. */
 export interface Order {
   id: number;
@@ -112,10 +106,18 @@ export interface ShipmentLine {
 }
 
 /**
- * Where a vehicle at the dock is: driving in, parked waiting for the farm, being loaded by the
- * crew, or driving off (until it is gone).
+ * Where a vehicle at the dock is: hired but not on its way yet (freight waits for daylight and a
+ * free bay), driving in, parked waiting for the farm, being loaded by the crew, or driving off
+ * (until it is gone).
  */
-export type ShipmentPhase = 'enroute' | 'waiting' | 'loading' | 'leaving';
+export type ShipmentPhase = 'scheduled' | 'enroute' | 'waiting' | 'loading' | 'leaving';
+
+/**
+ * Who sent the vehicle: a customer who drove in on their own ('walkin', pays on the spot) or hired
+ * freight taking a sale the farm closed ('sale': an offer on a listing or a town order; the farm
+ * paid the freight and the goods were set aside when it was closed).
+ */
+export type ShipmentKind = 'walkin' | 'sale';
 
 /** How a vehicle's visit ended: loaded and paid, out of time, or sent away by the player. */
 export type ShipmentOutcome = 'sold' | 'expired' | 'dismissed';
@@ -127,25 +129,32 @@ export interface ShipmentWork {
 }
 
 /**
- * A vehicle visiting the dock. For now only customers who drive in on their own ('walkin'): they
- * ask for one lot, wait at a bay and pay on the spot when the crew has loaded it.
+ * A vehicle visiting the dock: it asks for one lot, waits at a bay and pays when the crew has
+ * loaded it.
  */
 export interface Shipment {
   id: number;
-  kind: 'walkin';
+  kind: ShipmentKind;
   /** The dock whose bay it parks at. */
   dockId: number;
   phase: ShipmentPhase;
-  /** Game minute it set off from the highway's east end. */
+  /** Game minute it set off from the highway's east end (scheduled: the earliest it may). */
   setOffAt: number;
-  /** Game minute it parks at the bay. */
+  /** Game minute it parks at the bay (scheduled: not known yet). */
   arrivesAt: number;
-  /** It drives off at this game minute, loaded or not. */
+  /** It drives off at this game minute, loaded or not (scheduled: the deal falls through). */
   deadline: number;
   /** What it wants. */
   goods: ShipmentLine[];
   /** Coins paid when it is loaded. */
   payment: number;
+  /** The goods already left the inventory (set aside for a sale, or being loaded). */
+  staged?: true;
+  /** Sales: the freight paid when the deal was closed (never refunded) and the vehicle that comes. */
+  freight?: number;
+  vehicle?: VehicleLevel;
+  /** Sales of a town order: the order, given back if the delivery falls through in time. */
+  order?: Order;
   /** Present while loading. */
   work?: ShipmentWork;
   /** Leaving: when it set off back, and when it is out of sight (then it is removed). */
@@ -154,6 +163,29 @@ export interface Shipment {
   outcome?: ShipmentOutcome;
   /** Units damaged when it left in the middle of loading. */
   lost?: number;
+}
+
+/** Goods the farm puts up for sale at a price per unit; buyers make offers on it. */
+export interface Listing {
+  id: number;
+  good: OrderGood;
+  /** Coins per unit asked. */
+  price: number;
+  /** Units still for sale. */
+  quantity: number;
+  postedAt: number;
+  /** Units offered on it so far on `day` (offers fit the town's demand of the day). */
+  offered: { day: number; units: number };
+}
+
+/** A buyer wants part of a listing at its price; closing it hires the freight. */
+export interface Offer {
+  id: number;
+  listingId: number;
+  quantity: number;
+  /** Coins per unit. */
+  price: number;
+  expiresAt: number;
 }
 
 /** What a 'build', 'tend' or 'haul' task works on. */
@@ -303,10 +335,11 @@ export interface GameState {
   carcasses: Carcass[];
   /** The farm's vehicle (1 pickup, 2 SUV, 3 truck). */
   vehicleLevel: VehicleLevel;
-  /** Goods loaded for town. */
-  cargo: Cargo;
-  /** Open town orders. */
+  /** Open town orders (sent from the dock). */
   orders: Order[];
+  /** What the farm put up for sale, and the offers buyers made on it. */
+  listings: Listing[];
+  offers: Offer[];
   /** Crops the farm can grow, and the one being researched. */
   research: Research;
   /** Placed structures, including the starting house and dock. */
@@ -375,7 +408,13 @@ export type ActionError =
   | 'no-water-needed'
   | 'not-sick'
   | 'no-shipment'
-  | 'not-enough-goods';
+  | 'not-enough-goods'
+  | 'no-listing'
+  | 'no-offer'
+  | 'too-many-listings'
+  | 'invalid-price'
+  | 'no-order'
+  | 'dock-no-road';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 

@@ -28,7 +28,8 @@ import {
 } from '../game/save';
 import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type DemolishChange } from '../game/construction';
 import { buyMedicine, medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
-import { loadCargo, unloadCargo, upgradeVehicle, type Good } from '../game/market';
+import { upgradeVehicle, type Good } from '../game/market';
+import { acceptOffer, declineOffer, postListing, removeListing, repriceListing, sendOrder } from '../game/listings';
 import { startResearch } from '../game/research';
 import { CAMERA } from '../data/camera';
 import { CITY_SHOPS, type CityShopId } from '../data/city';
@@ -44,7 +45,10 @@ import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/s
 import type { ActionError, ActionResult, Animal, GameState, Rotation, TaskKind, ToolId } from '../game/types';
 import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
 
-export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | 'market' | 'garage' | null;
+export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | 'market' | 'garage' | 'dock' | null;
+
+/** Dock panel tabs: the bay, selling by listing, the town's orders. */
+export type DockTab = 'bay' | 'sell' | 'orders';
 
 /** Shop panel tabs. */
 export type ShopTab = 'seeds' | 'animals' | 'medicine' | 'land';
@@ -141,10 +145,20 @@ export interface GameStore {
   startLoading: (shipmentId: number) => void;
   /** Calls the loading off: the goods come back and the vehicle keeps waiting. */
   cancelLoading: (shipmentId: number) => void;
-  /** Sends a vehicle away without its load. */
+  /** Sends a vehicle away without its load, or calls a sale off. */
   dismissShipment: (shipmentId: number) => void;
-  /** Selects the dock and brings the camera to it. */
-  focusDock: () => void;
+  /** Opens the dock panel (on a tab) and brings the camera to the dock. */
+  openDock: (tab?: DockTab) => void;
+  dockTab: DockTab;
+  setDockTab: (tab: DockTab) => void;
+  postListing: (good: Good, price: number, quantity: number) => void;
+  repriceListing: (listingId: number, price: number) => void;
+  removeListing: (listingId: number) => void;
+  /** Closes an offer: pays the freight and sets the goods aside. */
+  acceptOffer: (offerId: number) => void;
+  declineOffer: (offerId: number) => void;
+  /** Sends a town order by freight. */
+  sendOrder: (orderId: number) => void;
   hireCandidate: (candidateId: number) => void;
   hireTemp: () => void;
   dismiss: (workerId: number) => void;
@@ -174,8 +188,6 @@ export interface GameStore {
   /** Tab the shop panel opens on. */
   shopTab: ShopTab;
   setShopTab: (tab: ShopTab) => void;
-  loadCargo: (good: Good, quantity: number) => void;
-  unloadCargo: (good: Good, quantity: number) => void;
   upgradeVehicle: () => void;
   startResearch: (cropId: CropId) => void;
   /** Last request to move the camera to a spot (tile space); the camera rig follows new ids. */
@@ -246,6 +258,12 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'not-sick': 'Este animal não está doente.',
   'no-shipment': 'Este veículo não está mais esperando na doca.',
   'not-enough-goods': 'Falta mercadoria no estoque para este pedido.',
+  'no-listing': 'Este anúncio não existe mais.',
+  'no-offer': 'Esta oferta não está mais de pé.',
+  'too-many-listings': 'Já há anúncios demais. Tire um antes de pôr outro.',
+  'invalid-price': 'Preço inválido.',
+  'no-order': 'Este pedido não está mais aberto.',
+  'dock-no-road': 'A doca está sem acesso por estrada: o frete não chega.',
 };
 
 const label = (type: StructureId): string => STRUCTURES[type].label;
@@ -321,6 +339,27 @@ const lotText = (lines: readonly { good: Good; quantity: number }[]): string =>
 /** Toast for a vehicle that parked, was loaded or left without its load. */
 const dockText = (event: DockEvent): { text: string; kind: Toast['kind'] } => {
   const s = event.shipment;
+  if (s.kind === 'sale') {
+    const buyer = s.order ? `${TOWN_SHOPS[s.order.shop].icon} ${TOWN_SHOPS[s.order.shop].label}` : 'comprador';
+    if (event.kind === 'arrived') {
+      return {
+        text:
+          s.phase === 'loading'
+            ? `🚚 O frete chegou à doca: a equipe já está carregando ${lotText(s.goods)}.`
+            : `🚚 O frete chegou à doca, mas a fila está cheia: mande carregar.`,
+        kind: 'info',
+      };
+    }
+    if (event.kind === 'sold') {
+      return { text: `🚚 Frete carregado: ${lotText(s.goods)} para ${buyer}, +${s.payment} moedas.`, kind: 'info' };
+    }
+    const lost = s.lost ? `, menos ${s.lost} unidade(s) avariada(s)` : '';
+    const back = s.order ? ' O pedido voltou para a lista enquanto estiver no prazo.' : '';
+    return {
+      text: `🚚 A venda para ${buyer} não saiu a tempo: a mercadoria voltou ao estoque${lost}. O frete pago não volta.${back}`,
+      kind: 'error',
+    };
+  }
   if (event.kind === 'arrived') {
     return {
       text: `🚗 Cliente na doca: quer ${lotText(s.goods)} por ${s.payment} moedas. Abra a doca para mandar carregar.`,
@@ -441,10 +480,13 @@ export const useGameStore = create<GameStore>()(
           get().showMessage(`🔬 Pesquisa concluída: ${crop.icon} ${crop.label} já pode ser plantado(a).`, 'info');
         }
         if (tick.spoiled) get().showMessage(`Estragou no estoque: ${spoiledText(tick.spoiled)}.`, 'error');
-        for (const delivery of tick.deliveries) {
-          const orders = delivery.filled.map((o) => TOWN_SHOPS[o.shop].label).join(', ');
+        if (tick.newOffers.length > 0) {
+          const offer = tick.newOffers[0];
+          const listing = offer && state.listings.find((l) => l.id === offer.listingId);
           get().showMessage(
-            `🛻 A carga foi para a cidade: +${delivery.earned} moedas${orders ? ` (pedidos: ${orders})` : ''}.`,
+            tick.newOffers.length === 1 && offer && listing
+              ? `📨 Oferta: ${lotText([{ good: listing.good, quantity: offer.quantity }])} a ${offer.price} cada. Veja na doca.`
+              : `📨 ${tick.newOffers.length} ofertas novas nos seus anúncios. Veja na doca.`,
             'info',
           );
         }
@@ -626,14 +668,43 @@ export const useGameStore = create<GameStore>()(
         commit(cancelLoading(get().game, shipmentId), 'Carga cancelada: a mercadoria voltou ao estoque.');
       },
       dismissShipment: (shipmentId) => {
-        commit(dismissShipment(get().game, shipmentId), 'O cliente foi dispensado.');
+        const sale = get().game.shipments.find((s) => s.id === shipmentId)?.kind === 'sale';
+        commit(
+          dismissShipment(get().game, shipmentId),
+          sale ? 'Venda cancelada: a mercadoria voltou ao estoque (o frete pago não volta).' : 'O cliente foi dispensado.',
+        );
       },
-      focusDock: () => {
+      dockTab: 'bay',
+      setDockTab: (dockTab) => set({ dockTab }),
+      openDock: (tab) => {
         const dock = docksOf(get().game)[0];
-        if (!dock) return;
-        const bay = bayPoint(dock);
-        set({ selectedStructure: dock.id, selectedAnimal: null, tool: null, buildMode: null, activitiesOpen: false });
-        get().focusCamera(bay.x, bay.y);
+        if (get().panel === 'dock' && !tab) {
+          set({ panel: null });
+          return;
+        }
+        set({ panel: 'dock', ...(tab ? { dockTab: tab } : {}), tool: null, buildMode: null, activitiesOpen: false });
+        if (dock && get().view === 'farm') {
+          const bay = bayPoint(dock);
+          get().focusCamera(bay.x, bay.y);
+        }
+      },
+      postListing: (good, price, quantity) => {
+        commit(postListing(get().game, good, price, quantity), '📋 Anúncio publicado: as ofertas chegam ao longo do dia.');
+      },
+      repriceListing: (listingId, price) => {
+        commit(repriceListing(get().game, listingId, price));
+      },
+      removeListing: (listingId) => {
+        commit(removeListing(get().game, listingId), 'Anúncio retirado.');
+      },
+      acceptOffer: (offerId) => {
+        commit(acceptOffer(get().game, offerId), '🚚 Negócio fechado: o frete foi chamado e a mercadoria separada.');
+      },
+      declineOffer: (offerId) => {
+        commit(declineOffer(get().game, offerId));
+      },
+      sendOrder: (orderId) => {
+        commit(sendOrder(get().game, orderId), '🚚 Pedido despachado: o frete foi chamado e a mercadoria separada.');
       },
       hireCandidate: (candidateId) => {
         const name = get().game.candidates.find((c) => c.id === candidateId)?.name;
@@ -708,12 +779,6 @@ export const useGameStore = create<GameStore>()(
       },
       shopTab: 'seeds',
       setShopTab: (shopTab) => set({ shopTab }),
-      loadCargo: (good, quantity) => {
-        commit(loadCargo(get().game, good, quantity));
-      },
-      unloadCargo: (good, quantity) => {
-        commit(unloadCargo(get().game, good, quantity));
-      },
       startResearch: (cropId) => {
         const research = CROPS[cropId].research;
         commit(
