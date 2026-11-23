@@ -27,7 +27,6 @@ import type {
   Order,
   ProductCounts,
   Research,
-  GitHubLink,
   Rotation,
   Specialty,
   Stars,
@@ -355,13 +354,6 @@ const parseResearch = (v: unknown): Research | null => {
   return { unlocked, current: { cropId: c.cropId, minutesLeft: Math.max(0, c.minutesLeft) } };
 };
 
-/** The linked GitHub account: null when none, undefined when invalid. */
-const parseGitHub = (v: unknown): GitHubLink | null | undefined => {
-  if (v === null) return null;
-  if (!isRecord(v) || typeof v.login !== 'string' || !isFiniteNumber(v.activeDays) || !isFiniteNumber(v.syncedAt)) return undefined;
-  return { login: v.login, activeDays: Math.max(0, Math.floor(v.activeDays)), syncedAt: v.syncedAt };
-};
-
 const parseCarcass = (v: unknown): Carcass | null => {
   if (!isRecord(v)) return null;
   const { id, kind, breed, x, y, diedAt, shelterId } = v;
@@ -461,8 +453,7 @@ const parseGame = (v: unknown): GameState | null => {
   const orders = parseList(v.orders, parseOrder);
   const cargo = parseCargo(v.cargo);
   const research = parseResearch(v.research);
-  const github = parseGitHub(v.github);
-  if (!orders || !cargo || !research || github === undefined || !isVehicleLevel(v.vehicleLevel)) return null;
+  if (!orders || !cargo || !research || !isVehicleLevel(v.vehicleLevel)) return null;
   const vehicleLevel = v.vehicleLevel;
   if (!workers || !candidates || !tasks || !animals || !carcasses || !structures || !isId(nextId)) return null;
   const maxId = Math.max(
@@ -494,7 +485,6 @@ const parseGame = (v: unknown): GameState | null => {
     cargo,
     orders,
     research,
-    github,
     structures,
     nextId: Math.max(nextId, maxId + 1),
   }));

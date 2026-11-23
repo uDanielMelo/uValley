@@ -142,21 +142,10 @@ Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
 4. Habilidade por cultura: aprendiz, experiente e mestre (15, 50 e 120 tarefas) dão até +30% de ritmo e +15%
    de efetividade naquela cultura. O adubo já tinha sido feito na 3e. Save v14.
 
-### Etapa 8: GitHub e social (parte local ✅)
-Backend (ex.: Supabase com login GitHub), save na nuvem, perfis e amigos, impacto de contribuições na
-fazenda com teto (para não premiar commits vazios).
-
-Feito (decisões tomadas por mim com a autonomia dada pelo usuário):
-1. Perfil (🐙 no topo): o jogador liga um usuário do GitHub; o jogo lê a atividade pública e conta os dias com
-   contribuição nos últimos 7 (não o número de commits). Cada dia dá +2% no crescimento das plantas e na
-   produção dos animais, até 5 dias (+10%). Sincroniza no máximo a cada 30 min.
-2. Save em arquivo: exportar e importar a fazenda.
-3. Nuvem: cliente pronto (save, cards públicos de fazenda e login GitHub pelo Supabase Auth), desligado até
-   configurar `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`. SQL e passo a passo em `docs/supabase.md`.
-   Save v15.
-
-Falta (depende do usuário criar o projeto Supabase e o OAuth App do GitHub): testar o login e a nuvem de
-verdade e fazer o sistema de amigos (seguir e visitar fazendas).
+### Etapa 8: GitHub e social (adiada para o fim)
+Backend, login GitHub, save na nuvem, perfis e amigos. Decidido com o usuário: só entra na parte final do
+projeto, de forma web (requisição ao GitHub e atualização pela web). O que havia sido feito localmente
+(bônus de contribuições, painel Perfil, save em arquivo e cliente Supabase) foi removido do código.
 
 ### Vias e mapa maior (pedido do usuário) ✅
 
@@ -191,4 +180,4 @@ tiles pulados; `placeStructure` (dev) liga sozinho uma rua até a rede.
 ## Skills de apoio (instaladas globalmente)
 
 `threejs-performance`, `threejs-shaders`, `threejs-interaction`, `threejs-react-three-fiber`,
-`threejs-game-ui-designer`, `vitest`, `playwright-cli`. Para a Etapa 8: `supabase/agent-skills@supabase`.
+`threejs-game-ui-designer`, `vitest`, `playwright-cli`.

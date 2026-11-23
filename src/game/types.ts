@@ -81,15 +81,6 @@ export interface Inventory {
   fertilizer: number;
 }
 
-/** The GitHub account linked to the farm (public activity only). */
-export interface GitHubLink {
-  login: string;
-  /** Distinct days with contributions in the last week, at the last sync. */
-  activeDays: number;
-  /** Real time (Unix ms) of the last sync. */
-  syncedAt: number;
-}
-
 /** Crop research: what is unlocked and what is under way. */
 export interface Research {
   unlocked: CropId[];
@@ -265,8 +256,6 @@ export interface GameState {
   orders: Order[];
   /** Crops the farm can grow, and the one being researched. */
   research: Research;
-  /** Linked GitHub account (community bonus), or null. */
-  github: GitHubLink | null;
   /** Placed structures, including the starting house and shipping bin. */
   structures: StructureInstance[];
   /** Next id for tasks, workers, candidates, animals, carcasses and structures. */
