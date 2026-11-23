@@ -147,6 +147,11 @@ Backend, login GitHub, save na nuvem, perfis e amigos. Decidido com o usuário: 
 projeto, de forma web (requisição ao GitHub e atualização pela web). O que havia sido feito localmente
 (bônus de contribuições, painel Perfil, save em arquivo e cliente Supabase) foi removido do código.
 
+### Etapa 9: doca e frete (em desenho)
+A caixa de venda vira uma doca com vagas; vender e comprar passam por veículos, frete e trabalho da equipe
+(carregamento como obra). Desenho completo, decisões do usuário e sub-etapas 9a a 9e em
+`docs/superpowers/specs/2026-11-23-dock-design.md` (aguardando aprovação; nada implementado).
+
 ### Vias e mapa maior (pedido do usuário) ✅
 
 Decidido com o usuário:
