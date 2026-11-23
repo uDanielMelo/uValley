@@ -1,36 +1,8 @@
 import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
-import { CROPS, CROP_IDS, type CropId } from '../data/crops';
-import { FERTILIZER } from '../data/fertilizer';
+import { CROPS, CROP_IDS } from '../data/crops';
 import { PLOT_BASE_COST, PLOT_COST_MULTIPLIER } from '../data/economy';
 import { PLOT_COUNT, neighbourPlots, tilesInPlot } from './grid';
-import { addCount } from './inventory';
-import { isUnlocked } from './research';
 import { fail, ok, type ActionResult, type GameState } from './types';
-
-const isPositiveInt = (n: number): boolean => Number.isInteger(n) && n > 0;
-
-export const buySeeds = (state: GameState, cropId: CropId, quantity: number): ActionResult => {
-  if (!isPositiveInt(quantity)) return fail('invalid-quantity');
-  if (!isUnlocked(state, cropId)) return fail('not-researched');
-  const cost = CROPS[cropId].seedCost * quantity;
-  if (state.money < cost) return fail('not-enough-money');
-  return ok({
-    ...state,
-    money: state.money - cost,
-    inventory: { ...state.inventory, seeds: addCount(state.inventory.seeds, cropId, quantity) },
-  });
-};
-
-export const buyFertilizer = (state: GameState, quantity: number): ActionResult => {
-  if (!isPositiveInt(quantity)) return fail('invalid-quantity');
-  const cost = FERTILIZER.price * quantity;
-  if (state.money < cost) return fail('not-enough-money');
-  return ok({
-    ...state,
-    money: state.money - cost,
-    inventory: { ...state.inventory, fertilizer: state.inventory.fertilizer + quantity },
-  });
-};
 
 /** What all crops and animal products in the inventory are worth at the reference price. */
 export const produceValue = (state: GameState): number =>

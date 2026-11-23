@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ANIMALS, PLOT_PASTURE_UNITS } from '../../data/animals';
 import { STRUCTURES } from '../../data/structures';
-import { buyAnimal } from '../animals';
+import { addAnimal } from '../animals';
 import { orderDemolish, orderStructure } from '../construction';
 import { setTimeOfDay, skipMinutes, spawnAnimals, unlockAll } from '../dev';
 import { plotIndex, tileIndex } from '../grid';
@@ -46,11 +46,11 @@ const run = (state: GameState, minutes: number): GameState => {
 describe('shelters', () => {
   it('house only their species, up to their capacity', () => {
     let s = coopFarm();
-    expect(buyAnimal(s, 'pig')).toEqual({ ok: false, error: 'no-shelter' });
+    expect(addAnimal(s, 'pig')).toEqual({ ok: false, error: 'no-shelter' });
     const capacity = STRUCTURES.chickenCoop.shelter?.capacity ?? 0;
-    for (let i = 0; i < capacity; i++) s = unwrap(buyAnimal(s, i % 2 === 0 ? 'chicken' : 'duck'));
+    for (let i = 0; i < capacity; i++) s = unwrap(addAnimal(s, i % 2 === 0 ? 'chicken' : 'duck'));
     expect(freeSlots(s, coopOf(s))).toBe(0);
-    expect(buyAnimal(s, 'chicken')).toEqual({ ok: false, error: 'shelter-full' });
+    expect(addAnimal(s, 'chicken')).toEqual({ ok: false, error: 'shelter-full' });
   });
 
   it('a shelter still being built houses nobody', () => {
@@ -59,7 +59,7 @@ describe('shelters', () => {
   });
 
   it('cannot be demolished while animals live there', () => {
-    const s = unwrap(buyAnimal(coopFarm(), 'chicken'));
+    const s = unwrap(addAnimal(coopFarm(), 'chicken'));
     expect(orderDemolish(s, tileIndex(28, 44))).toEqual({ ok: false, error: 'shelter-in-use' });
   });
 });
@@ -81,7 +81,7 @@ describe('pasture', () => {
     const yard = [plotIndex(7, 14), plotIndex(8, 14), plotIndex(7, 15), plotIndex(8, 15)];
     let s = spawnAnimals({ ...createInitialState(), money: 100_000, unlockedPlots: yard }, 'cow', 1);
     while (true) {
-      const next = buyAnimal(s, 'cow');
+      const next = addAnimal(s, 'cow');
       if (!next.ok) {
         expect(['pasture-full', 'shelter-full']).toContain(next.error);
         break;
@@ -101,7 +101,7 @@ describe('collecting', () => {
     let s = spawnAnimals(coopFarm(), 'chicken', 4);
     // Same stars for all, so they lay together.
     s = { ...s, animals: s.animals.map((a) => ({ ...a, stars: 2 as const })) };
-    s = skipMinutes({ ...s, workers: [] }, ANIMALS.chicken.productionHours * 60 + 15);
+    s = skipMinutes({ ...s, workers: [], inventory: { ...s.inventory, feed: 50 } }, ANIMALS.chicken.productionHours * 60 + 15);
     expect(coopOf(s).stock?.egg).toBe(4);
     const tend = s.tasks.find((t) => t.kind === 'tend');
     expect(tend?.job).toEqual({ type: 'shelter', structureId: coopOf(s).id });

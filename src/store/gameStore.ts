@@ -6,15 +6,14 @@ import {
   ANIMAL_PRODUCT_IDS,
   BREEDS,
   type AnimalId,
-  type BreedId,
 } from '../data/animals';
 import { CROPS, CROP_IDS, type CropId } from '../data/crops';
 import { SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures';
 import { SEASONS, SEASON_DAYS } from '../data/climate';
 import { DISEASES, MEDICINES, PREDATORS, type MedicineId, type PredatorId } from '../data/health';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
-import { animalSalePrice, buyAnimal, sellAnimal, type PurchaseAge } from '../game/animals';
-import { buyFertilizer, buyPlot, buySeeds } from '../game/economy';
+import { animalSalePrice, sellAnimal } from '../game/animals';
+import { buyPlot } from '../game/economy';
 import { plotOfTile, tileCoords, tileIndex, tilesInRect } from '../game/grid';
 import {
   DEFAULT_SETTINGS,
@@ -27,7 +26,10 @@ import {
   type SaveSettings,
 } from '../game/save';
 import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type DemolishChange } from '../game/construction';
-import { buyMedicine, medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
+import { medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
+import { emptyCart, giveUpHeld, giveUpRefund, orderPurchase, reorderHeld, setFeedOrder, type Cart } from '../game/purchases';
+import { LIVESTOCK } from '../data/docks';
+import type { Delivery } from '../game/types';
 import { upgradeVehicle, type Good } from '../game/market';
 import { acceptOffer, declineOffer, postListing, removeListing, repriceListing, sendOrder } from '../game/listings';
 import { startResearch } from '../game/research';
@@ -140,7 +142,18 @@ export interface GameStore {
   closePanel: () => void;
   requestPlot: (plot: number | null) => void;
   confirmPlot: () => void;
-  buySeeds: (crop: CropId, quantity: number) => void;
+  /** What the player picked in the shop (not saved). */
+  cart: Cart;
+  updateCart: (change: (cart: Cart) => Cart) => void;
+  clearCart: () => void;
+  /** Orders the cart by freight. */
+  orderCart: () => void;
+  /** Orders something right away by freight, leaving the cart alone (e.g. medicine from an animal's card). */
+  orderNow: (cart: Cart) => void;
+  /** Pays a new freight for a delivery held in town. */
+  reorderHeld: (heldId: number) => void;
+  giveUpHeld: (heldId: number) => void;
+  setFeedOrder: (auto: boolean, days: number) => void;
   /** Orders the crew to load the vehicle parked at the dock (the goods leave the inventory now). */
   startLoading: (shipmentId: number) => void;
   /** Calls the loading off: the goods come back and the vehicle keeps waiting. */
@@ -166,13 +179,10 @@ export interface GameStore {
   /** Opens the team hub on a worker's card (null closes the card). */
   selectWorker: (workerId: number | null) => void;
   clearTasks: () => void;
-  buyAnimal: (kind: AnimalId, breed: BreedId, age: PurchaseAge) => void;
   sellAnimal: (animalId: number) => void;
   /** Animal selected with the hand (its card is open). */
   selectedAnimal: number | null;
   selectAnimal: (id: number | null) => void;
-  buyMedicine: (id: MedicineId, quantity: number) => void;
-  buyFertilizer: (quantity: number) => void;
   /** Recent predator attacks, for the figure running away. */
   sightings: PredatorSighting[];
   /** Shows the toast and the fleeing predator for attacks (also used by the dev tools). */
@@ -264,6 +274,10 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'invalid-price': 'Preço inválido.',
   'no-order': 'Este pedido não está mais aberto.',
   'dock-no-road': 'A doca está sem acesso por estrada: o frete não chega.',
+  'too-many-heads': `O caminhão boiadeiro leva até ${LIVESTOCK.maxHeads} animais por viagem.`,
+  'empty-cart': 'O carrinho está vazio.',
+  'no-held': 'Esta entrega não está mais retida na cidade.',
+  reserved: 'Há animais a caminho com vaga reservada neste abrigo.',
 };
 
 const label = (type: StructureId): string => STRUCTURES[type].label;
@@ -336,9 +350,39 @@ const lotText = (lines: readonly { good: Good; quantity: number }[]): string =>
     })
     .join(', ');
 
+/** "20 kg de ração, 2 galinhas" */
+export const deliveryText = (d: Delivery): string => {
+  const parts: string[] = [];
+  for (const id of CROP_IDS) if (d.seeds[id]) parts.push(`${d.seeds[id]} ${CROPS[id].icon} semente(s) de ${CROPS[id].label.toLowerCase()}`);
+  if (d.fertilizer) parts.push(`${d.fertilizer} de adubo`);
+  for (const [id, n] of Object.entries(d.medicine)) if (n) parts.push(`${n} ${MEDICINES[id as MedicineId].label.toLowerCase()}`);
+  if (d.feed) parts.push(`${d.feed} kg de ração`);
+  const heads = new Map<AnimalId, number>();
+  for (const a of d.animals) heads.set(a.kind, (heads.get(a.kind) ?? 0) + 1);
+  for (const [kind, n] of heads) parts.push(`${n} ${ANIMALS[kind].icon} ${ANIMALS[kind].label.toLowerCase()}`);
+  return parts.join(', ');
+};
+
 /** Toast for a vehicle that parked, was loaded or left without its load. */
 const dockText = (event: DockEvent): { text: string; kind: Toast['kind'] } => {
   const s = event.shipment;
+  if (s.kind === 'purchase') {
+    const what = s.delivery ? deliveryText(s.delivery) : 'a compra';
+    if (event.kind === 'arrived') {
+      return {
+        text:
+          s.phase === 'loading'
+            ? `📦 A entrega chegou à doca: a equipe está descarregando ${what}.`
+            : `📦 A entrega chegou à doca, mas a fila está cheia: mande descarregar.`,
+        kind: 'info',
+      };
+    }
+    if (event.kind === 'delivered') return { text: `📦 Entrega descarregada: ${what}.`, kind: 'info' };
+    return {
+      text: `📦 Ninguém descarregou a entrega a tempo e ela voltou para a cidade (${what}). Peça um novo frete na doca.`,
+      kind: 'error',
+    };
+  }
   if (s.kind === 'sale') {
     const buyer = s.order ? `${TOWN_SHOPS[s.order.shop].icon} ${TOWN_SHOPS[s.order.shop].label}` : 'comprador';
     if (event.kind === 'arrived') {
@@ -510,8 +554,9 @@ export const useGameStore = create<GameStore>()(
         }
         if (tempsLeft > 0) get().showMessage('Fim do expediente: os esporádicos foram embora.', 'info');
         if (hungryAnimals > 0) {
-          get().showMessage(`Sem dinheiro para a ração: ${hungryAnimals} animal(is) com fome hoje.`, 'error');
+          get().showMessage(`Faltou ração: ${hungryAnimals} animal(is) com fome hoje. Peça ração na loja.`, 'error');
         }
+        if (tick.feedOrdered > 0) get().showMessage(`🥣 Ração pedida automaticamente: ${tick.feedOrdered} kg.`, 'info');
         if (workersLeft.length > 0) {
           get().showMessage(`${workersLeft.join(', ')} foi embora: faltou dinheiro para o salário.`, 'error');
         }
@@ -658,8 +703,26 @@ export const useGameStore = create<GameStore>()(
         if (commit(buyPlot(game, pendingPlot), 'Novo lote comprado!')) set({ pendingPlot: null });
       },
 
-      buySeeds: (crop, quantity) => {
-        commit(buySeeds(get().game, crop, quantity));
+      cart: emptyCart(),
+      updateCart: (change) => set((s) => ({ cart: change(s.cart) })),
+      clearCart: () => set({ cart: emptyCart() }),
+      orderCart: () => {
+        if (commit(orderPurchase(get().game, get().cart), '📦 Compra feita: o frete foi chamado e a equipe descarrega na doca.')) {
+          set({ cart: emptyCart() });
+        }
+      },
+      orderNow: (cart) => {
+        commit(orderPurchase(get().game, cart), '📦 Pedido feito: chega pelo frete e a equipe descarrega na doca.');
+      },
+      reorderHeld: (heldId) => {
+        commit(reorderHeld(get().game, heldId), '📦 Novo frete chamado para a entrega retida.');
+      },
+      giveUpHeld: (heldId) => {
+        const held = get().game.held.find((h) => h.id === heldId);
+        commit(giveUpHeld(get().game, heldId), held ? `Entrega abandonada: +${giveUpRefund(held)} moedas.` : undefined);
+      },
+      setFeedOrder: (auto, days) => {
+        commit(setFeedOrder(get().game, auto, days));
       },
       startLoading: (shipmentId) => {
         commit(startLoading(get().game, shipmentId), '📦 Carga na fila: a equipe com Carga nas atividades vai carregar o veículo.');
@@ -724,26 +787,12 @@ export const useGameStore = create<GameStore>()(
       },
       selectWorker: (selectedWorker) => set(selectedWorker === null ? { selectedWorker } : { selectedWorker, panel: 'workers' }),
       clearTasks: () => set((s) => ({ game: clearTasks(s.game) })),
-      buyAnimal: (kind, breed, age) => {
-        if (!commit(buyAnimal(get().game, kind, breed, age))) return;
-        const animal = get().game.animals[get().game.animals.length - 1];
-        const home = get().game.structures.find((x) => x.id === animal?.shelterId);
-        if (!animal || !home) return;
-        const who = `${ANIMALS[kind].label} ${BREEDS[breed].label}${age === 'baby' ? ' (filhote)' : ''}`;
-        get().showMessage(`${who} comprado(a), ${'★'.repeat(animal.stars)}: mora no ${STRUCTURES[home.type].label.toLowerCase()}.`, 'info');
-      },
       sellAnimal: (animalId) => {
         const game = get().game;
         const animal = game.animals.find((a) => a.id === animalId);
         const price = animal ? animalSalePrice(game.gameMinutes, animal) : 0;
         if (!commit(sellAnimal(game, animalId), `Animal vendido: +${price} moedas.`)) return;
         if (get().selectedAnimal === animalId) set({ selectedAnimal: null });
-      },
-      buyFertilizer: (quantity) => {
-        commit(buyFertilizer(get().game, quantity), `Adubo: +${quantity}.`);
-      },
-      buyMedicine: (id, quantity) => {
-        commit(buyMedicine(get().game, id, quantity), `${MEDICINES[id].label}: +${quantity}.`);
       },
       sightings: [],
       showSighting: (predator, x, y) => {

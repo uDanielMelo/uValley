@@ -1,5 +1,6 @@
 /** The dock: bays where vehicles park, customers who drive in, loading by the crew. Balancing only. */
 
+import type { AnimalId } from './animals';
 import type { VehicleLevel } from './market';
 
 /** Dock levels (reached by upgrades in a later stage): how many vehicles can park at once. */
@@ -92,4 +93,41 @@ export const OFFERS = {
   demand: [6, 24] as const,
   /** One offer takes this share of the day's demand. */
   share: [0.35, 0.8] as const,
+} as const;
+
+// ---------- buying by freight ----------
+
+/** Weight (kg) of what the farm buys, for the freight: per seed packet, dose, fertilizer unit and kg of feed. */
+export const SUPPLY_WEIGHT = { seed: 1, medicine: 0.5, fertilizer: 10, feedKg: 1 } as const;
+
+/** Animals come on a hired livestock truck: a fixed part plus a price per head, up to `maxHeads` a trip. */
+export const LIVESTOCK = {
+  base: 15,
+  perHead: {
+    chicken: 2,
+    duck: 2,
+    pig: 8,
+    sheep: 6,
+    goat: 6,
+    cow: 20,
+    ox: 20,
+    horse: 20,
+  } satisfies Record<AnimalId, number>,
+  maxHeads: 8,
+  /** Work minutes (at speed 1) to unload each head. */
+  unloadMinutesPerHead: 6,
+} as const;
+
+/**
+ * A delivery nobody unloaded in time goes back to town and is held there: it is still the farm's,
+ * and a new freight brings it. Animals held cost a daily fee and fall sick if they wait too long.
+ */
+export const HELD = {
+  /** Held animals cost this many times their daily feed, every midnight. */
+  feeMultiplier: 2,
+  /** Animals held at least this many days arrive with a chance of being sick (worms). */
+  sickAfterDays: 2,
+  sickChance: 0.5,
+  /** Giving up a held delivery gives this share of what it cost back. */
+  giveUpRefund: 0.5,
 } as const;

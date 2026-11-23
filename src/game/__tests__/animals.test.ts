@@ -3,9 +3,9 @@ import { ANIMALS, ANIMAL_IDS, ANIMAL_PRODUCTS, LEASH_RADIUS, MAX_ANIMALS } from 
 import { STARTING_MONEY } from '../../data/economy';
 import { MINUTES_PER_DAY } from '../../data/world';
 import {
+  addAnimal,
   animalActivity,
   animalSalePrice,
-  buyAnimal,
   homeOf,
   isInside,
   isPasture,
@@ -49,25 +49,20 @@ const withCoop = (): GameState => setTimeOfDay(unwrap(placeStructure(rich(), 'ch
 const coopOf = (s: GameState) => s.structures.find((x) => x.type === 'chickenCoop');
 
 describe('animals', () => {
-  it('can buy every kind once its shelter exists; they live in it', () => {
-    for (const kind of ANIMAL_IDS) expect(buyAnimal(rich(), kind)).toEqual({ ok: false, error: 'no-shelter' });
+  it('every kind moves in once its shelter exists; they live in it', () => {
+    for (const kind of ANIMAL_IDS) expect(addAnimal(rich(), kind)).toEqual({ ok: false, error: 'no-shelter' });
     // Every shelter at once needs more pasture than the starting plots hold.
     let s = unlockAll(rich());
     for (const kind of ANIMAL_IDS) s = spawnAnimals(s, kind, 1);
-    const before = s.money;
-    for (const kind of ANIMAL_IDS) s = unwrap(buyAnimal(s, kind));
+    for (const kind of ANIMAL_IDS) s = unwrap(addAnimal(s, kind));
     expect(s.animals).toHaveLength(ANIMAL_IDS.length * 2);
-    const spent = ANIMAL_IDS.reduce((sum, k) => sum + ANIMALS[k].purchaseCost, 0);
-    expect(s.money).toBe(before - spent);
     for (const a of s.animals) expect(homeOf(s, a)).not.toBeNull();
   });
 
-  it('rejects purchases without money and beyond the limit', () => {
-    const poor = { ...withCoop(), money: 10 };
-    expect(buyAnimal(poor, 'chicken')).toEqual({ ok: false, error: 'not-enough-money' });
+  it('stops at the farm limit', () => {
     const full = spawnAnimals(rich(), 'chicken', MAX_ANIMALS + 5);
     expect(full.animals).toHaveLength(MAX_ANIMALS);
-    expect(buyAnimal(full, 'chicken')).toEqual({ ok: false, error: 'max-animals' });
+    expect(addAnimal(full, 'chicken')).toEqual({ ok: false, error: 'max-animals' });
   });
 
   it('wander over pasture near the shelter while awake and sleep inside at night', () => {
@@ -94,7 +89,9 @@ describe('animals', () => {
     if (!coop) throw new Error('no coop');
     expect(collectShelter(s0, coop.id)).toEqual({ ok: false, error: 'no-product' });
     // Nobody to tend: the egg waits in the coop and a chore is queued.
-    const laid = skipMinutes({ ...s0, workers: [] }, ANIMALS.chicken.productionHours * 60 + 15);
+    // With feed for the midnight meal, and no automatic order to muddle the money.
+    const stocked = { ...s0, workers: [], inventory: { ...s0.inventory, feed: 50 }, feedOrder: { auto: false, days: 3 } };
+    const laid = skipMinutes(stocked, ANIMALS.chicken.productionHours * 60 + 15);
     expect(coopOf(laid)?.stock).toEqual({ egg: 1 });
     expect(laid.tasks.filter((t) => t.kind === 'tend')).toHaveLength(1);
     const s = unwrap(collectShelter(laid, coop.id));
@@ -103,13 +100,15 @@ describe('animals', () => {
     expect(produceValue(s)).toBe(ANIMAL_PRODUCTS.egg.sellPrice);
   });
 
-  it('charge feed at midnight; hungry animals stop producing', () => {
-    let s = spawnAnimals(createInitialState(), 'cow', 2);
+  it('eat feed from the stock at midnight; hungry animals stop producing', () => {
+    const base = spawnAnimals(createInitialState(), 'cow', 2);
+    let s = { ...base, inventory: { ...base.inventory, feed: 100 } };
     const fed = advanceGame({ ...s, gameMinutes: MINUTES_PER_DAY - 1 }, 2);
-    expect(fed.state.money).toBe(s.money - ANIMALS.cow.feedCostPerDay * 2);
+    expect(fed.state.inventory.feed).toBe(100 - ANIMALS.cow.feedKgPerDay * 2);
     expect(fed.hungryAnimals).toBe(0);
 
-    s = payFeed({ ...s, money: ANIMALS.cow.feedCostPerDay }).state;
+    s = payFeed({ ...s, inventory: { ...s.inventory, feed: ANIMALS.cow.feedKgPerDay } }).state;
+    expect(s.inventory.feed).toBe(0);
     expect(s.animals.map((a) => a.fed)).toEqual([true, false]);
     const hungry = s.animals[1];
     s = skipMinutes(s, 600);
@@ -135,7 +134,7 @@ describe('animals', () => {
   });
 
   it('sells back at a discount', () => {
-    const s = unwrap(buyAnimal(spawnAnimals(rich(), 'horse', 1), 'horse'));
+    const s = unwrap(addAnimal(spawnAnimals(rich(), 'horse', 1), 'horse'));
     const horse = s.animals[1];
     if (!horse) throw new Error('no horse');
     const sold = unwrap(sellAnimal(s, horse.id));

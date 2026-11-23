@@ -6,7 +6,6 @@ import { addAnimal, stepAnimals } from '../animals';
 import { growthMinutesNeeded } from '../crops';
 import { addFertilizer, fillManure, setTimeOfDay } from '../dev';
 import { seasonGrowth } from '../climate';
-import { buyFertilizer } from '../economy';
 import { tileIndex } from '../grid';
 import { growTiles } from '../growth';
 import { sicknessRisk } from '../health';
@@ -116,13 +115,6 @@ describe('fertilizing', () => {
     s = queued.state;
     const then = toggleTask(s, 'fertilize', TILE, 'wheat');
     expect(then.ok).toBe(true);
-  });
-
-  it('is sold at the shop', () => {
-    const s = farm();
-    const bought = unwrap(buyFertilizer(s, 10));
-    expect(bought.inventory.fertilizer).toBe(15);
-    expect(bought.money).toBe(s.money - 10 * FERTILIZER.price);
   });
 });
 

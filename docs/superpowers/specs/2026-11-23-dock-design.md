@@ -1,6 +1,6 @@
 # Doca e frete: design
 
-Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **9a e 9b implementadas** (branches `fase-4a-etapa-9a` e `fase-4b-etapa-9b`); próximas: 9c–9e, uma sub-etapa por vez. As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
+Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **9a, 9b e 9c implementadas** (branches `fase-4a-etapa-9a`, `fase-4b-etapa-9b` e `fase-4c-etapa-9c`); próximas: 9d–9e, uma sub-etapa por vez. As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
 
 Este documento é a memória do que foi conversado e decidido. Tudo que está em "Decidido pelo usuário" veio da conversa; o que está em "Minhas escolhas" são propostas minhas, provisórias, para o usuário confirmar ou ajustar.
 
@@ -112,8 +112,26 @@ interface HeldPurchase { id: number; goods: ShipmentGood[]; since: number }   //
 **9d. Caminhão e níveis da doca**
 - `DOCK_LEVELS`: mais vagas e vaga de caminhão (área maior, estrada); veículos de frete por peso (`VEHICLES`); frete por kg menor no caminhão; `GaragePanel` vira escolha do veículo padrão de frete.
 
-**9e. Embarque de gado**
-- Estrutura `loadingPen` (curral de embarque) com área de contenção; o animal marcado para venda vira tarefa `tend`/`haul` de conduzir ao brete; separação; carga em caminhão boiadeiro; peso por animal; estresse e perda se ficar tempo demais retido.
+**9e. Embarque de gado** (desenho detalhado em "Embarque de gado (9e)" abaixo; só depois da 9c e da 9d)
+- Estrutura `loadingPen` (curral de embarque) com área de contenção; o animal marcado para venda vira tarefa `tend` de conduzir ao curral; carga em caminhão boiadeiro; peso por animal; estresse e perda se ficar tempo demais retido.
+
+## Embarque de gado (9e)
+
+Combinado com o usuário em conversa (2026-11-23). Não muda a ordem das etapas: entra depois da 9c (compras por frete) e da 9d (caminhão e níveis da doca), porque o caminhão boiadeiro e a vaga de caminhão vêm da 9d.
+
+**Fluxo**
+1. O gado fica solto no pasto, como hoje.
+2. O jogador clica no curral de embarque (Mão) e abre o painel do curral. Ali seleciona os animais: Shift+arrastar uma caixa no chão marca todos cujo centro cai dentro dela (contorno pulsante, como a estrutura selecionada), e o painel de baixo mostra a contagem por espécie e raça, o peso e quantos caminhões isso dá. Botões: **Levar ao curral** e **Limpar**. Filhote não entra; doente entra, mas vende pela metade.
+3. **Levar ao curral** cria uma tarefa `tend` por animal, com `job: { type: 'herd', animalId }` (habilidade Animais; a especialidade na espécie conta). Os peões vão até o animal, cercam e conduzem até o curral, a pé ou a cavalo se a fazenda tiver cavalo (`laborMultipliers`). Dentro do curral o animal fica retido (`penId`): sai do pasto, come ração, pode adoecer, e a retenção longa causa estresse e perda.
+4. O caminhão boiadeiro vem à vaga de caminhão ao lado da rampa. Os animais do curral sobem a rampa um a um (animação) e saem da fazenda. Quando o caminhão enche (cabeças por espécie, `data/docks.ts`) ele sai e vem o próximo; quem não coube espera no curral.
+
+**Estrutura `loadingPen`**: anel de rua e acesso à estrada de acesso (como alojamento e abrigos), capacidade de cabeças, rampa de frente para a vaga do caminhão. Sem estrada, não funciona. Não pode ser demolida com animais retidos.
+
+**Duas formas de vender (as duas entram)**
+- **Comprador com caminhão próprio:** como o cliente avulso, vem à doca, pede um lote de uma espécie, espera o prazo e paga à vista o preço do card de cada animal (raça, estrelas, fase). É a primeira a implementar.
+- **Anúncio e frete:** o lote de animais vira um bem do anúncio (`postListing`), a oferta fecha como em 9b e o frete do caminhão (`FREIGHT`, custo por kg) é pago pelo jogador. O lote é separado do curral na hora do envio.
+
+**Partes da implementação**: (1) curral, seleção por caixa, painel e tarefa de condução, com testes em `src/game`; (2) caminhão boiadeiro, rampa, animação e as duas formas de venda. O movimento começa simples (animais em fila com os peões ao lado); o cerco em formação, empurrando o rebanho, fica para depois.
 
 ## Dúvidas que dependem do usuário
 
@@ -142,8 +160,16 @@ Diferenças da 9a para o modelo proposto: `Shipment` tem `setOffAt` (para desenh
 - O frete é pago ao fechar e roda das 6h às 19h; prazo de 5 h a partir do primeiro horário possível. Ele só sai com a vaga livre e 40 min de folga para carregar; senão a venda cai (a mercadoria volta, o frete não). Ao estacionar, a carga começa sozinha.
 - O cliente avulso não vem enquanto há frete esperando vaga (o frete tem prioridade).
 
+## Como ficou a 9c
+
+- A compra é uma viagem `kind: 'purchase'` com `delivery` (`Delivery`: sementes, remédio, adubo, ração em kg e `PendingAnimal[]`) e `goodsCost`; não há tipo `redelivery`: o novo frete de uma entrega retida é outra viagem `purchase` com a mesma `delivery` (que guarda `heldSince`).
+- `HeldPurchase { id, delivery, since, cost }` em `GameState.held`. Animais retidos seguram a vaga e custam `HELD.feeMultiplier` × a ração por dia; com `HELD.sickAfterDays` ou mais, metade pode chegar com verminose.
+- Animais vêm num caminhão boiadeiro contratado (`LIVESTOCK`: fixo + por cabeça, até 8 por viagem), não no veículo da fazenda; os insumos usam o veículo da fazenda (`FREIGHT` por kg, `SUPPLY_WEIGHT`).
+- Ração virou estoque (kg, `inventory.feed`); `feedCostPerDay` virou `feedKgPerDay` (mesmos números, 1 moeda/kg). Pedido automático (`feedOrder`, ligado por padrão, 3 dias) roda de hora em hora no horário do frete.
+- A compra só pode ser cancelada antes de o frete sair; descarregar não tem avaria; o remédio do card do animal é pedido direto.
+
 ## Como retomar numa nova sessão
 
 1. Ler este documento e `docs/roadmap.md` (seção "Etapa 9").
-2. Implementar a próxima sub-etapa (9c: compras por frete) quando o usuário pedir.
+2. Implementar a próxima sub-etapa (9d: caminhão e níveis da doca) quando o usuário pedir.
 3. Cada sub-etapa termina atualizando `CLAUDE.md` e `docs/roadmap.md`, com testes e `npm run build`.

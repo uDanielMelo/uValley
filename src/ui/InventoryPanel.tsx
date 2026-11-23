@@ -1,4 +1,4 @@
-import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
+import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS, FEED } from '../data/animals';
 import { FERTILIZER } from '../data/fertilizer';
 import { MEDICINES, MEDICINE_IDS } from '../data/health';
 import { StorageSummary } from './StorageSummary';
@@ -73,8 +73,14 @@ function SeedList() {
 function MedicineList() {
   const medicine = useGameStore((s) => s.game.inventory.medicine);
   const fertilizer = useGameStore((s) => s.game.inventory.fertilizer);
+  const feed = useGameStore((s) => s.game.inventory.feed);
   return (
     <ul className="grid grid-cols-3 gap-2">
+      <li className="rounded-xl bg-parchment-dark/60 p-2 text-center text-sm font-black" title="Os animais comem à meia-noite">
+        <div className="text-xl">{FEED.icon}</div>
+        {FEED.label}
+        <div className="tabular-nums">{feed} kg</div>
+      </li>
       <li
         className="rounded-xl bg-parchment-dark/60 p-2 text-center text-sm font-black"
         title="Esterco curtido: adube terra arada ou plantada (tecla 5)"

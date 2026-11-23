@@ -220,6 +220,12 @@ export const callCustomer = (state: GameState): GameState =>
     slot: Math.floor(state.gameMinutes) % 97,
   });
 
+/** Adds feed (kg) to the stock. */
+export const addFeed = (state: GameState, kg: number): GameState => ({
+  ...state,
+  inventory: { ...state.inventory, feed: state.inventory.feed + Math.max(0, kg) },
+});
+
 /** A buyer makes an offer right now on the first listing without one (up to 5 units). */
 export const forceOffer = (state: GameState): GameState => {
   const listing = state.listings.find((l) => !state.offers.some((o) => o.listingId === l.id));

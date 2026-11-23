@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buyAnimal } from '../animals';
+import { addAnimal } from '../animals';
 import { orderStructure, previewPlacement } from '../construction';
 import { finishAllTasks, setTimeOfDay } from '../dev';
 import { tileIndex, tileLine, withTile } from '../grid';
@@ -68,13 +68,13 @@ describe('road access', () => {
     const coop = last(far);
     expect(isCutOff(far, coop)).toBe(true);
     expect(shelterFor(far, 'chicken')).toBe('shelter-no-road');
-    expect(buyAnimal(far, 'chicken')).toEqual({ ok: false, error: 'shelter-no-road' });
+    expect(addAnimal(far, 'chicken')).toEqual({ ok: false, error: 'shelter-no-road' });
     const stocked = addStock(far, coop.id, 'egg', 3);
     expect(queueShelterChores(stocked).tasks).toHaveLength(stocked.tasks.length);
     // Once a road links it, it works.
     const linked = linkFar(stocked);
     expect(isActive(linked, coop)).toBe(true);
-    expect(unwrap(buyAnimal(linked, 'chicken')).animals).toHaveLength(1);
+    expect(unwrap(addAnimal(linked, 'chicken')).animals).toHaveLength(1);
     expect(queueShelterChores(linked).tasks).toHaveLength(linked.tasks.length + 1);
   });
 

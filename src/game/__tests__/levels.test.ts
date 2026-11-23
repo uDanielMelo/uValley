@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ANIMALS } from '../../data/animals';
 import { DEMOLISH_REFUND, SHELTER_LEVELS, STRUCTURES } from '../../data/structures';
-import { buyAnimal } from '../animals';
+import { addAnimal } from '../animals';
 import { cancelAllOrders, checkUpgrade, completeAllWork, demolishClick, orderDemolish, orderUpgrade } from '../construction';
 import { setTimeOfDay, skipMinutes, spawnAnimals } from '../dev';
 import { tileIndex } from '../grid';
@@ -82,7 +82,7 @@ describe('upgrading', () => {
     expect(coopOf(s).work).toEqual({ kind: 'upgrade', done: 0, total: upgradeMinutes('chickenCoop', 2), toLevel: 2 });
     expect(isOperational(coopOf(s))).toBe(true);
     expect(shelterFor(s, 'chicken')).toEqual(coopOf(s));
-    expect(unwrap(buyAnimal(s, 'chicken')).animals).toHaveLength(3);
+    expect(unwrap(addAnimal(s, 'chicken')).animals).toHaveLength(3);
     expect(checkUpgrade(s, coopOf(s).id)).toBe('under-construction');
 
     const { state, finished } = run(s, 400);

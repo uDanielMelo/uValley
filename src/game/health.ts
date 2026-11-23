@@ -11,7 +11,6 @@ import {
   DISEASE_RISK,
   LARGE_ANIMALS,
   MEDICATE_MINUTES,
-  MEDICINES,
   MEDICINE_IDS,
   PREDATOR_RISK,
   SPECIES_PREDATOR,
@@ -309,19 +308,6 @@ export const stepHealth = (state: GameState, fromMinutes: number): HealthStep =>
 };
 
 // ---------- medicine ----------
-
-const isPositiveInt = (n: number): boolean => Number.isInteger(n) && n > 0;
-
-export const buyMedicine = (state: GameState, id: MedicineId, quantity: number): ActionResult => {
-  if (!isPositiveInt(quantity)) return fail('invalid-quantity');
-  const cost = MEDICINES[id].price * quantity;
-  if (state.money < cost) return fail('not-enough-money');
-  return ok({
-    ...state,
-    money: state.money - cost,
-    inventory: { ...state.inventory, medicine: addCount(state.inventory.medicine, id, quantity) },
-  });
-};
 
 /** The medicine a sick animal needs, or null when healthy. */
 export const medicineFor = (animal: Pick<Animal, 'health'>): MedicineId | null =>

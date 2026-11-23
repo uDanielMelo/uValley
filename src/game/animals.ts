@@ -37,19 +37,24 @@ import {
   pastureUsed,
   productionMultiplier,
   shelterDoor,
+  housesKind,
   shelterFor,
   stockCap,
   stockTotal,
 } from './shelters';
+import { isOperational } from './structures';
 import {
   fail,
   ok,
   type ActionResult,
   type Animal,
   type AnimalActivity,
+  type AnimalAge,
+  type AnimalHealth,
   type GameState,
   type GridPoint,
   type Stars,
+  type StructureInstance,
   type Tile,
 } from './types';
 
@@ -83,7 +88,7 @@ export const isInside = (state: GameState, animal: Animal): boolean => {
 
 // ---------- breed, stars and life cycle ----------
 
-export type PurchaseAge = 'baby' | 'adult';
+export type PurchaseAge = AnimalAge;
 
 /** Age in game minutes. */
 export const ageMinutes = (gameMinutes: number, animal: Pick<Animal, 'bornAt'>): number =>
@@ -159,17 +164,27 @@ export interface AddAnimalOptions {
   breed?: BreedId;
   /** Bought as a baby or as a young adult (default). */
   age?: PurchaseAge;
-  /** Dev tools: ignore the pasture limit. */
+  /** Dev tools and deliveries (their seat was kept): ignore the pasture limit. */
   ignorePasture?: boolean;
+  /** Deliveries: the shelter kept for it (used while it stands and fits it) and its rolled stars. */
+  shelterId?: number;
+  stars?: Stars;
+  health?: AnimalHealth;
 }
 
+/** The shelter kept for a delivered animal, while it stands and houses its species. */
+const keptShelter = (state: GameState, kind: AnimalId, shelterId: number | undefined): StructureInstance | null => {
+  const kept = shelterId === undefined ? undefined : state.structures.find((s) => s.id === shelterId);
+  return kept && housesKind(kept.type, kind) && isOperational(kept) ? kept : null;
+};
+
 /**
- * Adds an animal without charging anything (used by buying and dev tools). It moves into a
- * finished shelter for its species with room and needs room on the pasture.
+ * Adds an animal without charging anything (deliveries and dev tools). It moves into a finished
+ * shelter for its species with room (or the one kept for it) and needs room on the pasture.
  */
 export const addAnimal = (state: GameState, kind: AnimalId, options: AddAnimalOptions = {}): ActionResult => {
   if (state.animals.length >= MAX_ANIMALS) return fail('max-animals');
-  const shelter = shelterFor(state, kind);
+  const shelter = keptShelter(state, kind, options.shelterId) ?? shelterFor(state, kind);
   if (typeof shelter === 'string') return fail(shelter);
   if (!options.ignorePasture && pastureUsed(state) + ANIMALS[kind].pastureUnits > pastureCapacity(state)) {
     return fail('pasture-full');
@@ -183,7 +198,7 @@ export const addAnimal = (state: GameState, kind: AnimalId, options: AddAnimalOp
     id,
     kind,
     breed,
-    stars: rollAnimalStars(id),
+    stars: options.stars ?? rollAnimalStars(id),
     bornAt,
     shelterId: shelter.id,
     x: door.x,
@@ -192,20 +207,9 @@ export const addAnimal = (state: GameState, kind: AnimalId, options: AddAnimalOp
     waitMinutes: 5,
     productMinutes: 0,
     fed: true,
+    ...(options.health ? { health: options.health } : {}),
   };
   return ok({ ...state, animals: [...state.animals, animal], nextId: id + 1 });
-};
-
-export const buyAnimal = (
-  state: GameState,
-  kind: AnimalId,
-  breed: BreedId = defaultBreed(kind),
-  age: PurchaseAge = 'adult',
-): ActionResult => {
-  const cost = purchasePrice(kind, breed, age);
-  if (state.money < cost) return fail('not-enough-money');
-  const added = addAnimal(state, kind, { breed, age });
-  return added.ok ? ok({ ...added.state, money: added.state.money - cost }) : added;
 };
 
 /** Sells one animal; the price depends on its breed, stars and age. */
@@ -227,24 +231,25 @@ export const removeDeadAnimals = (state: GameState): { state: GameState; died: A
   return { state: { ...state, animals: state.animals.filter((a) => !gone.has(a.id)) }, died };
 };
 
-export const dailyFeedCost = (state: GameState): number =>
-  state.animals.reduce((sum, a) => sum + ANIMALS[a.kind].feedCostPerDay, 0);
+/** Feed (kg) the animals eat in a day. */
+export const dailyFeedKg = (state: Pick<GameState, 'animals'>): number =>
+  state.animals.reduce((sum, a) => sum + ANIMALS[a.kind].feedKgPerDay, 0);
 
-/** Pays feed for every animal in order; those that can't be fed go hungry (no production) for a day. */
+/** Feeds every animal in order from the feed stock; those left without go hungry (no production) for a day. */
 export const payFeed = (state: GameState): { state: GameState; hungry: number } => {
   if (state.animals.length === 0) return { state, hungry: 0 };
-  let money = state.money;
+  let feed = state.inventory.feed;
   let hungry = 0;
   const animals = state.animals.map((a) => {
-    const cost = ANIMALS[a.kind].feedCostPerDay;
-    if (money >= cost) {
-      money -= cost;
+    const need = ANIMALS[a.kind].feedKgPerDay;
+    if (feed >= need) {
+      feed -= need;
       return a.fed ? a : { ...a, fed: true };
     }
     hungry++;
     return { ...a, fed: false };
   });
-  return { state: { ...state, money, animals }, hungry };
+  return { state: { ...state, inventory: { ...state.inventory, feed }, animals }, hungry };
 };
 
 /** Work speed multipliers from draft animals (ox: tilling, horse: walking), by breed, stars and age. */

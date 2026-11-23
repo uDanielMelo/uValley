@@ -471,6 +471,9 @@ export const checkDemolish = (state: GameState, tile: number): StructureInstance
   if (STRUCTURES[found.type].cost === undefined) return 'not-demolishable';
   if (found.work) return 'under-construction';
   if (state.animals.some((a) => a.shelterId === found.id)) return 'shelter-in-use';
+  // Animals on their way (or held in town) keep a seat here.
+  const kept = [...state.shipments.map((s) => s.delivery), ...state.held.map((h) => h.delivery)];
+  if (kept.some((d) => d?.animals.some((a) => a.shelterId === found.id))) return 'reserved';
   if (found.type === 'bunkhouse' && isActive(state, found)) {
     const staff = state.workers.filter((w) => w.kind === 'staff').length;
     if (bedCount(state) - BUNKHOUSE_BEDS < staff) return 'beds-in-use';

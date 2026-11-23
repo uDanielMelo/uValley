@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_MINUTES_PER_REAL_HOUR } from '../../data/animals';
-import { DISEASES, DISEASE_RISK, MEDICINES, PREDATOR_RISK } from '../../data/health';
+import { DISEASES, DISEASE_RISK, PREDATOR_RISK } from '../../data/health';
 import { addAnimal, animalSalePrice, sellAnimal } from '../animals';
 import { addMedicine, setTimeOfDay, sickenAnimal } from '../dev';
 import {
-  buyMedicine,
   deathAt,
   exposure,
   freeMedicine,
@@ -165,14 +164,6 @@ describe('disease course', () => {
 });
 
 describe('medicine', () => {
-  it('is bought in the shop', () => {
-    const s = farm();
-    const bought = unwrap(buyMedicine(s, 'antibiotic', 2));
-    expect(bought.money).toBe(s.money - 2 * MEDICINES.antibiotic.price);
-    expect(bought.inventory.medicine.antibiotic).toBe(2);
-    expect(buyMedicine({ ...s, money: 0 }, 'dewormer', 1)).toEqual({ ok: false, error: 'not-enough-money' });
-  });
-
   it('noticed sick animals get a medicate task while there are doses for them, the most urgent first', () => {
     let s = unwrap(addAnimal(unwrap(addAnimal(farm(), 'cow')), 'cow'));
     const [cowA, cowB] = s.animals;

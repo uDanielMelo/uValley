@@ -4,7 +4,7 @@ import { PLOT_BASE_COST, STARTING_MONEY, STARTING_SEEDS } from '../../data/econo
 import { MINUTES_PER_DAY } from '../../data/world';
 import { applyTool, harvest, plant, till, water } from '../actions';
 import { cropStage, isMature } from '../crops';
-import { buyPlot, buySeeds, plotCost, plotStatus, produceValue } from '../economy';
+import { buyPlot, plotCost, plotStatus, produceValue } from '../economy';
 import { plotIndex, tileIndex } from '../grid';
 import { tick } from '../simulation';
 import { DEFAULT_SETTINGS, SAVE_VERSION, deserialize, isOutdatedSave, serialize } from '../save';
@@ -100,12 +100,8 @@ describe('tile actions', () => {
 });
 
 describe('economy', () => {
-  it('buys seeds and values the produce', () => {
-    let s = unwrap(buySeeds(createInitialState(), 'corn', 3));
-    expect(s.money).toBe(STARTING_MONEY - CROPS.corn.seedCost * 3);
-    expect(s.inventory.seeds.corn).toBe(3);
-    expect(buySeeds(s, 'tomato', 1000)).toEqual({ ok: false, error: 'not-enough-money' });
-
+  it('values the produce', () => {
+    let s = createInitialState();
     s = { ...s, inventory: { ...s.inventory, produce: { wheat: 2, corn: 1 } } };
     expect(produceValue(s)).toBe(CROPS.wheat.sellPrice * 2 + CROPS.corn.sellPrice);
   });

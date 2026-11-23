@@ -1,3 +1,4 @@
+import { FEED } from '../data/animals';
 import { STARTING_MONEY, STARTING_SEEDS } from '../data/economy';
 import { STARTING_CROPS } from './research';
 import { START_STRUCTURES } from '../data/structures';
@@ -45,7 +46,7 @@ export const createInitialState = (): GameState => {
     tiles,
     unlockedPlots,
     plotsPurchased: 0,
-    inventory: { seeds: { ...STARTING_SEEDS }, produce: {}, products: {}, medicine: {}, fertilizer: 0 },
+    inventory: { seeds: { ...STARTING_SEEDS }, produce: {}, products: {}, medicine: {}, fertilizer: 0, feed: 0 },
     workers,
     candidates,
     tasks: [],
@@ -58,6 +59,8 @@ export const createInitialState = (): GameState => {
     research: { unlocked: [...STARTING_CROPS], current: null },
     structures,
     shipments: [],
+    held: [],
+    feedOrder: { auto: true, days: FEED.autoDays },
     nextId,
   };
 };

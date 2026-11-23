@@ -4,7 +4,6 @@ import {
   addAnimal,
   animalProduct,
   animalSalePrice,
-  buyAnimal,
   laborMultipliers,
   lifeStage,
   productionRate,
@@ -84,8 +83,7 @@ describe('breeds and stars', () => {
     expect(purchasePrice('cow', 'gir', 'baby')).toBe(Math.round(ANIMALS.cow.purchaseCost * BABY_PRICE));
     expect(BREEDS.holandesa.production).toBeGreaterThan(BREEDS.gir.production);
     const before = farm();
-    const s = unwrap(buyAnimal(before, 'cow', 'holandesa', 'baby'));
-    expect(s.money).toBe(before.money - purchasePrice('cow', 'holandesa', 'baby'));
+    const s = unwrap(addAnimal(before, 'cow', { breed: 'holandesa', age: 'baby' }));
     expect(only(s).breed).toBe('holandesa');
   });
 
@@ -131,7 +129,7 @@ describe('breeds and stars', () => {
 
 describe('life saves', () => {
   it('round-trips breed, stars and birth time', () => {
-    const s = unwrap(buyAnimal(farm(), 'chicken', 'leghorn', 'baby'));
+    const s = unwrap(addAnimal(farm(), 'chicken', { breed: 'leghorn', age: 'baby' }));
     expect(deserialize(serialize(s, DEFAULT_SETTINGS))?.game).toEqual(s);
   });
 

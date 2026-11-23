@@ -12,6 +12,7 @@ import {
 } from '../game/animals';
 import { freeMedicine, healthFactor, isKnownSick, medicateTaskFor, minutesToDeath } from '../game/health';
 import type { Animal, GameState } from '../game/types';
+import { emptyCart, purchaseFreight } from '../game/purchases';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { formatCoins } from './format';
 import { Button, Card, Coins, Stars } from './primitives';
@@ -58,7 +59,9 @@ function HealthLine({ id, disease }: { id: number; disease: DiseaseId }) {
   }, null);
   const queued = useGameStore((s) => !!medicateTaskFor(s.game.tasks, id));
   const doses = useGameStore((s) => freeMedicine(s.game, def.medicine));
-  const buy = useGameStore((s) => s.buyMedicine);
+  const order = useGameStore((s) => s.orderNow);
+  const level = useGameStore((s) => s.game.vehicleLevel);
+  const cart = { ...emptyCart(), medicine: { [def.medicine]: 1 } };
   return (
     <div className="flex flex-col gap-1 rounded-lg bg-red-700/10 px-2 py-1.5 text-xs font-bold">
       <p className="flex justify-between gap-2 text-red-800">
@@ -77,8 +80,13 @@ function HealthLine({ id, disease }: { id: number; disease: DiseaseId }) {
           <span className="text-wood/70">
             {doses > 0 ? `${medicine.icon} ${medicine.label} no estoque` : `Sem ${medicine.label.toLowerCase()} no estoque`}
           </span>
-          <Button variant="ghost" className="shrink-0 text-[11px] whitespace-nowrap" onClick={() => buy(def.medicine, 1)}>
-            Comprar <Coins value={formatCoins(medicine.price)} />
+          <Button
+            variant="ghost"
+            className="shrink-0 text-[11px] whitespace-nowrap"
+            title="Chega pelo frete na doca"
+            onClick={() => order(cart)}
+          >
+            Pedir 1 <Coins value={formatCoins(medicine.price + purchaseFreight(level, cart))} />
           </Button>
         </div>
       )}

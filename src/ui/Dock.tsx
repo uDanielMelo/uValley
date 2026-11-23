@@ -122,6 +122,7 @@ function DockButton({ icon, label, hotkey, active, onClick, expanded, alert, tit
 function DockShortcut() {
   const waiting = useGameStore((s) => s.game.shipments.some((x) => x.phase === 'waiting'));
   const offers = useGameStore((s) => s.game.offers.length > 0);
+  const held = useGameStore((s) => s.game.held.length > 0);
   const open = useGameStore((s) => s.panel === 'dock');
   const openDock = useGameStore((s) => s.openDock);
   return (
@@ -130,9 +131,11 @@ function DockShortcut() {
       label="Doca"
       hotkey="V"
       active={open}
-      alert={waiting || offers}
-      title={waiting ? 'Doca: cliente esperando (V)' : offers ? 'Doca: ofertas novas (V)' : 'Doca: vender e pedidos (V)'}
-      onClick={() => openDock(waiting ? 'bay' : offers ? 'sell' : undefined)}
+      alert={waiting || offers || held}
+      title={
+        waiting ? 'Doca: cliente esperando (V)' : held ? 'Doca: entrega retida na cidade (V)' : offers ? 'Doca: ofertas novas (V)' : 'Doca: vender e pedidos (V)'
+      }
+      onClick={() => openDock(waiting || held ? 'bay' : offers ? 'sell' : undefined)}
     />
   );
 }

@@ -3,11 +3,12 @@ import { LISTINGS, OFFERS, WALK_IN } from '../data/docks';
 import { TOWN_SHOPS, VEHICLES } from '../data/market';
 import { bayCount, isDock } from '../game/dock';
 import { offerChance, referencePrice } from '../game/listings';
+import { giveUpRefund, heldFee, purchaseFreight } from '../game/purchases';
 import { ALL_GOODS, countIn, goodKey, type Good } from '../game/market';
 import { checkSale, freightCost, hasGoods, knownGoods, loadingProgress } from '../game/shipments';
 import { formatClock, toClock } from '../game/time';
-import type { GameState, Listing, Offer, Order, Shipment, ShipmentLine } from '../game/types';
-import { ERROR_MESSAGES, useGameStore, type DockTab, type GameStore } from '../store/gameStore';
+import type { GameState, HeldPurchase, Listing, Offer, Order, Shipment, ShipmentLine } from '../game/types';
+import { ERROR_MESSAGES, deliveryText, useGameStore, type DockTab, type GameStore } from '../store/gameStore';
 import { formatCoins } from './format';
 import { goodName } from './goods';
 import { Button, Coins, Panel } from './primitives';
@@ -68,6 +69,38 @@ function StockNote({ line }: { line: ShipmentLine }) {
   );
 }
 
+/** A delivery held in town: bring it with a new freight, or give it up. */
+function HeldRow({ held }: { held: HeldPurchase }) {
+  const level = useGameStore((s) => s.game.vehicleLevel);
+  const money = useGameStore((s) => s.game.money);
+  const reorder = useGameStore((s) => s.reorderHeld);
+  const giveUp = useGameStore((s) => s.giveUpHeld);
+  const freight = purchaseFreight(level, held.delivery);
+  const fee = heldFee({ held: [held] });
+  return (
+    <li className="flex flex-col gap-1.5 rounded-xl bg-orange-100 p-2.5 text-xs font-bold text-orange-950">
+      <p className="text-sm font-black">🏙️ {deliveryText(held.delivery)}</p>
+      <p>
+        Retido na cidade desde {clock(held.since)}
+        {fee > 0 && (
+          <>
+            {' '}
+            · <Coins value={formatCoins(fee)} /> por dia pelos animais
+          </>
+        )}
+      </p>
+      <div className="flex gap-2">
+        <Button variant="leaf" className="flex-1 text-xs" disabled={money < freight} onClick={() => reorder(held.id)}>
+          Novo frete <Coins value={formatCoins(freight)} />
+        </Button>
+        <Button variant="ghost" className="text-xs" onClick={() => giveUp(held.id)}>
+          Desistir (+{formatCoins(giveUpRefund(held))})
+        </Button>
+      </div>
+    </li>
+  );
+}
+
 const STATUS: Record<Shipment['phase'], string> = {
   scheduled: '🕒 Frete agendado',
   enroute: '🛣️ A caminho',
@@ -80,7 +113,7 @@ function ShipmentCard({ id }: { id: number }) {
   const shipment = useGameStore((s) => s.game.shipments.find((x) => x.id === id));
   const enough = useGameStore((s) => {
     const found = s.game.shipments.find((x) => x.id === id);
-    return found ? !!found.staged || hasGoods(s.game, found.goods) : false;
+    return found ? found.kind !== 'walkin' || hasGoods(s.game, found.goods) : false;
   });
   const loaders = useGameStore((s) => s.game.workers.filter((w) => w.priorities.includes('haul')).length);
   const start = useGameStore((s) => s.startLoading);
@@ -89,8 +122,9 @@ function ShipmentCard({ id }: { id: number }) {
   if (!shipment) return null;
   const percent = Math.floor((loadingProgress(shipment) ?? 0) * 100);
   const sale = shipment.kind === 'sale';
+  const purchase = shipment.kind === 'purchase';
   const shop = shipment.order ? TOWN_SHOPS[shipment.order.shop] : null;
-  const who = sale ? `🚚 Frete${shop ? ` · ${shop.icon} ${shop.label}` : ' · comprador'}` : '🚗 Cliente';
+  const who = purchase ? '📦 Entrega da cidade' : sale ? `🚚 Frete${shop ? ` · ${shop.icon} ${shop.label}` : ' · comprador'}` : '🚗 Cliente';
   const when =
     shipment.phase === 'scheduled'
       ? `sai a partir das ${clock(shipment.setOffAt)}`
@@ -101,20 +135,24 @@ function ShipmentCard({ id }: { id: number }) {
     <div className="flex flex-col gap-1.5 rounded-xl bg-parchment-dark/60 p-2.5">
       <p className="flex items-center justify-between gap-2 text-xs font-extrabold">
         <span>{who}</span>
-        <span className="text-wood/70">{STATUS[shipment.phase]}</span>
+        <span className="text-wood/70">{purchase && shipment.phase === 'loading' ? '📦 Descarregando' : STATUS[shipment.phase]}</span>
       </p>
-      <div className="flex items-center justify-between gap-2 text-sm font-black">
-        <span className="flex flex-col">
-          <Lot lines={shipment.goods} />
-        </span>
-        {!sale && shipment.phase !== 'loading' && shipment.goods[0] && <StockNote line={shipment.goods[0]} />}
-        {sale && <span className="text-xs font-bold text-wood/70">separado</span>}
-      </div>
+      {purchase && shipment.delivery ? (
+        <p className="text-sm font-black">{deliveryText(shipment.delivery)}</p>
+      ) : (
+        <div className="flex items-center justify-between gap-2 text-sm font-black">
+          <span className="flex flex-col">
+            <Lot lines={shipment.goods} />
+          </span>
+          {!sale && shipment.phase !== 'loading' && shipment.goods[0] && <StockNote line={shipment.goods[0]} />}
+          {sale && <span className="text-xs font-bold text-wood/70">separado</span>}
+        </div>
+      )}
       <p className="flex items-center justify-between text-xs font-bold">
-        <span className="text-wood/70">{sale ? 'Recebe ao sair carregado' : 'Paga ao sair carregado'}</span>
-        <Coins value={formatCoins(shipment.payment)} />
+        <span className="text-wood/70">{purchase ? 'Mercadoria paga' : sale ? 'Recebe ao sair carregado' : 'Paga ao sair carregado'}</span>
+        <Coins value={formatCoins(purchase ? (shipment.goodsCost ?? 0) : shipment.payment)} />
       </p>
-      {sale && (
+      {(sale || purchase) && (
         <p className="flex items-center justify-between text-xs font-bold text-wood/70">
           <span>Frete pago ({VEHICLES[shipment.vehicle ?? 1].label.toLowerCase()})</span>
           <Coins value={formatCoins(shipment.freight ?? 0)} />
@@ -127,14 +165,14 @@ function ShipmentCard({ id }: { id: number }) {
       {shipment.phase === 'loading' && (
         <>
           <div className="flex justify-between text-xs font-extrabold">
-            <span>📦 Carregando</span>
+            <span>{purchase ? '📦 Descarregando' : '📦 Carregando'}</span>
             <span className="tabular-nums">{percent}%</span>
           </div>
           <Progress percent={percent} />
           {loaders === 0 && (
             <p className="text-xs font-bold text-red-700">Ninguém tem Carga nas atividades: ajuste na equipe (T).</p>
           )}
-          {!sale && (
+          {shipment.kind === 'walkin' && (
             <Button variant="ghost" className="self-start text-xs" onClick={() => cancel(id)}>
               Cancelar carga (a mercadoria volta)
             </Button>
@@ -144,17 +182,26 @@ function ShipmentCard({ id }: { id: number }) {
       {shipment.phase === 'waiting' && (
         <div className="flex items-center gap-2">
           <Button variant="leaf" className="flex-1 text-sm" disabled={!enough} onClick={() => start(id)}>
-            Mandar carregar
+            {purchase ? 'Mandar descarregar' : 'Mandar carregar'}
           </Button>
-          {!sale && (
+          {shipment.kind === 'walkin' && (
             <Button variant="ghost" className="text-xs" onClick={() => dismiss(id)}>
               Dispensar
             </Button>
           )}
         </div>
       )}
-      {shipment.phase === 'waiting' && !enough && (
+      {shipment.phase === 'waiting' && !enough && shipment.kind === 'walkin' && (
         <p className="text-xs font-bold text-wood/70">Falta mercadoria: colha ou dispense o cliente.</p>
+      )}
+      {purchase && shipment.phase === 'scheduled' && (
+        <button
+          type="button"
+          onClick={() => dismiss(id)}
+          className="self-end text-[11px] font-extrabold text-red-800/80 hover:underline"
+        >
+          Cancelar compra (a mercadoria é devolvida, o frete não)
+        </button>
       )}
       {sale && shipment.phase !== 'enroute' && (
         <button
@@ -166,6 +213,21 @@ function ShipmentCard({ id }: { id: number }) {
         </button>
       )}
     </div>
+  );
+}
+
+function HeldList() {
+  const held = useGameStore((s) => s.game.held);
+  if (held.length === 0) return null;
+  return (
+    <section>
+      <h3 className="mb-1.5 text-sm font-black">Retido na cidade</h3>
+      <ul className="flex flex-col gap-2">
+        {held.map((h) => (
+          <HeldRow key={h.id} held={h} />
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -195,6 +257,7 @@ function BayList({ compact = false }: { compact?: boolean }) {
           Vaga livre. Clientes avulsos costumam passar perto das {hours}; para vender mais, anuncie na aba Vender.
         </p>
       )}
+      <HeldList />
       {!compact && (
         <p className="text-[11px] font-bold text-wood/60">
           A equipe carrega pela atividade Carga (habilidade Construção). Se o prazo acabar no meio, ela descarrega e parte se perde.
@@ -452,7 +515,8 @@ export function DockPanel() {
   const close = useGameStore((s) => s.closePanel);
   const offers = useGameStore((s) => s.game.offers.length);
   const orders = useGameStore((s) => s.game.orders.length);
-  const counts: Record<DockTab, number> = { bay: 0, sell: offers, orders };
+  const held = useGameStore((s) => s.game.held.length);
+  const counts: Record<DockTab, number> = { bay: held, sell: offers, orders };
   return (
     <Panel title="🚚 Doca" onClose={close} width="w-[24rem]">
       <div className="mb-3 flex gap-1.5">

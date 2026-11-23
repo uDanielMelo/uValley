@@ -161,6 +161,7 @@ export function DevPanel() {
           <Section title="Doca">
             <DevButton onClick={dev.customer}>🚗 Chamar cliente</DevButton>
             <DevButton onClick={dev.offer}>📨 Forçar oferta</DevButton>
+            <DevButton onClick={() => dev.feed(100)}>🥣 +100 kg ração</DevButton>
           </Section>
 
           <Section title="Clima">

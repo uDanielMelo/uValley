@@ -6,7 +6,7 @@ import { harvest, plant, till, water } from '../actions';
 import { applyDayWeather, weatherOf } from '../climate';
 import { growthMinutesNeeded } from '../crops';
 import { unlockAll } from '../dev';
-import { buySeeds } from '../economy';
+import { checkPurchase, emptyCart } from '../purchases';
 import { tileIndex } from '../grid';
 import { growTiles } from '../growth';
 import { isUnlocked, startResearch, stepResearch } from '../research';
@@ -42,8 +42,8 @@ describe('research', () => {
   it('a new farm knows wheat, corn and tomato; other seeds wait for research', () => {
     const s = { ...createInitialState(), money: 10_000 };
     expect(s.research.unlocked).toEqual(['wheat', 'corn', 'tomato']);
-    expect(buySeeds(s, 'carrot', 1)).toEqual({ ok: false, error: 'not-researched' });
-    expect(buySeeds(s, 'wheat', 1).ok).toBe(true);
+    expect(checkPurchase(s, { ...emptyCart(), seeds: { carrot: 1 } })).toBe('not-researched');
+    expect(checkPurchase(s, { ...emptyCart(), seeds: { wheat: 1 } })).toBeNull();
   });
 
   it('costs money, takes game time, one at a time, and unlocks the crop', () => {

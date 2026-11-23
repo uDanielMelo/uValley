@@ -5,6 +5,7 @@ import { growTiles } from './growth';
 import { payFeed, removeDeadAnimals, stepAnimals } from './animals';
 import { queueAnimalCare, stepHealth, type PredatorAttack } from './health';
 import { expireOffers, generateOffers } from './listings';
+import { autoOrderFeed, chargeHeld } from './purchases';
 import { refreshOrders } from './market';
 import { stepResearch } from './research';
 import type { CropId } from '../data/crops';
@@ -40,6 +41,8 @@ export interface TickResult {
   spoiled: Spoiled | null;
   /** Offers buyers just made on the farm's listings. */
   newOffers: Offer[];
+  /** Feed (kg) ordered automatically. */
+  feedOrdered: number;
   /** Crop whose research just finished. */
   researched: CropId | null;
   /** Vehicles that parked at the dock, were loaded and paid, or left without their load. */
@@ -98,6 +101,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       weatherReports: [],
       spoiled: null,
       newOffers: [],
+      feedOrdered: 0,
       researched: null,
       dockEvents: [],
     };
@@ -116,6 +120,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
 
   const workersLeft: string[] = [];
   let hungryAnimals = 0;
+  let feedOrdered = 0;
   let tempsLeft = 0;
   const weatherReports: WeatherReport[] = [];
   let spoiled: Spoiled | null = null;
@@ -134,10 +139,14 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       next = releaseTemps(next);
       tempsLeft += before - next.workers.length;
     }
-    // Buyers look at the listings once an hour.
+    // Buyers look at the listings once an hour, and the feed is checked.
     next = generateOffers(next, h);
+    const feed = autoOrderFeed(next);
+    next = feed.state;
+    feedOrdered += feed.ordered;
     if (hourOfDay === 0) {
-      const fed = payFeed(next);
+      // Animals held in town are kept at the farm's cost.
+      const fed = payFeed(chargeHeld(next));
       next = refreshCandidates(fed.state);
       hungryAnimals = fed.hungry;
       // A new day: its weather hits the farm and stored goods spoil a little.
@@ -154,6 +163,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   return {
     state: next,
     newOffers: next.offers.filter((o) => !known.has(o.id)),
+    feedOrdered,
     researched: studied.finished,
     dockEvents: dockEvents(state.shipments, next.shipments),
     workersLeft,

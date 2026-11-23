@@ -39,8 +39,8 @@ export interface AnimalDef {
   /** UI label (pt-BR). */
   label: string;
   purchaseCost: number;
-  /** Charged at midnight; unfed animals don't produce the next day. */
-  feedCostPerDay: number;
+  /** Feed (kg) eaten at midnight from the farm's stock; unfed animals don't produce the next day. */
+  feedKgPerDay: number;
   /** What it produces, or null for draft animals. */
   product: AnimalProductId | null;
   /** Fed game hours between products. */
@@ -58,7 +58,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     id: 'chicken',
     label: 'Galinha',
     purchaseCost: 120,
-    feedCostPerDay: 2,
+    feedKgPerDay: 2,
     product: 'egg',
     productionHours: 24,
     labor: {},
@@ -70,7 +70,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     id: 'duck',
     label: 'Pata',
     purchaseCost: 150,
-    feedCostPerDay: 2,
+    feedKgPerDay: 2,
     product: 'duckEgg',
     productionHours: 24,
     labor: {},
@@ -82,7 +82,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     id: 'pig',
     label: 'Porco',
     purchaseCost: 600,
-    feedCostPerDay: 6,
+    feedKgPerDay: 6,
     product: 'truffle',
     productionHours: 48,
     labor: {},
@@ -94,7 +94,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     id: 'sheep',
     label: 'Ovelha',
     purchaseCost: 700,
-    feedCostPerDay: 5,
+    feedKgPerDay: 5,
     product: 'wool',
     productionHours: 72,
     labor: {},
@@ -106,7 +106,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     id: 'goat',
     label: 'Cabra',
     purchaseCost: 450,
-    feedCostPerDay: 4,
+    feedKgPerDay: 4,
     product: 'goatMilk',
     productionHours: 24,
     labor: {},
@@ -118,7 +118,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     id: 'cow',
     label: 'Vaca',
     purchaseCost: 800,
-    feedCostPerDay: 8,
+    feedKgPerDay: 8,
     product: 'milk',
     productionHours: 24,
     labor: {},
@@ -130,7 +130,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     id: 'ox',
     label: 'Boi',
     purchaseCost: 1000,
-    feedCostPerDay: 9,
+    feedKgPerDay: 9,
     product: null,
     productionHours: 0,
     labor: { hoe: 0.4 },
@@ -142,7 +142,7 @@ export const ANIMALS: Record<AnimalId, AnimalDef> = {
     id: 'horse',
     label: 'Cavalo',
     purchaseCost: 1200,
-    feedCostPerDay: 10,
+    feedKgPerDay: 10,
     product: null,
     productionHours: 0,
     labor: { walk: 0.3 },
@@ -290,6 +290,20 @@ export const COLLECT_MINUTES = 10;
 /** Maximum total labor bonus of each kind (1 = twice as fast). */
 export const LABOR_BONUS_CAP = 1;
 export const MAX_ANIMALS = 40;
+
+/** Animal feed: bought by the kg (it comes by freight) and eaten at midnight. */
+export const FEED = {
+  label: 'Ração',
+  icon: '🥣',
+  /** Coins per kg. */
+  pricePerKg: 1,
+  /** Automatic reorder: on a new farm it is on and keeps this many days of feed. */
+  autoDays: 3,
+  /** The automatic order goes out when the stock (counting what is on its way) falls below this many days. */
+  reorderBelowDays: 1.5,
+  /** Automatic orders are rounded up to this many kg. */
+  orderStep: 10,
+} as const;
 /** Fraction of the purchase price returned when selling an adult animal (stage and stars adjust it). */
 export const ANIMAL_RESALE = 0.5;
 /** Animals wander between these hours and sleep otherwise. */

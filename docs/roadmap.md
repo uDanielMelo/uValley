@@ -147,7 +147,7 @@ Backend, login GitHub, save na nuvem, perfis e amigos. Decidido com o usuário: 
 projeto, de forma web (requisição ao GitHub e atualização pela web). O que havia sido feito localmente
 (bônus de contribuições, painel Perfil, save em arquivo e cliente Supabase) foi removido do código.
 
-### Etapa 9: doca e frete (em andamento: 9a ✅, 9b ✅)
+### Etapa 9: doca e frete (em andamento: 9a ✅, 9b ✅, 9c ✅)
 A caixa de venda vira uma doca com vagas; vender e comprar passam por veículos, frete e trabalho da equipe
 (carregamento como obra). Desenho completo, decisões do usuário e sub-etapas 9a a 9e em
 `docs/superpowers/specs/2026-11-23-dock-design.md` (aprovado pelo usuário em 2026-11-23).
@@ -171,6 +171,16 @@ Mercado virou vitrine de preços e pedidos; `cargo` e a coleta pelo relógio sa�
 a referência dos anúncios é o preço da cidade (o "prêmio de mercado" do spec), o frete é pago ao fechar, a
 carga do frete começa sozinha ao estacionar, o cliente avulso não vem enquanto há frete esperando vaga e a
 estação ainda não muda a demanda (fica para a etapa de economia).
+
+9c ✅: compras por frete. A loja tem carrinho (sementes, adubo, remédio, ração e animais) e "Pedir entrega"
+paga a mercadoria e o frete; a entrega chega à doca e a equipe descarrega sozinha. Os animais reservam a
+vaga no abrigo e o pasto desde o pedido e vêm num caminhão boiadeiro contratado (fixo + por cabeça, até 8).
+Entrega não descarregada a tempo fica retida na cidade: novo frete para trazer, ou desistir com metade de
+volta; animal retido custa o dobro da ração por dia e, depois de 2 dias, pode chegar com verminose. A ração
+virou estoque (kg) comido à meia-noite, com pedido automático ligado por padrão (mantém 3 dias). Save v19.
+Decidido por mim: ração com pedido automático (para não virar microgerenciamento), caminhão boiadeiro à
+parte do veículo da fazenda, a compra só pode ser cancelada antes de o frete sair, e o remédio pedido do
+card do animal vai direto, sem passar pelo carrinho.
 
 ### Vias e mapa maior (pedido do usuário) ✅
 

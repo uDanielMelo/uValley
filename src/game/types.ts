@@ -79,6 +79,8 @@ export interface Inventory {
   medicine: MedicineCounts;
   /** Fertilizer (cured manure) units. */
   fertilizer: number;
+  /** Animal feed, kg. */
+  feed: number;
 }
 
 /** Crop research: what is unlocked and what is under way. */
@@ -113,14 +115,50 @@ export interface ShipmentLine {
 export type ShipmentPhase = 'scheduled' | 'enroute' | 'waiting' | 'loading' | 'leaving';
 
 /**
- * Who sent the vehicle: a customer who drove in on their own ('walkin', pays on the spot) or hired
+ * Who sent the vehicle: a customer who drove in on their own ('walkin', pays on the spot), hired
  * freight taking a sale the farm closed ('sale': an offer on a listing or a town order; the farm
- * paid the freight and the goods were set aside when it was closed).
+ * paid the freight and the goods were set aside when it was closed) or hired freight bringing what
+ * the farm bought ('purchase': paid when ordered, unloaded by the crew).
  */
-export type ShipmentKind = 'walkin' | 'sale';
+export type ShipmentKind = 'walkin' | 'sale' | 'purchase';
 
-/** How a vehicle's visit ended: loaded and paid, out of time, or sent away by the player. */
-export type ShipmentOutcome = 'sold' | 'expired' | 'dismissed';
+/** Bought as a baby or as a young adult. */
+export type AnimalAge = 'baby' | 'adult';
+
+/** An animal on its way: its seat in a shelter (and on the pasture) is kept for it. */
+export interface PendingAnimal {
+  kind: AnimalId;
+  breed: BreedId;
+  age: AnimalAge;
+  stars: Stars;
+  shelterId: number;
+  /** What it cost (refunded if it cannot move in when it arrives). */
+  price: number;
+}
+
+/** What a purchase brings. */
+export interface Delivery {
+  seeds: ItemCounts;
+  medicine: MedicineCounts;
+  fertilizer: number;
+  /** Feed, kg. */
+  feed: number;
+  animals: PendingAnimal[];
+  /** Game minute it was first held in town (animals that waited long may arrive sick). */
+  heldSince?: number;
+}
+
+/** A delivery that went back to town: still the farm's, waiting for a new freight. */
+export interface HeldPurchase {
+  id: number;
+  delivery: Delivery;
+  since: number;
+  /** What the goods cost (part of it comes back when giving up). */
+  cost: number;
+}
+
+/** How a vehicle's visit ended: loaded and paid, unloaded, out of time, or sent away by the player. */
+export type ShipmentOutcome = 'sold' | 'delivered' | 'expired' | 'dismissed';
 
 /** Loading under way: the goods already left the inventory; the crew adds work minutes. */
 export interface ShipmentWork {
@@ -155,6 +193,9 @@ export interface Shipment {
   vehicle?: VehicleLevel;
   /** Sales of a town order: the order, given back if the delivery falls through in time. */
   order?: Order;
+  /** Purchases: what it brings and what the goods cost. */
+  delivery?: Delivery;
+  goodsCost?: number;
   /** Present while loading. */
   work?: ShipmentWork;
   /** Leaving: when it set off back, and when it is out of sight (then it is removed). */
@@ -346,6 +387,10 @@ export interface GameState {
   structures: StructureInstance[];
   /** Vehicles on their way to, at or leaving the dock. */
   shipments: Shipment[];
+  /** Deliveries that went back to town, waiting for a new freight. */
+  held: HeldPurchase[];
+  /** Automatic feed orders: on or off, and how many days of feed to keep. */
+  feedOrder: { auto: boolean; days: number };
   /** Next id for tasks, workers, candidates, animals, carcasses, structures and shipments. */
   nextId: number;
 }
@@ -414,7 +459,11 @@ export type ActionError =
   | 'too-many-listings'
   | 'invalid-price'
   | 'no-order'
-  | 'dock-no-road';
+  | 'dock-no-road'
+  | 'too-many-heads'
+  | 'empty-cart'
+  | 'no-held'
+  | 'reserved';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 
