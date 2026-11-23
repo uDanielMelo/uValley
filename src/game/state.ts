@@ -56,6 +56,7 @@ export const createInitialState = (): GameState => {
     orders: [],
     research: { unlocked: [...STARTING_CROPS], current: null },
     structures,
+    shipments: [],
     nextId,
   };
 };

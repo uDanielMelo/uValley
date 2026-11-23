@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ACCESS_ROAD_FARM_Y, ACCESS_ROAD_X, CAR, HIGHWAY, ROAD_COST } from '../../data/roads';
+import { DOCK } from '../../data/docks';
 import { GRID_SIZE } from '../../data/world';
 import { till } from '../actions';
 import { isPasture } from '../animals';
@@ -12,7 +13,7 @@ import { tick } from '../simulation';
 import { createInitialState } from '../state';
 import { checkPlacement } from '../structures';
 import type { ActionResult, GameState, GridPoint, Tile } from '../types';
-import { carRoutes, carState, driveMinutes, roundCorners, routeLength } from '../visitors';
+import { carRoutes, driveMinutes, roundCorners, routeLength, shipmentCar } from '../visitors';
 import { toggleTask } from '../workers';
 
 const unwrap = (result: ActionResult): GameState => {
@@ -168,9 +169,9 @@ describe('walking on roads', () => {
 describe('visiting car', () => {
   const step = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(b.x - a.x, b.y - a.y);
 
-  it('comes along the highway, turns into the access road and parks in front of the shipping bin', () => {
+  it('comes along the highway, turns into the access road and parks at the dock bay', () => {
     const s = createInitialState();
-    const { arrive, leave } = carRoutes(s.tiles);
+    const { arrive, leave } = carRoutes(s.tiles, PARKING);
     const start = arrive[0];
     expect(start?.x).toBe(ACCESS_ROAD_X + 0.5 + HIGHWAY.reach);
     expect(start?.y).toBeGreaterThan(GRID_SIZE);
@@ -210,47 +211,61 @@ describe('visiting car', () => {
     expect(tight[1]?.y).toBeCloseTo(0.5, 5);
   });
 
-  it('follows player-built roads and parks at the reachable tile closest to the bin', () => {
+  it('follows player-built roads and parks at the reachable tile closest to the bay', () => {
     // Cutting the access road makes the car stop at the last reachable tile.
     const cut = unwrap(removeRoad(createInitialState(), tileIndex(ACCESS_ROAD_X, 60)));
-    const short = carRoutes(cut.tiles).arrive;
+    const short = carRoutes(cut.tiles, PARKING).arrive;
     expect(short[short.length - 1]).toEqual({ x: ACCESS_ROAD_X + 0.5, y: 61.5 });
-    // A detour east of the cut reaches the street in front of the bin.
+    // A detour east of the cut reaches the street in front of the dock.
     const s = { ...cut, tiles: withRoads(cut.tiles, [61, 60, 59].map((y) => tileIndex(33, y))) };
-    const detour = carRoutes(s.tiles).arrive;
+    const detour = carRoutes(s.tiles, PARKING).arrive;
     expect(detour[detour.length - 1]).toEqual(PARKING);
     for (const p of detour.filter((q) => q.y < GRID_SIZE)) expect(onRoad(s, p)).toBe(true);
   });
 
-  it('arrives, parks, leaves and is away between visits', () => {
-    const routes = carRoutes(createInitialState().tiles);
+  /** A visit setting off at `hour`, parked for DOCK.waitMinutes, then leaving (as game/shipments saves it). */
+  const visit = (hour: number, drive: number) => {
+    const setOffAt = hour;
+    const arrivesAt = hour + drive;
+    const leftAt = arrivesAt + DOCK.waitMinutes;
+    return {
+      coming: { phase: 'enroute' as const, setOffAt, arrivesAt },
+      parked: { phase: 'waiting' as const, setOffAt, arrivesAt },
+      leaving: { phase: 'leaving' as const, setOffAt, arrivesAt, leftAt, goneAt: leftAt + drive },
+    };
+  };
+
+  it('arrives, parks, leaves and disappears, following its saved visit', () => {
+    const routes = carRoutes(createInitialState().tiles, PARKING);
     const drive = driveMinutes(routeLength(routes.arrive));
-    const hour = (CAR.visitHours[0] ?? 0) * 60;
-    expect(carState(hour - 1, routes).phase).toBe('away');
+    const hour = 8 * 60;
+    const v = visit(hour, drive);
+    expect(shipmentCar(v.coming, hour - 1, routes)).toBeNull();
 
-    const early = carState(hour + 1, routes);
-    expect(early.phase).toBe('arriving');
-    expect(early.x).toBeCloseTo(ACCESS_ROAD_X + 0.5 + HIGHWAY.reach - CAR.speed, 5);
-    expect(Math.sin(early.heading)).toBeCloseTo(-1, 5); // driving west along the highway
+    const early = shipmentCar(v.coming, hour + 1, routes);
+    expect(early?.phase).toBe('arriving');
+    expect(early?.x).toBeCloseTo(ACCESS_ROAD_X + 0.5 + HIGHWAY.reach - CAR.speed, 5);
+    expect(Math.sin(early?.heading ?? 0)).toBeCloseTo(-1, 5); // driving west along the highway
 
-    const parked = carState(hour + drive + 1, routes);
-    expect(parked.phase).toBe('parked');
-    expect(parked.x).toBeCloseTo(PARKING.x, 5);
-    expect(parked.y).toBeCloseTo(PARKING.y, 5);
+    const parked = shipmentCar(v.parked, hour + drive + 1, routes);
+    expect(parked?.phase).toBe('parked');
+    expect(parked?.x).toBeCloseTo(PARKING.x, 5);
+    expect(parked?.y).toBeCloseTo(PARKING.y, 5);
 
-    const leaving = carState(hour + drive + CAR.waitMinutes + drive / 2, routes);
-    expect(leaving.phase).toBe('leaving');
-    expect(leaving.x).toBeLessThan(ACCESS_ROAD_X);
-    expect(Math.sin(leaving.heading)).toBeCloseTo(-1, 5); // still westward, away from the farm
+    const leaving = shipmentCar(v.leaving, hour + drive + DOCK.waitMinutes + drive / 2, routes);
+    expect(leaving?.phase).toBe('leaving');
+    expect(leaving?.x).toBeLessThan(ACCESS_ROAD_X);
+    expect(Math.sin(leaving?.heading ?? 0)).toBeCloseTo(-1, 5); // still westward, away from the farm
 
-    expect(carState(hour + drive * 2 + CAR.waitMinutes + 1, routes).phase).toBe('away');
+    expect(shipmentCar(v.leaving, hour + drive * 2 + DOCK.waitMinutes + 1, routes)).toBeNull();
   });
 
   it('slows down smoothly before parking', () => {
-    const routes = carRoutes(createInitialState().tiles);
+    const routes = carRoutes(createInitialState().tiles, PARKING);
     const drive = driveMinutes(routeLength(routes.arrive));
-    const hour = (CAR.visitHours[0] ?? 0) * 60;
-    const at = (t: number) => carState(hour + t, routes);
+    const hour = 8 * 60;
+    const v = visit(hour, drive);
+    const at = (t: number) => shipmentCar(v.coming, hour + t, routes) ?? { x: NaN, y: NaN };
     const cruise = step(at(1), at(2));
     const braking = step(at(drive - 0.2), at(drive - 0.1));
     expect(cruise).toBeCloseTo(CAR.speed, 5);

@@ -117,13 +117,13 @@ export const isOperational = (s: StructureInstance): boolean => s.work === undef
 export const hasRoadRing = (type: StructureId): boolean => STRUCTURES[type].category !== 'decor';
 
 /**
- * Buildings that stop working without a road to the access road: the bunkhouse, shelters and
- * storage. The house and the shipping bin are fixed, decorations need no road and the greenhouse
- * is only a roof over the field.
+ * Buildings that stop working without a road to the access road: the dock, the bunkhouse, shelters
+ * and storage. The house is fixed, decorations need no road and the greenhouse is only a roof over
+ * the field.
  */
 export const needsRoadAccess = (type: StructureId): boolean => {
   const def = STRUCTURES[type];
-  return def.cost !== undefined && def.category !== 'decor' && !def.cover;
+  return def.needsRoad === true || (def.cost !== undefined && def.category !== 'decor' && !def.cover);
 };
 
 /** Tiles of a structure's road ring (may leave the map). Empty for decorations. */

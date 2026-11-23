@@ -59,6 +59,7 @@ const CAN = '#6f9fb0';
 const SACK = '#d8c08e';
 const BASKET = '#c08a4a';
 const MANURE_BAG = '#7a5230';
+const CRATE = '#b98a55';
 
 /** Tools held in the right hand; only the one for the current task is shown. */
 function Tools({ tools }: { tools: PersonRig['tools'] }) {
@@ -83,6 +84,9 @@ function Tools({ tools }: { tools: PersonRig['tools'] }) {
       </group>
       <group ref={tools.tend} visible={false}>
         <Cyl args={[0.07, 0.055, 0.1, 8]} position={[0, -0.07, 0.04]} color={METAL} />
+      </group>
+      <group ref={tools.haul} visible={false}>
+        <Box size={[0.2, 0.13, 0.15]} position={[-0.05, -0.08, 0.12]} color={CRATE} />
       </group>
       <group ref={tools.build} visible={false}>
         <Box size={[0.022, 0.2, 0.022]} position={[0, -0.03, 0.06]} color={WOOD} rotation={[1.3, 0, 0]} />

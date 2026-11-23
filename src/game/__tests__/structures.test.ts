@@ -31,7 +31,7 @@ const FREE_Y = 44;
 describe('structure placement', () => {
   it('starts with the house, shipping bin and bunkhouse as placed instances', () => {
     const s = createInitialState();
-    expect(s.structures.map((x) => x.type)).toEqual(['house', 'shippingBin', 'bunkhouse']);
+    expect(s.structures.map((x) => x.type)).toEqual(['house', 'dock', 'bunkhouse']);
     expect(new Set([...s.workers.map((w) => w.id), ...s.structures.map((x) => x.id)]).size).toBe(
       s.workers.length + s.structures.length,
     );

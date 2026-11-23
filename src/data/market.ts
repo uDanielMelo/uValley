@@ -46,7 +46,7 @@ export const VEHICLES: Record<VehicleLevel, VehicleDef> = {
   3: { label: 'Caminhão', icon: '🚚', capacity: 1500, price: 9000, scale: 1.4, color: '#3f7d4a' },
 };
 
-/** The town market pays this much more than the shipping bin (the goods have to get there). */
+/** The town market pays this much more than the reference price (the goods have to get there). */
 export const MARKET_BONUS = 1.25;
 /** Game minutes after each car visit hour when the load is picked up (and paid). */
 export const PICKUP_DELAY = 30;

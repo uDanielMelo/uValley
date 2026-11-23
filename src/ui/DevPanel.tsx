@@ -158,6 +158,10 @@ export function DevPanel() {
             <DevButton onClick={dev.manure}>🪣 Esterco cheio</DevButton>
           </Section>
 
+          <Section title="Doca">
+            <DevButton onClick={dev.customer}>🚗 Chamar cliente</DevButton>
+          </Section>
+
           <Section title="Clima">
             <DevButton onClick={() => dev.weather('sunny')}>☀️ Sol</DevButton>
             <DevButton onClick={() => dev.weather('cloudy')}>☁️ Nublado</DevButton>

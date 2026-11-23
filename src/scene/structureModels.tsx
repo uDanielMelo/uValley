@@ -7,11 +7,11 @@ import { Barn, Bunkhouse, ChickenCoop, ColdRoom, Greenhouse, Silo, Warehouse } f
 import { Bench, FlowerBed, Fountain, LampPost, PlantedTree, Scarecrow } from './models/Decor';
 import { House } from './models/House';
 import { Corral, Pigsty, Sheepfold, Stable } from './models/Shelters';
-import { ShippingBin } from './models/ShippingBin';
+import { Dock } from './models/Dock';
 
 export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   house: House,
-  shippingBin: ShippingBin,
+  dock: Dock,
   bunkhouse: Bunkhouse,
   chickenCoop: ChickenCoop,
   pigsty: Pigsty,

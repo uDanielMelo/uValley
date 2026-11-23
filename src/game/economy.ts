@@ -1,4 +1,4 @@
-import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS, type AnimalProductId } from '../data/animals';
+import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
 import { CROPS, CROP_IDS, type CropId } from '../data/crops';
 import { FERTILIZER } from '../data/fertilizer';
 import { PLOT_BASE_COST, PLOT_COST_MULTIPLIER } from '../data/economy';
@@ -32,49 +32,13 @@ export const buyFertilizer = (state: GameState, quantity: number): ActionResult 
   });
 };
 
-export const sellProduce = (state: GameState, cropId: CropId, quantity: number): ActionResult => {
-  if (!isPositiveInt(quantity)) return fail('invalid-quantity');
-  if ((state.inventory.produce[cropId] ?? 0) < quantity) return fail('no-produce');
-  return ok({
-    ...state,
-    money: state.money + CROPS[cropId].sellPrice * quantity,
-    inventory: {
-      ...state.inventory,
-      produce: addCount(state.inventory.produce, cropId, -quantity),
-    },
-  });
-};
-
-export const sellAnimalProduct = (state: GameState, productId: AnimalProductId, quantity: number): ActionResult => {
-  if (!isPositiveInt(quantity)) return fail('invalid-quantity');
-  if ((state.inventory.products[productId] ?? 0) < quantity) return fail('no-produce');
-  return ok({
-    ...state,
-    money: state.money + ANIMAL_PRODUCTS[productId].sellPrice * quantity,
-    inventory: {
-      ...state.inventory,
-      products: addCount(state.inventory.products, productId, -quantity),
-    },
-  });
-};
-
-/** Total sale value of all crops and animal products in the inventory. */
+/** What all crops and animal products in the inventory are worth at the reference price. */
 export const produceValue = (state: GameState): number =>
   CROP_IDS.reduce((sum, id) => sum + CROPS[id].sellPrice * (state.inventory.produce[id] ?? 0), 0) +
   ANIMAL_PRODUCT_IDS.reduce(
     (sum, id) => sum + ANIMAL_PRODUCTS[id].sellPrice * (state.inventory.products[id] ?? 0),
     0,
   );
-
-export const sellAllProduce = (state: GameState): ActionResult => {
-  const value = produceValue(state);
-  if (value <= 0) return fail('no-produce');
-  return ok({
-    ...state,
-    money: state.money + value,
-    inventory: { ...state.inventory, produce: {}, products: {} },
-  });
-};
 
 export const plotCost = (plotsPurchased: number): number =>
   Math.round(PLOT_BASE_COST * Math.pow(PLOT_COST_MULTIPLIER, plotsPurchased));

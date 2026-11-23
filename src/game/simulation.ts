@@ -8,6 +8,7 @@ import { deliverCargo, pickupsBetween, refreshOrders, type Delivery } from './ma
 import { stepResearch } from './research';
 import type { CropId } from '../data/crops';
 import { queueShelterChores } from './shelters';
+import { dockEvents, stepShipments, type DockEvent } from './shipments';
 import { spoilGoods, type Spoiled } from './storage';
 import { payHourlyWages, refreshCandidates, releaseTemps } from './staff';
 import type { Animal, GameState, StructureInstance, StructureWorkKind } from './types';
@@ -40,6 +41,8 @@ export interface TickResult {
   deliveries: Delivery[];
   /** Crop whose research just finished. */
   researched: CropId | null;
+  /** Vehicles that parked at the dock, were loaded and paid, or left without their load. */
+  dockEvents: DockEvent[];
 }
 
 export interface FinishedWork {
@@ -74,7 +77,7 @@ const finishedWorks = (before: readonly StructureInstance[], next: GameState): F
  * Advances the game by dtMinutes: crop growth (in GROWTH_STEP_MINUTES steps, so the tiles array
  * only changes on step boundaries or when a task finishes), workers (including construction) and animals,
  * then health (sickness, predators) and the standing orders: collecting at shelters with products,
- * medicating noticed sick animals and taking carcasses away. Then, for each
+ * medicating noticed sick animals and taking carcasses away, and the vehicles at the dock. Then, for each
  * full hour that ended: wages for the hours of the shift, day laborers leaving when it ends, and
  * at midnight the feed, a new hiring board, the new day's weather and spoilage.
  */
@@ -94,6 +97,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       spoiled: null,
       deliveries: [],
       researched: null,
+      dockEvents: [],
     };
   }
   const gameMinutes = state.gameMinutes + dtMinutes;
@@ -104,7 +108,8 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   const animalsDied = aged.died;
   const studied = stepResearch(aged.state, dtMinutes);
   const health = stepHealth(studied.state, state.gameMinutes);
-  let next = queueAnimalCare(queueShelterChores(health.state));
+  // Customers set off, park, run out of time and drive away (loading is done by the workers above).
+  let next = stepShipments(queueAnimalCare(queueShelterChores(health.state)), state.gameMinutes);
   const worksFinished = finishedWorks(state.structures, next);
 
   const workersLeft: string[] = [];
@@ -151,6 +156,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
     state: next,
     deliveries,
     researched: studied.finished,
+    dockEvents: dockEvents(state.shipments, next.shipments),
     workersLeft,
     hungryAnimals,
     tempsLeft,

@@ -105,7 +105,58 @@ export interface Order {
   dueDay: number;
 }
 
-/** What a 'build' or 'tend' task works on. */
+/** A lot of one good (crops or animal products) on a vehicle. */
+export interface ShipmentLine {
+  good: OrderGood;
+  quantity: number;
+}
+
+/**
+ * Where a vehicle at the dock is: driving in, parked waiting for the farm, being loaded by the
+ * crew, or driving off (until it is gone).
+ */
+export type ShipmentPhase = 'enroute' | 'waiting' | 'loading' | 'leaving';
+
+/** How a vehicle's visit ended: loaded and paid, out of time, or sent away by the player. */
+export type ShipmentOutcome = 'sold' | 'expired' | 'dismissed';
+
+/** Loading under way: the goods already left the inventory; the crew adds work minutes. */
+export interface ShipmentWork {
+  done: number;
+  total: number;
+}
+
+/**
+ * A vehicle visiting the dock. For now only customers who drive in on their own ('walkin'): they
+ * ask for one lot, wait at a bay and pay on the spot when the crew has loaded it.
+ */
+export interface Shipment {
+  id: number;
+  kind: 'walkin';
+  /** The dock whose bay it parks at. */
+  dockId: number;
+  phase: ShipmentPhase;
+  /** Game minute it set off from the highway's east end. */
+  setOffAt: number;
+  /** Game minute it parks at the bay. */
+  arrivesAt: number;
+  /** It drives off at this game minute, loaded or not. */
+  deadline: number;
+  /** What it wants. */
+  goods: ShipmentLine[];
+  /** Coins paid when it is loaded. */
+  payment: number;
+  /** Present while loading. */
+  work?: ShipmentWork;
+  /** Leaving: when it set off back, and when it is out of sight (then it is removed). */
+  leftAt?: number;
+  goneAt?: number;
+  outcome?: ShipmentOutcome;
+  /** Units damaged when it left in the middle of loading. */
+  lost?: number;
+}
+
+/** What a 'build', 'tend' or 'haul' task works on. */
 export type TaskJob =
   /** A structure site or demolition; the task tile is one of the footprint tiles. */
   | { type: 'structure'; structureId: number }
@@ -116,7 +167,9 @@ export type TaskJob =
   /** Medicating a sick animal ('tend'); the task tile is where the animal was when it was queued. */
   | { type: 'medicate'; animalId: number }
   /** Taking a carcass away ('tend'); the task tile is under the carcass. */
-  | { type: 'carcass'; carcassId: number };
+  | { type: 'carcass'; carcassId: number }
+  /** Loading a vehicle at the dock ('haul'); the task tile is one of the bay's crew tiles. */
+  | { type: 'shipment'; shipmentId: number };
 
 /** A queued order on a tile, executed by a worker. */
 export interface Task {
@@ -127,7 +180,7 @@ export interface Task {
   cropId: CropId | null;
   /** Worker currently assigned, if any. */
   workerId: number | null;
-  /** Present on (and only on) 'build' and 'tend' tasks. */
+  /** Present on (and only on) 'build', 'tend' and 'haul' tasks. */
   job?: TaskJob;
 }
 
@@ -256,15 +309,17 @@ export interface GameState {
   orders: Order[];
   /** Crops the farm can grow, and the one being researched. */
   research: Research;
-  /** Placed structures, including the starting house and shipping bin. */
+  /** Placed structures, including the starting house and dock. */
   structures: StructureInstance[];
-  /** Next id for tasks, workers, candidates, animals, carcasses and structures. */
+  /** Vehicles on their way to, at or leaving the dock. */
+  shipments: Shipment[];
+  /** Next id for tasks, workers, candidates, animals, carcasses, structures and shipments. */
   nextId: number;
 }
 
 export type ToolId = 'hoe' | 'seed' | 'water' | 'hand' | 'fertilize';
-/** Kinds of queued work: the four farm tools, animal care (collecting at shelters) and construction. */
-export type TaskKind = ToolId | 'tend' | 'build';
+/** Kinds of queued work: the farm tools, animal care, construction and loading at the dock. */
+export type TaskKind = ToolId | 'tend' | 'build' | 'haul';
 
 export type ActionError =
   | 'out-of-bounds'
@@ -318,7 +373,9 @@ export type ActionError =
   | 'researching'
   | 'already-researched'
   | 'no-water-needed'
-  | 'not-sick';
+  | 'not-sick'
+  | 'no-shipment'
+  | 'not-enough-goods';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 

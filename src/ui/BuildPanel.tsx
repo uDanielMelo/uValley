@@ -61,7 +61,7 @@ function RoadRow() {
       </div>
       <p className="mt-0.5 text-xs font-bold text-wood/80">
         Clique e arraste para traçar; a equipe abre cada trecho. Ela anda {Math.round(ROAD_WALK_BONUS * 100)}% mais
-        rápido na estrada, e o carro segue as estradas até a caixa de venda.
+        rápido na estrada, e os clientes seguem as estradas até a doca.
       </p>
     </button>
   );

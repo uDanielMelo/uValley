@@ -5,7 +5,7 @@ import { Carcasses } from './Carcasses';
 import { Blueprint } from './Blueprint';
 import { BuildGhost } from './BuildGhost';
 import { CameraRig } from './CameraRig';
-import { Car } from './Car';
+import { Cars } from './Car';
 import { Predators } from './Predators';
 import { Rain } from './Rain';
 import { CropLayer } from './CropLayer';
@@ -57,7 +57,7 @@ export function GameCanvas() {
         <Animals />
         <Carcasses />
         <Predators />
-        <Car />
+        <Cars />
       </WorldSwitch>
       <Rain />
       <PostFx />

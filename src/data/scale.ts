@@ -68,8 +68,6 @@ export const PROP_SIZES = {
   /** Grass blades (before the per-tuft random scale). */
   grassMin: 0.15,
   grassMax: 0.35,
-  /** Wooden shipping bin. */
-  shippingBinHeight: 0.9,
   /** Single-lane dirt road (the rest of the tile is a grass verge). */
   roadWidth: 3.0,
   /** Two-lane paved highway beyond the farm: lanes, edge lines and the dashed center line. */

@@ -23,6 +23,7 @@ import { homeSpot } from './home';
 import { makeWorker, rollProfile } from './staff';
 import { completeAllWork } from './construction';
 import { applyTask } from './tasks';
+import { spawnWalkIn } from './shipments';
 
 export const addMoney = (state: GameState, amount: number): GameState => ({
   ...state,
@@ -209,6 +210,14 @@ export const addMedicine = (state: GameState, amount: number): GameState => ({
     medicine: MEDICINE_IDS.reduce((m, id) => addCount(m, id, Math.max(0, Math.floor(amount))), state.inventory.medicine),
   },
 });
+
+/** A walk-in customer sets off for the dock right now (when a bay is free), wanting something different each minute. */
+export const callCustomer = (state: GameState): GameState =>
+  spawnWalkIn(state, {
+    at: state.gameMinutes,
+    day: Math.floor(state.gameMinutes / MINUTES_PER_DAY),
+    slot: Math.floor(state.gameMinutes) % 97,
+  });
 
 /** A predator raids the shelter with most animals right now. */
 export const forceRaid = (state: GameState): { state: GameState; attack: PredatorAttack | null } => {

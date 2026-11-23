@@ -147,10 +147,19 @@ Backend, login GitHub, save na nuvem, perfis e amigos. Decidido com o usuário: 
 projeto, de forma web (requisição ao GitHub e atualização pela web). O que havia sido feito localmente
 (bônus de contribuições, painel Perfil, save em arquivo e cliente Supabase) foi removido do código.
 
-### Etapa 9: doca e frete (em desenho)
+### Etapa 9: doca e frete (em andamento: 9a ✅)
 A caixa de venda vira uma doca com vagas; vender e comprar passam por veículos, frete e trabalho da equipe
 (carregamento como obra). Desenho completo, decisões do usuário e sub-etapas 9a a 9e em
-`docs/superpowers/specs/2026-11-23-dock-design.md` (aguardando aprovação; nada implementado).
+`docs/superpowers/specs/2026-11-23-dock-design.md` (aprovado pelo usuário em 2026-11-23).
+
+9a ✅: a doca no lugar da caixa de venda (33, 57), com uma vaga de carro na rua à frente; clientes avulsos
+vêm sozinhos (até 4 horários por dia, com chance), pedem um lote e esperam 2 h; o jogador manda carregar e
+a equipe (atividade Carga, habilidade Construção, até 3 pessoas) soma progresso na viagem; carregado, paga
+à vista. Prazo estourado no meio da carga: descarrega e perde 15% (pelo menos 1 unidade). A venda
+instantânea saiu. Save v17. Decidido por mim (as dúvidas do spec): Carga usa Construção, prazo de 2 h,
+avaria de 15%, a doca no lugar da caixa e o cliente só pede o que a fazenda conhece (de preferência o que
+ela tem em estoque). Provisório até a 9b: a carga do Mercado continua sendo levada pelo relógio, sem carro
+na cena (a 9b a troca por anúncios e frete).
 
 ### Vias e mapa maior (pedido do usuário) ✅
 

@@ -7,6 +7,8 @@ import { laborMultipliers } from './animals';
 import { careMinutes } from './health';
 import { mainSpecies } from './shelters';
 import { addWork, cancelAllOrders, roadTaskMinutes, workSpot } from './construction';
+import { loaderSpot } from './dock';
+import { addShipmentWork, cancelAllLoading } from './shipments';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { homeSpot } from './home';
 import { addCount } from './inventory';
@@ -160,8 +162,8 @@ export const applyArea = (
   return { state: { ...state, tasks: [...state.tasks, ...added], nextId }, mode, changed, error };
 };
 
-/** Empties the queue: sites and demolitions are called off and queued roads refunded. */
-export const clearTasks = cancelAllOrders;
+/** Empties the queue: sites, demolitions and loadings are called off and queued roads refunded. */
+export const clearTasks = (state: GameState): GameState => cancelAllOrders(cancelAllLoading(state));
 
 /** Queued task kinds that no worker has in their list (they would wait forever). */
 export const unstaffedKinds = (state: GameState): TaskKind[] => {
@@ -176,16 +178,25 @@ const tileCenter = (tile: number): GridPoint => {
   return { x: x + 0.5, y: y + 0.5 };
 };
 
-/** Where a worker stands to do a task: on its tile, or beside the wall for structure and shelter work. */
+/**
+ * Where a worker stands to do a task: on its tile, beside the wall for structure and shelter
+ * work, or between the platform and the vehicle when loading at the dock.
+ */
 export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoint => {
   const job = task.job;
+  if (job?.type === 'shipment') {
+    const shipment = state.shipments.find((s) => s.id === job.shipmentId);
+    const dock = shipment && state.structures.find((s) => s.id === shipment.dockId);
+    return dock ? loaderSpot(dock, task.tile) : tileCenter(task.tile);
+  }
   if (job?.type !== 'structure' && job?.type !== 'shelter') return tileCenter(task.tile);
   const site = state.structures.find((s) => s.id === job.structureId);
   return (site && workSpot(state, site, task.tile, from)) ?? tileCenter(task.tile);
 };
 
-/** Work minutes (at speed 1) of a task that is done in one go (structure work accumulates on the site). */
+/** Work minutes (at speed 1) of a task that is done in one go (structure work and loading accumulate). */
 export const taskMinutes = (task: Task): number => {
+  if (task.kind === 'haul') return 1;
   if (task.kind === 'tend') return careMinutes(task.job) ?? COLLECT_MINUTES;
   if (task.kind === 'build') return roadTaskMinutes(task.job?.type === 'road' && task.job.remove);
   return TASK_MINUTES[task.kind];
@@ -198,6 +209,10 @@ export const taskProgress = (state: GameState, worker: Worker): number | null =>
   const job = task.job;
   if (job?.type === 'structure') {
     const work = state.structures.find((s) => s.id === job.structureId)?.work;
+    return work && work.total > 0 ? Math.min(1, work.done / work.total) : null;
+  }
+  if (job?.type === 'shipment') {
+    const work = state.shipments.find((s) => s.id === job.shipmentId)?.work;
     return work && work.total > 0 ? Math.min(1, work.done / work.total) : null;
   }
   return Math.min(1, worker.progress / taskMinutes(task));
@@ -247,7 +262,7 @@ export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' |
     }
     return { kind: task.kind, cropId: null, animalId: job?.type === 'shelter' ? mainSpecies(state, job.structureId) : null };
   }
-  if (task.kind === 'hoe' || task.kind === 'build') return { kind: task.kind, cropId: null };
+  if (task.kind === 'hoe' || task.kind === 'build' || task.kind === 'haul') return { kind: task.kind, cropId: null };
   return { kind: task.kind, cropId: state.tiles[task.tile]?.crop?.cropId ?? null };
 };
 
@@ -358,6 +373,14 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
         tasks = world.tasks;
         if (!world.structures.find((s) => s.id === job.structureId)?.work) {
           // Finished (the site's tasks are gone), or a stray task without a site.
+          tasks = tasks.filter((t) => t.id !== task.id);
+          w = { ...w, taskId: null, progress: 0 };
+        }
+      } else if (job?.type === 'shipment') {
+        // Loading is kept on the shipment: several loaders add to it and it survives crew changes.
+        world = addShipmentWork({ ...world, tasks, workers }, job.shipmentId, work);
+        tasks = world.tasks;
+        if (!world.shipments.find((s) => s.id === job.shipmentId)?.work) {
           tasks = tasks.filter((t) => t.id !== task.id);
           w = { ...w, taskId: null, progress: 0 };
         }

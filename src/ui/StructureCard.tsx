@@ -23,6 +23,7 @@ import type { GameState, StructureInstance } from '../game/types';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { formatCoins, formatWorkTime } from './format';
 import { Button, Card, Coins } from './primitives';
+import { DockSection } from './DockPanel';
 import { StorageSummary } from './StorageSummary';
 
 const find = (s: GameStore): StructureInstance | undefined =>
@@ -56,6 +57,7 @@ const idleText = (type: StructureId): string => {
   if (type === 'bunkhouse') return 'as camas não contam e a equipe dorme na frente da casa';
   if (def.shelter) return 'não recebe animais novos e a equipe não coleta o que eles produzem';
   if (def.storage) return 'não guarda nada';
+  if (type === 'dock') return 'nenhum cliente consegue chegar à vaga';
   return 'fica parada';
 };
 
@@ -184,7 +186,7 @@ function ShelterSection({ type }: { type: StructureId }) {
   );
 }
 
-/** What else a structure offers: beds, selling, team hub. */
+/** What else a structure offers: beds, the vehicles at the dock, storage, team hub. */
 function ExtraSection({ type }: { type: StructureId }) {
   const beds = useGameStore((s) => `${staffCount(s.game)}/${bedCount(s.game)}`);
   const showPanel = useGameStore((s) => s.showPanel);
@@ -200,13 +202,7 @@ function ExtraSection({ type }: { type: StructureId }) {
       </div>
     );
   }
-  if (type === 'shippingBin') {
-    return (
-      <Button variant="leaf" className="text-sm" onClick={() => showPanel('inventory')}>
-        Vender colheita e produtos
-      </Button>
-    );
-  }
+  if (type === 'dock') return <DockSection />;
   const storage = STRUCTURES[type].storage;
   if (storage || type === 'house') {
     return (

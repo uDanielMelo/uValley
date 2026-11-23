@@ -14,9 +14,15 @@ export type TaskOrder = Pick<Task, 'kind' | 'tile' | 'cropId' | 'job'>;
  */
 export const applyTask = (state: GameState, task: TaskOrder): ActionResult => {
   if (task.kind === 'seed') return task.cropId ? plant(state, task.tile, task.cropId) : fail('no-seeds');
-  if (task.kind !== 'build' && task.kind !== 'tend') return applyTool(state, task.kind, task.tile, CROP_IDS[0]);
+  if (task.kind !== 'build' && task.kind !== 'tend' && task.kind !== 'haul') {
+    return applyTool(state, task.kind, task.tile, CROP_IDS[0]);
+  }
   const job = task.job;
   if (!job) return fail('no-structure');
+  // Loading is done bit by bit on the shipment (shipments.ts), like structure work.
+  if (job.type === 'shipment') {
+    return state.shipments.some((s) => s.id === job.shipmentId && s.phase === 'loading') ? ok(state) : fail('no-shipment');
+  }
   // Collecting never fails in the projected queue: a shelter may fill up before the crew gets there.
   if (job.type === 'shelter') {
     const collected = collectShelter(state, job.structureId);

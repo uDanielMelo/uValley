@@ -11,7 +11,7 @@ import { setHoverCursor } from './cursor';
 import { Person, personScale, type PersonLook, type PersonRig } from './models/Person';
 
 const HALF = GRID_SIZE / 2;
-const TOOL_IDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'fertilize', 'tend', 'build'];
+const TOOL_IDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'fertilize', 'tend', 'build', 'haul'];
 const STRAW = '#e2c27a';
 
 const DEFAULT_LOOK: PersonLook = { shirt: '#3f6fb5', pants: '#4a5a7a', skin: '#e0ac85', hat: STRAW, hair: '#4a3324' };
@@ -106,6 +106,12 @@ const workPose = (kind: TaskKind, t: number): Pose => {
       const strike = Math.max(0, Math.sin(t * 7));
       return { legL: -0.2, legR: 0.2, armL: -0.9, armR: -2.1 + strike * 1.2, bend: 0.2, bob: 0 };
     }
+    case 'haul': {
+      // Loading the vehicle: bend down for a crate, straighten up and swing it onto the bed.
+      const lift = Math.sin(t * 2.6) * 0.5 + 0.5;
+      const arms = -0.7 - lift * 0.6;
+      return { legL: -0.25, legR: 0.25, armL: arms, armR: arms, bend: 0.75 - lift * 0.6, bob: -0.05 * (1 - lift) };
+    }
   }
 };
 
@@ -134,6 +140,7 @@ function WorkerFigure({ id }: { id: number }) {
         fertilize: createRef<Group>(),
         tend: createRef<Group>(),
         build: createRef<Group>(),
+        haul: createRef<Group>(),
       },
     }),
     [],

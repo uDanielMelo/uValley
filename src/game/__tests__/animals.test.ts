@@ -26,7 +26,7 @@ import {
   unlockAll,
   waterAll,
 } from '../dev';
-import { produceValue, sellAllProduce, sellAnimalProduct } from '../economy';
+import { produceValue } from '../economy';
 import { tileIndex } from '../grid';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { collectShelter } from '../shelters';
@@ -101,9 +101,6 @@ describe('animals', () => {
     expect(s.inventory.products.egg).toBe(1);
     expect(coopOf(s)?.stock).toBeUndefined();
     expect(produceValue(s)).toBe(ANIMAL_PRODUCTS.egg.sellPrice);
-    const sold = unwrap(sellAnimalProduct(s, 'egg', 1));
-    expect(sold.money).toBe(s.money + ANIMAL_PRODUCTS.egg.sellPrice);
-    expect(unwrap(sellAllProduce(s)).inventory.products).toEqual({});
   });
 
   it('charge feed at midnight; hungry animals stop producing', () => {

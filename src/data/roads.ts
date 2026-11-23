@@ -1,4 +1,4 @@
-/** Roads and the visiting car. Balancing and layout only, no logic. */
+/** Roads and the vehicles that drive on them. Balancing and layout only, no logic. */
 
 /** Tile column of the access road. */
 export const ACCESS_ROAD_X = 32;
@@ -38,8 +38,6 @@ export const CAR = {
   brakeDistance: 4,
   /** Radius (tiles) of the turn between the highway and the access road. */
   junctionRadius: 1.4,
-  /** Game minutes the car stays parked at the farm. */
-  waitMinutes: 40,
-  /** Hours of the day when a car comes to the farm. */
+  /** Hours of the day when the farm's vehicle takes the town load (see data/market PICKUP_DELAY). */
   visitHours: [7, 12, 18],
 } as const;

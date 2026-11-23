@@ -6,11 +6,10 @@ import { CROPS, CROP_IDS } from '../data/crops';
 import { produceValue } from '../game/economy';
 import { useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
-import { Button, Coins, Panel } from './primitives';
+import { Coins, Panel } from './primitives';
 
 function ProduceList() {
   const produce = useGameStore((s) => s.game.inventory.produce);
-  const sell = useGameStore((s) => s.sell);
   const items = CROP_IDS.filter((id) => (produce[id] ?? 0) > 0);
   if (items.length === 0) {
     return <p className="rounded-xl bg-parchment-dark/60 p-3 text-sm font-bold">Nenhuma colheita ainda.</p>;
@@ -25,12 +24,7 @@ function ProduceList() {
             <span className="flex-1 font-black">
               {def.icon} {def.label} <span className="tabular-nums">×{count}</span>
             </span>
-            <Button className="text-sm" onClick={() => sell(id, 1)}>
-              Vender 1
-            </Button>
-            <Button className="text-sm" onClick={() => sell(id, count)}>
-              <Coins value={formatCoins(def.sellPrice * count)} />
-            </Button>
+            <Coins value={formatCoins(def.sellPrice * count)} className="text-sm" />
           </li>
         );
       })}
@@ -40,7 +34,6 @@ function ProduceList() {
 
 function AnimalProductList() {
   const products = useGameStore((s) => s.game.inventory.products);
-  const sell = useGameStore((s) => s.sellProduct);
   const items = ANIMAL_PRODUCT_IDS.filter((id) => (products[id] ?? 0) > 0);
   if (items.length === 0) return null;
   return (
@@ -53,12 +46,7 @@ function AnimalProductList() {
             <span className="flex-1 font-black">
               {def.icon} {def.label} <span className="tabular-nums">×{count}</span>
             </span>
-            <Button className="text-sm" onClick={() => sell(id, 1)}>
-              Vender 1
-            </Button>
-            <Button className="text-sm" onClick={() => sell(id, count)}>
-              <Coins value={formatCoins(def.sellPrice * count)} />
-            </Button>
+            <Coins value={formatCoins(def.sellPrice * count)} className="text-sm" />
           </li>
         );
       })}
@@ -109,16 +97,19 @@ function MedicineList() {
 export function InventoryPanel() {
   const close = useGameStore((s) => s.closePanel);
   const total = useGameStore((s) => produceValue(s.game));
-  const sellAll = useGameStore((s) => s.sellAll);
   return (
     <Panel title="🎒 Inventário" onClose={close}>
       <StorageSummary />
       <h3 className="mt-3 mb-2 font-black">Colheitas</h3>
       <ProduceList />
       <AnimalProductList />
-      <Button variant="leaf" className="mt-3 w-full" disabled={total <= 0} onClick={sellAll}>
-        Vender tudo · <Coins value={formatCoins(total)} />
-      </Button>
+      <p className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-parchment-dark/60 px-3 py-2 text-xs font-bold">
+        <span>Vale cerca de</span>
+        <Coins value={formatCoins(total)} />
+      </p>
+      <p className="mt-1.5 text-xs font-bold text-wood/70">
+        Venda para os clientes que estacionam na doca ou leve ao mercado da cidade.
+      </p>
       <h3 className="mt-5 mb-2 font-black">Sementes</h3>
       <SeedList />
       <h3 className="mt-5 mb-2 font-black">Insumos</h3>

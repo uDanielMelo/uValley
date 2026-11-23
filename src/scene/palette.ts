@@ -91,3 +91,6 @@ export const PALETTE = {
   badgeBorder: '#8a6a48',
   badgeText: '#4a3424',
 } as const;
+
+/** Body colors of the customers' cars at the dock (picked per visit). */
+export const CUSTOMER_CAR_COLORS: readonly string[] = ['#c0392b', '#2e6da4', '#3f7d4a', '#d9d4c7', '#e1a83a', '#5b5f66', '#7a3b6e'];

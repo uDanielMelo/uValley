@@ -93,16 +93,19 @@ interface DockButtonProps {
   active: boolean;
   onClick: () => void;
   expanded?: boolean;
+  /** Small dot calling for attention (e.g. a customer waiting at the dock). */
+  alert?: boolean;
+  title?: string;
 }
 
-function DockButton({ icon, label, hotkey, active, onClick, expanded }: DockButtonProps) {
+function DockButton({ icon, label, hotkey, active, onClick, expanded, alert, title }: DockButtonProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      title={hotkey ? `${label} (${hotkey})` : label}
+      title={title ?? (hotkey ? `${label} (${hotkey})` : label)}
       aria-expanded={expanded}
-      className={`flex h-12 min-w-14 flex-col items-center justify-center rounded-xl px-2 text-[11px] font-extrabold transition ${
+      className={`relative flex h-12 min-w-14 flex-col items-center justify-center rounded-xl px-2 text-[11px] font-extrabold transition ${
         active ? 'bg-coin/50 ring-2 ring-wood/60' : 'hover:bg-parchment-dark'
       }`}
     >
@@ -110,7 +113,26 @@ function DockButton({ icon, label, hotkey, active, onClick, expanded }: DockButt
         {icon}
       </span>
       {label}
+      {alert && <span className="absolute top-1 right-1.5 h-2.5 w-2.5 animate-pulse rounded-full bg-red-600 ring-2 ring-parchment" />}
     </button>
+  );
+}
+
+/** Opens the dock's card; pulses while a customer waits there. */
+function DockShortcut() {
+  const waiting = useGameStore((s) => s.game.shipments.some((x) => x.phase === 'waiting'));
+  const selected = useGameStore((s) => s.game.structures.find((x) => x.id === s.selectedStructure)?.type === 'dock');
+  const focusDock = useGameStore((s) => s.focusDock);
+  return (
+    <DockButton
+      icon="🚚"
+      label="Doca"
+      hotkey=""
+      active={selected}
+      alert={waiting}
+      title={waiting ? 'Doca: cliente esperando' : 'Doca'}
+      onClick={focusDock}
+    />
   );
 }
 
@@ -174,6 +196,7 @@ function FarmDock() {
           onClick={() => setOpen()}
         />
         <DockButton icon="🔨" label="Construir" hotkey="B" active={building} onClick={() => openPanel('build')} />
+        <DockShortcut />
         <span className="h-8 w-px bg-wood/20" aria-hidden />
         <DockButton icon="🏙️" label="Cidade" hotkey="C" active={false} onClick={goToCity} />
       </Card>

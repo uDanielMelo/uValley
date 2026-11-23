@@ -26,6 +26,7 @@ import {
   spawnAnimals,
   unlockAll,
   waterAll,
+  callCustomer,
 } from '../game/dev';
 import type { GameState } from '../game/types';
 import { useGameStore } from '../store/gameStore';
@@ -68,6 +69,7 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.fertilizer(10)     +10 de adubo
   dev.weather('rain')    pula para o próximo dia com esse clima (sunny, cloudy, rain, storm)
   dev.manure()           todos os abrigos cheios de esterco
+  dev.customer()         um cliente sai agora para a doca (se a vaga estiver livre)
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -143,6 +145,12 @@ const devApi = {
   },
   fertilizer: (amount = 10) => apply((g) => addFertilizer(g, amount), `+${amount} de adubo`),
   manure: () => apply(fillManure, 'Abrigos cheios de esterco'),
+  customer: () => {
+    const before = useGameStore.getState().game.shipments.length;
+    apply(callCustomer);
+    const came = useGameStore.getState().game.shipments.length > before;
+    useGameStore.getState().showMessage(came ? '🛠️ Um cliente saiu para a doca' : '🛠️ A vaga da doca está ocupada', came ? 'info' : 'error');
+  },
   medicine: (amount = 5) => apply((g) => addMedicine(g, amount), `+${amount} doses de cada remédio`),
   state: () => useGameStore.getState().game,
 };

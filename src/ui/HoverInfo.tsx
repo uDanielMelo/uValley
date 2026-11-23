@@ -301,10 +301,8 @@ export function HoverInfo() {
   return (
     <Card className="w-64 px-4 py-2">
       <p className="font-black">{title}</p>
-      {tile.structure === 'shippingBin' && <p className="text-sm">Clique para vender sua colheita.</p>}
-      {tile.structure && tile.structure !== 'shippingBin' && (
-        <p className="text-sm">{STRUCTURES[tile.structure].description}</p>
-      )}
+      {tile.structure === 'dock' && <p className="text-sm">Clique para ver quem está na vaga e mandar carregar.</p>}
+      {tile.structure && tile.structure !== 'dock' && <p className="text-sm">{STRUCTURES[tile.structure].description}</p>}
       {tile.structure && <RoadAccessDetails tileIndex={hovered} />}
       {tile.structure && <WorkDetails tileIndex={hovered} />}
       {tile.structure && <ShelterDetails tileIndex={hovered} />}

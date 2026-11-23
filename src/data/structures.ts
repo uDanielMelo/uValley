@@ -4,7 +4,7 @@ import type { AnimalId } from './animals';
 
 export const STRUCTURE_IDS = [
   'house',
-  'shippingBin',
+  'dock',
   'bunkhouse',
   'chickenCoop',
   'pigsty',
@@ -101,6 +101,8 @@ export interface StructureDef {
    * `Tile.structure`, so they can still be tilled, planted and harvested underneath.
    */
   cover?: boolean;
+  /** Stops working without a road to the access road, even though the player cannot build it (the dock). */
+  needsRoad?: boolean;
   /** Present on lights: shelters whose door is within `radius` tiles gain `safety` (see LIGHT_SAFETY_CAP). */
   light?: { radius: number; safety: number };
   /** Short pt-BR description for the build menu. */
@@ -109,13 +111,14 @@ export interface StructureDef {
 
 export const STRUCTURES: Record<StructureId, StructureDef> = {
   house: { id: 'house', label: 'Casa', icon: '🏠', width: 2, depth: 2, description: 'A casa da família.' },
-  shippingBin: {
-    id: 'shippingBin',
-    label: 'Caixa de venda',
-    icon: '📦',
+  dock: {
+    id: 'dock',
+    label: 'Doca',
+    icon: '🚚',
     width: 1,
     depth: 1,
-    description: 'Venda sua colheita aqui.',
+    needsRoad: true,
+    description: 'Plataforma de carga: os clientes estacionam na vaga e a equipe carrega.',
   },
   bunkhouse: {
     id: 'bunkhouse',
@@ -376,6 +379,6 @@ export interface StructurePlacement {
  */
 export const START_STRUCTURES: readonly StructurePlacement[] = [
   { id: 'house', x: 30, y: 56 },
-  { id: 'shippingBin', x: 33, y: 57 },
+  { id: 'dock', x: 33, y: 57 },
   { id: 'bunkhouse', x: 27, y: 57 },
 ];

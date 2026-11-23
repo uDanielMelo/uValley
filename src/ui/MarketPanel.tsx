@@ -44,7 +44,7 @@ function LoadBar() {
       </div>
       <p className="mt-1 text-wood/80">
         Passa na fazenda às {pickup} e leva a carga: pedidos primeiro, o resto no mercado ({Math.round((MARKET_BONUS - 1) * 100)}% a
-        mais que a caixa de venda).
+        mais que o preço de referência).
       </p>
     </div>
   );

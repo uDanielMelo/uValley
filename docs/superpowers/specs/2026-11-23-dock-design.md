@@ -1,6 +1,6 @@
 # Doca e frete: design
 
-Data: 2026-11-23. Status: **rascunho aguardando aprovação do usuário** (o usuário saiu antes de revisar). Nada foi implementado ainda: não escrever código de produto antes da aprovação. Depois de aprovado, o próximo passo é o plano de implementação (skill `superpowers:writing-plans`), uma sub-etapa por vez.
+Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **9a implementada** (branch `fase-4a-etapa-9a`); próximas: 9b–9e, uma sub-etapa por vez. As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
 
 Este documento é a memória do que foi conversado e decidido. Tudo que está em "Decidido pelo usuário" veio da conversa; o que está em "Minhas escolhas" são propostas minhas, provisórias, para o usuário confirmar ou ajustar.
 
@@ -122,6 +122,16 @@ interface HeldPurchase { id: number; goods: ShipmentGood[]; since: number }   //
 3. Venda de gado vivo exige caminhão (não picape)? Minha proposta: sim, a partir do nível 2 da doca.
 4. O carro espontâneo pode pedir coisas que a fazenda ainda não produz? Minha proposta: não, só o que a fazenda conhece (como os pedidos).
 5. A doca no pátio inicial fica no mesmo lugar da caixa de venda (33, 57) com a mesma frente para a rua?
+
+## Respostas adotadas (9a)
+
+1. Carga usa a habilidade Construção (tipo de tarefa `haul`, sem habilidade nova).
+2. Avaria de 15% (pelo menos 1 unidade, só se a carga já tinha começado) e prazo de 2 h (`DOCK` em `src/data/docks.ts`).
+3. Gado vivo exige caminhão (a partir do nível 2 da doca): fica para a 9e.
+4. O cliente avulso só pede o que a fazenda conhece; em 70% das vezes, algo que ela tem em estoque.
+5. A doca fica no lugar da caixa de venda (33, 57), de frente para a rua; a vaga é o tile de estrada à frente.
+
+Diferenças da 9a para o modelo proposto: `Shipment` tem `setOffAt` (para desenhar o carro na ida), `leftAt`/`goneAt` e `outcome` em vez da fase `done`; a viagem só tem o tipo `walkin` e não tem `vehicle`, `freight` nem `direction` (entram na 9b/9c). O cliente que não encontra vaga livre não vem. A venda instantânea do inventário foi removida já na 9a; a carga manual do Mercado fica até a 9b.
 
 ## Como retomar numa nova sessão
 

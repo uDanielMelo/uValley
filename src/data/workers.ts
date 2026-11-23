@@ -23,6 +23,8 @@ export const TASK_SKILL: Record<TaskKind, SkillId> = {
   fertilize: 'farming',
   tend: 'animals',
   build: 'construction',
+  // Loading vehicles at the dock is heavy lifting, like building.
+  haul: 'construction',
 };
 
 export interface AgeBand {
@@ -133,7 +135,7 @@ export const MAX_WORKERS = 12;
 export const MAX_TASKS = 300;
 
 /** Order in which a new worker picks tasks (editable per worker). */
-export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['water', 'hand', 'tend', 'seed', 'fertilize', 'hoe', 'build'];
+export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['haul', 'water', 'hand', 'tend', 'seed', 'fertilize', 'hoe', 'build'];
 
 /** Workers only work between these game hours; outside them they go home. Wages are paid per hour in between. */
 export const WORK_START_HOUR = 6;

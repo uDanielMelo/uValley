@@ -6,7 +6,6 @@ import {
   ANIMAL_PRODUCT_IDS,
   BREEDS,
   type AnimalId,
-  type AnimalProductId,
   type BreedId,
 } from '../data/animals';
 import { CROPS, CROP_IDS, type CropId } from '../data/crops';
@@ -15,7 +14,7 @@ import { SEASONS, SEASON_DAYS } from '../data/climate';
 import { DISEASES, MEDICINES, PREDATORS, type MedicineId, type PredatorId } from '../data/health';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
 import { animalSalePrice, buyAnimal, sellAnimal, type PurchaseAge } from '../game/animals';
-import { buyFertilizer, buyPlot, buySeeds, sellAllProduce, sellAnimalProduct, sellProduce } from '../game/economy';
+import { buyFertilizer, buyPlot, buySeeds } from '../game/economy';
 import { plotOfTile, tileCoords, tileIndex, tilesInRect } from '../game/grid';
 import {
   DEFAULT_SETTINGS,
@@ -38,6 +37,8 @@ import { seasonOf, weatherLook } from '../game/climate';
 import { advanceGame, type FinishedWork } from '../game/simulation';
 import type { Spoiled } from '../game/storage';
 import { createInitialState } from '../game/state';
+import { cancelLoading, dismissShipment, startLoading, type DockEvent } from '../game/shipments';
+import { bayPoint, docksOf } from '../game/dock';
 import { anchorFor, structureAt, upgradeCost } from '../game/structures';
 import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/staff';
 import type { ActionError, ActionResult, Animal, GameState, Rotation, TaskKind, ToolId } from '../game/types';
@@ -136,8 +137,14 @@ export interface GameStore {
   requestPlot: (plot: number | null) => void;
   confirmPlot: () => void;
   buySeeds: (crop: CropId, quantity: number) => void;
-  sell: (crop: CropId, quantity: number) => void;
-  sellAll: () => void;
+  /** Orders the crew to load the vehicle parked at the dock (the goods leave the inventory now). */
+  startLoading: (shipmentId: number) => void;
+  /** Calls the loading off: the goods come back and the vehicle keeps waiting. */
+  cancelLoading: (shipmentId: number) => void;
+  /** Sends a vehicle away without its load. */
+  dismissShipment: (shipmentId: number) => void;
+  /** Selects the dock and brings the camera to it. */
+  focusDock: () => void;
   hireCandidate: (candidateId: number) => void;
   hireTemp: () => void;
   dismiss: (workerId: number) => void;
@@ -150,7 +157,6 @@ export interface GameStore {
   /** Animal selected with the hand (its card is open). */
   selectedAnimal: number | null;
   selectAnimal: (id: number | null) => void;
-  sellProduct: (product: AnimalProductId, quantity: number) => void;
   buyMedicine: (id: MedicineId, quantity: number) => void;
   buyFertilizer: (quantity: number) => void;
   /** Recent predator attacks, for the figure running away. */
@@ -238,6 +244,8 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'already-researched': 'Esta cultura já é conhecida.',
   'no-water-needed': 'Não precisa regar: árvores do pomar e plantas na estufa se viram sozinhas.',
   'not-sick': 'Este animal não está doente.',
+  'no-shipment': 'Este veículo não está mais esperando na doca.',
+  'not-enough-goods': 'Falta mercadoria no estoque para este pedido.',
 };
 
 const label = (type: StructureId): string => STRUCTURES[type].label;
@@ -299,6 +307,29 @@ const spoiledText = (spoiled: Spoiled): string => {
     if (n) parts.push(`${n} ${ANIMAL_PRODUCTS[id].icon} ${ANIMAL_PRODUCTS[id].label.toLowerCase()}`);
   }
   return parts.join(', ');
+};
+
+/** "6 🌾 trigo" */
+const lotText = (lines: readonly { good: Good; quantity: number }[]): string =>
+  lines
+    .map(({ good, quantity }) => {
+      const def = good.kind === 'crop' ? CROPS[good.id] : ANIMAL_PRODUCTS[good.id];
+      return `${quantity} ${def.icon} ${def.label.toLowerCase()}`;
+    })
+    .join(', ');
+
+/** Toast for a vehicle that parked, was loaded or left without its load. */
+const dockText = (event: DockEvent): { text: string; kind: Toast['kind'] } => {
+  const s = event.shipment;
+  if (event.kind === 'arrived') {
+    return {
+      text: `🚗 Cliente na doca: quer ${lotText(s.goods)} por ${s.payment} moedas. Abra a doca para mandar carregar.`,
+      kind: 'info',
+    };
+  }
+  if (event.kind === 'sold') return { text: `🚗 Venda na doca: ${lotText(s.goods)}, +${s.payment} moedas.`, kind: 'info' };
+  const lost = s.lost ? ` A equipe descarregou o que já tinha posto e ${s.lost} unidade(s) se perderam.` : '';
+  return { text: `🚗 O cliente cansou de esperar e foi embora sem a carga.${lost}`, kind: 'error' };
 };
 
 /** Toast text for a site, upgrade or demolition the crew finished. */
@@ -416,6 +447,10 @@ export const useGameStore = create<GameStore>()(
             `🛻 A carga foi para a cidade: +${delivery.earned} moedas${orders ? ` (pedidos: ${orders})` : ''}.`,
             'info',
           );
+        }
+        for (const event of tick.dockEvents) {
+          const { text, kind } = dockText(event);
+          get().showMessage(text, kind);
         }
         if (tick.predatorAttacks.length > 0) get().reportAttacks(tick.predatorAttacks);
         if (tick.diedOfSickness.length > 0) {
@@ -584,11 +619,21 @@ export const useGameStore = create<GameStore>()(
       buySeeds: (crop, quantity) => {
         commit(buySeeds(get().game, crop, quantity));
       },
-      sell: (crop, quantity) => {
-        commit(sellProduce(get().game, crop, quantity));
+      startLoading: (shipmentId) => {
+        commit(startLoading(get().game, shipmentId), '📦 Carga na fila: a equipe com Carga nas atividades vai carregar o veículo.');
       },
-      sellAll: () => {
-        commit(sellAllProduce(get().game), 'Tudo vendido!');
+      cancelLoading: (shipmentId) => {
+        commit(cancelLoading(get().game, shipmentId), 'Carga cancelada: a mercadoria voltou ao estoque.');
+      },
+      dismissShipment: (shipmentId) => {
+        commit(dismissShipment(get().game, shipmentId), 'O cliente foi dispensado.');
+      },
+      focusDock: () => {
+        const dock = docksOf(get().game)[0];
+        if (!dock) return;
+        const bay = bayPoint(dock);
+        set({ selectedStructure: dock.id, selectedAnimal: null, tool: null, buildMode: null, activitiesOpen: false });
+        get().focusCamera(bay.x, bay.y);
       },
       hireCandidate: (candidateId) => {
         const name = get().game.candidates.find((c) => c.id === candidateId)?.name;
@@ -622,9 +667,6 @@ export const useGameStore = create<GameStore>()(
         const price = animal ? animalSalePrice(game.gameMinutes, animal) : 0;
         if (!commit(sellAnimal(game, animalId), `Animal vendido: +${price} moedas.`)) return;
         if (get().selectedAnimal === animalId) set({ selectedAnimal: null });
-      },
-      sellProduct: (product, quantity) => {
-        commit(sellAnimalProduct(get().game, product, quantity));
       },
       buyFertilizer: (quantity) => {
         commit(buyFertilizer(get().game, quantity), `Adubo: +${quantity}.`);

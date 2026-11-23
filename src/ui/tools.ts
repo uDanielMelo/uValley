@@ -34,6 +34,7 @@ export const TASK_LABELS: Record<TaskKind, string> = {
   fertilize: 'Adubar',
   tend: 'Tratar animais',
   build: 'Obras',
+  haul: 'Carga',
 };
 
 export const TASK_ICONS: Record<TaskKind, string> = {
@@ -44,6 +45,7 @@ export const TASK_ICONS: Record<TaskKind, string> = {
   fertilize: '💩',
   tend: '🪣',
   build: '🔨',
+  haul: '📦',
 };
 
 /** Ongoing-action verbs (pt-BR) for worker status. */
@@ -55,6 +57,7 @@ export const TASK_VERBS: Record<TaskKind, string> = {
   fertilize: 'Adubando',
   tend: 'Cuidando dos animais',
   build: 'Em obra',
+  haul: 'Carregando',
 };
 
 /** What a construction or animal care task is about: [label, ongoing verb] (pt-BR). */
@@ -67,6 +70,7 @@ const jobWords = (game: GameState, task: Task): [string, string] => {
     return [`Medicar ${name}`, `Medicando ${name}`];
   }
   if (job?.type === 'carcass') return ['Recolher carcaça', 'Recolhendo carcaça'];
+  if (job?.type === 'shipment') return ['Carregar veículo na doca', 'Carregando veículo na doca'];
   const target = job ? game.structures.find((s) => s.id === job.structureId) : undefined;
   if (!target) return [TASK_LABELS[task.kind], TASK_VERBS[task.kind]];
   const name = STRUCTURES[target.type].label.toLowerCase();

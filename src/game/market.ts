@@ -37,7 +37,7 @@ export const goodKey = (good: Good): string => `${good.kind}:${good.id}`;
 
 export const unitWeight = (good: Good): number => (good.kind === 'crop' ? CROP_WEIGHT[good.id] : PRODUCT_WEIGHT[good.id]);
 
-/** The shipping bin price of one unit. */
+/** The reference price of one unit (what a walk-in customer pays, give or take). */
 export const basePrice = (good: Good): number =>
   good.kind === 'crop' ? CROPS[good.id].sellPrice : ANIMAL_PRODUCTS[good.id].sellPrice;
 
@@ -50,7 +50,7 @@ export const emptyCargo = (): Cargo => ({ produce: {}, products: {} });
 export const countIn = (holder: Pick<Inventory, 'produce' | 'products'>, good: Good): number =>
   good.kind === 'crop' ? (holder.produce[good.id] ?? 0) : (holder.products[good.id] ?? 0);
 
-const addTo = <T extends Pick<Inventory, 'produce' | 'products'>>(holder: T, good: Good, delta: number): T =>
+export const addTo = <T extends Pick<Inventory, 'produce' | 'products'>>(holder: T, good: Good, delta: number): T =>
   good.kind === 'crop'
     ? { ...holder, produce: addCount(holder.produce, good.id, delta) }
     : { ...holder, products: addCount(holder.products, good.id, delta) };

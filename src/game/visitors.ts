@@ -1,16 +1,13 @@
 import { ACCESS_ROAD_X, CAR } from '../data/roads';
-import { START_STRUCTURES } from '../data/structures';
-import { GRID_SIZE, MINUTES_PER_DAY } from '../data/world';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { accessRoadExit } from './roads';
-import { frontPoint } from './structures';
-import type { GridPoint, Tile } from './types';
+import type { GridPoint, Shipment, Tile } from './types';
 
 /**
- * The visiting car. It is purely derived from the clock and the road network (never saved):
- * at each visit hour it drives in from far beyond the map edge along the roads, taking the bends
- * in arcs, parks at the road tile closest to the front of the shipping bin, waits, and drives back
- * out until it disappears.
+ * Vehicles visiting the dock. Each one follows a saved shipment (game/shipments.ts): it drives in
+ * from far beyond the map edge along the roads, taking the bends in arcs, parks at the road tile
+ * closest to its bay and, when it leaves, drives back out until it disappears. Only the times are
+ * saved; the routes are derived from the road network.
  */
 
 const DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
@@ -19,13 +16,6 @@ const DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
   [0, 1],
   [-1, 0],
 ];
-
-/** Where the car tries to park: on the road in front of the shipping bin. */
-const parkingGoal = (): GridPoint => {
-  const bin = START_STRUCTURES.find((s) => s.id === 'shippingBin');
-  if (!bin) return { x: GRID_SIZE / 2, y: GRID_SIZE / 2 };
-  return frontPoint({ type: bin.id, x: bin.x, y: bin.y, rotation: 0 }, 0.5);
-};
 
 /** Radius (tiles) of the turns on farm roads: the bend drawn on a corner road tile. */
 const FARM_TURN_RADIUS = 0.5;
@@ -98,12 +88,12 @@ export interface CarRoutes {
 }
 
 /**
- * The car's routes in tile space. It comes along the highway, turns into the access road at the
+ * A vehicle's routes in tile space. It comes along the highway, turns into the access road at the
  * junction and follows road tiles (4-connected) from the map entry to the parking spot: the
- * reachable road tile closest to the shipping bin (ties: the shorter drive). It leaves the same
- * way back and turns the other way on the highway, so both drives have the same length.
+ * reachable road tile closest to `goal`, its bay (ties: the shorter drive). It leaves the same way
+ * back and turns the other way on the highway, so both drives have the same length.
  */
-export const carRoutes = (tiles: readonly Tile[]): CarRoutes => {
+export const carRoutes = (tiles: readonly Tile[], goal: GridPoint): CarRoutes => {
   const exit = accessRoadExit();
   const entry = tileIndex(ACCESS_ROAD_X, exit.edgeRow);
   const { border: edge, turn: junction, highwayEast, highwayWest } = exit;
@@ -114,7 +104,6 @@ export const carRoutes = (tiles: readonly Tile[]): CarRoutes => {
     };
   }
 
-  const goal = parkingGoal();
   const parent = new Map<number, number>([[entry, -1]]);
   const queue = [entry];
   let best = entry;
@@ -194,7 +183,7 @@ const arrivalDistance = (length: number, t: number): number => {
   return length - brake + v * tau - (v * v * tau * tau) / (4 * brake || 1);
 };
 
-export type CarPhase = 'arriving' | 'parked' | 'leaving' | 'away';
+export type CarPhase = 'arriving' | 'parked' | 'leaving';
 
 export interface CarState {
   phase: CarPhase;
@@ -203,29 +192,36 @@ export interface CarState {
   y: number;
   /** Direction the car's nose points: atan2(dx, dy) in tile space. */
   heading: number;
-  /** Which visit of the day this is (for the car's look). */
-  visit: number;
 }
 
-/** Where the car is at a given game time. */
-export const carState = (gameMinutes: number, routes: CarRoutes): CarState => {
-  const route = routes.arrive;
-  const length = routeLength(route);
-  const drive = driveMinutes(length);
-  const minute = ((gameMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
-  const start = route[0] ?? { x: 0, y: 0 };
-  for (let visit = 0; visit < CAR.visitHours.length; visit++) {
-    const t = minute - (CAR.visitHours[visit] ?? 0) * 60;
-    if (t < 0) continue;
-    if (t < drive) return { phase: 'arriving', visit, ...pointAt(route, arrivalDistance(length, t)) };
-    if (t < drive + CAR.waitMinutes) return { phase: 'parked', visit, ...pointAt(route, length) };
-    const back = t - drive - CAR.waitMinutes;
-    if (back < drive) {
-      // Leaving mirrors arriving in time: speed up from the parking spot, then cruise away.
-      const leaveLength = routeLength(routes.leave);
-      const p = pointAt(routes.leave, leaveLength - arrivalDistance(leaveLength, drive - back));
-      return { phase: 'leaving', visit, x: p.x, y: p.y, heading: p.heading };
-    }
+/**
+ * Where a shipment's vehicle is at a given game time, or null once it is out of sight. The drives
+ * are stretched to the saved times, so the vehicle parks exactly when the shipment arrives even
+ * if the roads changed on the way.
+ */
+export const shipmentCar = (
+  shipment: Pick<Shipment, 'phase' | 'setOffAt' | 'arrivesAt' | 'leftAt' | 'goneAt'>,
+  gameMinutes: number,
+  routes: CarRoutes,
+): CarState | null => {
+  const arrive = routes.arrive;
+  const length = routeLength(arrive);
+  if (shipment.phase === 'leaving') {
+    const leftAt = shipment.leftAt ?? gameMinutes;
+    const span = (shipment.goneAt ?? leftAt) - leftAt;
+    const back = gameMinutes - leftAt;
+    if (span <= 0 || back >= span) return null;
+    // Leaving mirrors arriving in time: speed up from the parking spot, then cruise away.
+    const leaveLength = routeLength(routes.leave);
+    const drive = driveMinutes(leaveLength);
+    const p = pointAt(routes.leave, leaveLength - arrivalDistance(leaveLength, drive - (back / span) * drive));
+    return { phase: 'leaving', ...p };
   }
-  return { phase: 'away', visit: 0, x: start.x, y: start.y, heading: -Math.PI / 2 };
+  const span = shipment.arrivesAt - shipment.setOffAt;
+  const t = gameMinutes - shipment.setOffAt;
+  if (shipment.phase === 'enroute' && t < span && span > 0) {
+    if (t < 0) return null;
+    return { phase: 'arriving', ...pointAt(arrive, arrivalDistance(length, (t / span) * driveMinutes(length))) };
+  }
+  return { phase: 'parked', ...pointAt(arrive, length) };
 };
