@@ -60,6 +60,7 @@ export const createInitialState = (): GameState => {
     research: { unlocked: [...STARTING_CROPS], current: null },
     structures,
     shipments: [],
+    machines: [],
     held: [],
     feedOrder: { auto: true, days: FEED.autoDays },
     nextId,

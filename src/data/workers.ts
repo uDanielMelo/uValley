@@ -4,7 +4,7 @@ import type { Specialty, Stars, TaskKind, ToolId } from '../game/types';
 
 // ---------- attributes ----------
 
-export const SKILL_IDS = ['farming', 'animals', 'construction'] as const;
+export const SKILL_IDS = ['farming', 'animals', 'construction', 'machinery'] as const;
 /** General skills: a worker doing a task of their skill works faster and better. */
 export type SkillId = (typeof SKILL_IDS)[number];
 
@@ -12,6 +12,7 @@ export const SKILLS: Record<SkillId, { label: string; icon: string }> = {
   farming: { label: 'Plantio', icon: '🌱' },
   animals: { label: 'Tratar animais', icon: '🐄' },
   construction: { label: 'Construção', icon: '🔨' },
+  machinery: { label: 'Maquinário', icon: '🚜' },
 };
 
 /** The general skill each task uses. */
@@ -69,6 +70,8 @@ export const STAR_LEVELS: Record<Stars, StarLevel> = {
 
 /** Extra coins per hour for a worker with a specialty. */
 export const SPECIALTY_WAGE = 1;
+/** Extra coins per hour for a worker who can drive machinery. */
+export const MACHINERY_WAGE = 1;
 
 /** Bonus when the task uses one of the worker's general skills. */
 export const SKILL_BONUS = { speed: 1.15, effectiveness: 1.1 } as const;
@@ -89,7 +92,7 @@ export const CANDIDATE_COUNT = 4;
 export const SECOND_SKILL_CHANCE: Record<Stars, number> = { 1: 0.1, 2: 0.25, 3: 0.5 };
 export const SPECIALTY_CHANCE = 0.4;
 /** Relative weight of each general skill when generating a worker. */
-export const SKILL_WEIGHTS: Record<SkillId, number> = { farming: 0.5, animals: 0.3, construction: 0.2 };
+export const SKILL_WEIGHTS: Record<SkillId, number> = { farming: 0.42, animals: 0.26, construction: 0.17, machinery: 0.15 };
 
 /** First names for generated workers (pt-BR). */
 export const WORKER_NAMES: readonly string[] = [

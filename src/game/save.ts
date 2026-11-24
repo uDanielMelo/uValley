@@ -12,6 +12,7 @@ import {
 import { CROP_IDS, type CropId } from '../data/crops';
 import { DISEASE_IDS, MEDICINE_IDS, type DiseaseId, type MedicineId } from '../data/health';
 import { SHELTER_LEVEL_IDS, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
+import { CONDITION, MACHINE_IDS, type MachineId } from '../data/machines';
 import { DEFAULT_PRIORITIES, SKILL_IDS, type SkillId } from '../data/workers';
 import { SPEED_OPTIONS, type GameSpeed } from '../data/world';
 import { PLOT_COUNT, TILE_COUNT, inBounds, isValidTileIndex } from './grid';
@@ -20,6 +21,7 @@ import type {
   Animal,
   AnimalHealth,
   Candidate,
+  Machine,
   Carcass,
   Delivery,
   HeldPurchase,
@@ -60,7 +62,7 @@ import { rehomeAnimals } from './shelters';
 import { repairHaulTasks } from './shipments';
 import { stampStructures } from './structures';
 
-export const SAVE_VERSION = 23;
+export const SAVE_VERSION = 24;
 /**
  * Saves older than this were made on the 32x32 map, before buildings needed roads; they cannot be
  * placed on the new map, so loading one starts a new game.
@@ -91,7 +93,7 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * (`job.siteId`). Earlier versions (v1–v15, on the 32x32 map) are not loaded.
  */
 export interface SaveDataV23 {
-  saveVersion: 23;
+  saveVersion: 24;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
@@ -253,6 +255,8 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
   21: migrateV21,
   // v23 adds player-built fences (Tile.fence, 'fence' jobs): nothing to convert.
   22: (data) => ({ ...data, saveVersion: 23 }),
+  // v24 adds machinery (GameState.machines, the machinery skill, riding workers).
+  23: (data) => ({ ...data, machines: [], saveVersion: 24 }),
 };
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {
@@ -351,6 +355,7 @@ const STARS: readonly Stars[] = [1, 2, 3];
 const isStars = (v: unknown): v is Stars => STARS.some((s) => s === v);
 const isSkillId = (v: unknown): v is SkillId => SKILL_IDS.some((s) => s === v);
 const isTaskKind = (v: unknown): v is TaskKind => TASK_KINDS.some((t) => t === v);
+const isMachineId = (v: unknown): v is MachineId => MACHINE_IDS.some((m) => m === v);
 const isWorkerKind = (v: unknown): v is WorkerKind => WORKER_KINDS.some((k) => k === v);
 const isId = (v: unknown): v is number => isFiniteNumber(v) && Number.isInteger(v) && v >= 0;
 
@@ -411,6 +416,37 @@ const parseWorker = (v: unknown): Worker | null => {
     taskId,
     path: points,
     progress: Math.max(0, progress),
+    ...(isId(v.machineId) ? { machineId: v.machineId } : {}),
+    ...(v.riding === true && isId(v.machineId) ? { riding: true as const } : {}),
+    ...(isId(v.rentalId) ? { rentalId: v.rentalId } : {}),
+  };
+};
+
+const parseMachine = (v: unknown): Machine | null => {
+  if (!isRecord(v)) return null;
+  const { id, type, parkId, slot, condition } = v;
+  if (!isId(id) || !isMachineId(type) || !isId(parkId) || !isId(slot)) return null;
+  if (!isFiniteNumber(condition)) return null;
+  let rental: Machine['rental'];
+  if (v.rental !== undefined) {
+    if (!isRecord(v.rental) || !isFiniteNumber(v.rental.until)) return null;
+    const operatorId = v.rental.operatorId;
+    if (operatorId !== undefined && !isId(operatorId)) return null;
+    rental = operatorId === undefined ? { until: v.rental.until } : { until: v.rental.until, operatorId };
+  }
+  if (v.repairUntil !== undefined && !isFiniteNumber(v.repairUntil)) return null;
+  if (v.driverId !== undefined && !isId(v.driverId)) return null;
+  if (v.unpaidMinutes !== undefined && !isFiniteNumber(v.unpaidMinutes)) return null;
+  return {
+    id,
+    type,
+    parkId,
+    slot,
+    condition: Math.min(CONDITION.max, Math.max(0, condition)),
+    ...(rental ? { rental } : {}),
+    ...(v.repairUntil !== undefined ? { repairUntil: v.repairUntil } : {}),
+    ...(v.driverId !== undefined ? { driverId: v.driverId } : {}),
+    ...(v.unpaidMinutes !== undefined ? { unpaidMinutes: Math.max(0, v.unpaidMinutes) } : {}),
   };
 };
 
@@ -748,6 +784,10 @@ const parseGame = (v: unknown): GameState | null => {
   const orders = parseList(v.orders, parseOrder);
   const research = parseResearch(v.research);
   const allShipments = parseList(v.shipments, parseShipment);
+  // A machine that does not validate is dropped, not the whole save.
+  const machines = Array.isArray(v.machines)
+    ? v.machines.map(parseMachine).filter((m): m is Machine => m !== null)
+    : [];
   const listings = parseList(v.listings, parseListing);
   const allOffers = parseList(v.offers, parseOffer);
   if (!allShipments || !listings || !allOffers) return null;
@@ -767,6 +807,7 @@ const parseGame = (v: unknown): GameState | null => {
     ...orders.map((o) => o.id),
     ...structures.map((s) => s.id),
     ...allShipments.map((s) => s.id),
+    ...machines.map((m) => m.id),
     ...listings.map((l) => l.id),
     ...allOffers.map((o) => o.id),
     ...held.map((h) => h.id),
@@ -799,6 +840,7 @@ const parseGame = (v: unknown): GameState | null => {
     research,
     structures,
     shipments,
+    machines,
     held,
     feedOrder,
     nextId: Math.max(nextId, maxId + 1),

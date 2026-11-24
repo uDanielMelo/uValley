@@ -5,6 +5,7 @@ import {
   CANDIDATE_COUNT,
   DEFAULT_PRIORITIES,
   HARVEST_BONUS,
+  MACHINERY_WAGE,
   MAX_AGE,
   MAX_WORKERS,
   MIN_AGE,
@@ -55,8 +56,8 @@ export const ageBand = (age: number): AgeBand => {
   return band;
 };
 
-export const hourlyWageFor = (stars: Stars, specialty: Specialty | null): number =>
-  STAR_LEVELS[stars].hourlyWage + (specialty ? SPECIALTY_WAGE : 0);
+export const hourlyWageFor = (stars: Stars, specialty: Specialty | null, skills: readonly SkillId[] = []): number =>
+  STAR_LEVELS[stars].hourlyWage + (specialty ? SPECIALTY_WAGE : 0) + (skills.includes('machinery') ? MACHINERY_WAGE : 0);
 
 /** What a task is about, for skill and specialty matching. */
 export interface TaskContext {
@@ -180,7 +181,7 @@ export const rollProfile = (seed: number, usedNames: ReadonlySet<string>): Worke
       specialty = { kind: 'crop', id: CROP_IDS[Math.floor(r() * CROP_IDS.length)] ?? CROP_IDS[0] };
     }
   }
-  return { name: freeName(usedNames, r()), age, stars, skills, specialty, hourlyWage: hourlyWageFor(stars, specialty) };
+  return { name: freeName(usedNames, r()), age, stars, skills, specialty, hourlyWage: hourlyWageFor(stars, specialty, skills) };
 };
 
 const namesInUse = (state: Pick<GameState, 'workers' | 'candidates'>): Set<string> =>

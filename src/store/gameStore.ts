@@ -315,6 +315,11 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'already-fence': 'Já tem cerca aqui.',
   'not-gate': 'Isso não é uma porteira.',
   'no-room-for-fence': 'Nenhum tile livre para cerca nessa linha.',
+  'no-shed': 'Construa um galpão ou estacionamento para guardar máquinas.',
+  'no-parking': 'Não há vaga livre para a máquina.',
+  'no-machine': 'Essa máquina não existe.',
+  'machine-busy': 'A máquina está em uso.',
+  'machine-broken': 'A máquina está quebrada.',
 };
 
 const label = (type: StructureId): string => STRUCTURES[type].label;

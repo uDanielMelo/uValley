@@ -2,6 +2,7 @@ import type { AnimalId, AnimalProductId, BreedId } from '../data/animals';
 import type { DiseaseId, MedicineId } from '../data/health';
 import type { OrderGood, TownShopId, VehicleLevel } from '../data/market';
 import type { CropId } from '../data/crops';
+import type { MachineId } from '../data/machines';
 import type { ShelterLevel, StructureId } from '../data/structures';
 import type { SkillId } from '../data/workers';
 
@@ -314,6 +315,12 @@ export interface Worker extends WorkerProfile {
   path: GridPoint[];
   /** Work minutes already spent on the current task. */
   progress: number;
+  /** The machine this worker is riding or heading to (a machine id). */
+  machineId?: number;
+  /** True while mounted on the machine. */
+  riding?: true;
+  /** The rented machine this worker came with (a machine id). */
+  rentalId?: number;
 }
 
 /** Someone on the hiring board. */
@@ -407,12 +414,31 @@ export interface GameState {
   structures: StructureInstance[];
   /** Vehicles on their way to, at or leaving the dock. */
   shipments: Shipment[];
+  /** Owned and rented machines, parked in sheds and parking lots. */
+  machines: Machine[];
   /** Deliveries that went back to town, waiting for a new freight. */
   held: HeldPurchase[];
   /** Automatic feed orders: on or off, and how many days of feed to keep. */
   feedOrder: { auto: boolean; days: number };
   /** Next id for tasks, workers, candidates, animals, carcasses, structures and shipments. */
   nextId: number;
+}
+
+/** A tractor or harvester, parked in a shed or parking lot (`parkId`) at a bay (`slot`). */
+export interface Machine {
+  id: number;
+  type: MachineId;
+  parkId: number;
+  slot: number;
+  /** Condition points, 0 (broken) to `CONDITION.max`. */
+  condition: number;
+  /** Set while rented: the game minute it ends and the operator that came with it. */
+  rental?: { until: number; operatorId?: number };
+  /** Game minute the machine is back from the town mechanic. */
+  repairUntil?: number;
+  driverId?: number;
+  /** Game minutes away from the bay not yet charged as fuel. */
+  unpaidMinutes?: number;
 }
 
 export type ToolId = 'hoe' | 'seed' | 'water' | 'hand' | 'fertilize';
@@ -493,7 +519,12 @@ export type ActionError =
   | 'no-fence'
   | 'already-fence'
   | 'not-gate'
-  | 'no-room-for-fence';
+  | 'no-room-for-fence'
+  | 'no-shed'
+  | 'no-parking'
+  | 'no-machine'
+  | 'machine-busy'
+  | 'machine-broken';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 
