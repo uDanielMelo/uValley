@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MACHINES } from '../../data/machines';
 import type { SkillId } from '../../data/workers';
 import { tileIndex } from '../grid';
+import { homeSpot } from '../home';
 import { availableMachine, buyMachine, machineCanDo, releaseOrphanMachines } from '../machines';
 import { dismissWorker } from '../staff';
 import { createInitialState } from '../state';
@@ -123,10 +124,20 @@ describe('mounted operator', () => {
     const base = setup();
     const id = firstWorker(base).id;
     const machine = firstMachine(base);
-    let s = queueHoe(mount(base, id, machine.id, { x: 26.5, y: 45.5 }), [tileIndex(30, 50)]);
+    let s = queueHoe(mount({ ...base, gameMinutes: 19 * 60 + 50 }, id, machine.id, { x: 26.5, y: 45.5 }), [tileIndex(30, 52)]);
+    // He takes the task and drives off to it.
+    s = step(s);
+    const taskId = firstWorker(s).taskId;
+    expect(taskId).not.toBeNull();
+    expect(firstWorker(s).riding).toBe(true);
+    expect(s.tasks[0]?.workerId).toBe(id);
+    // Cross 20h still mid-task: the task goes back to the queue, unassigned.
     s = { ...s, gameMinutes: 19 * 60 + 59 };
     s = step(s);
+    expect(s.gameMinutes).toBe(20 * 60);
+    expect(firstWorker(s).taskId).toBeNull();
     expect(firstWorker(s).riding).toBe(true);
+    expect(s.tasks).toEqual([expect.objectContaining({ id: taskId, workerId: null })]);
     for (let k = 0; k < 120 && firstWorker(s).machineId !== undefined; k++) s = step(s);
     const w = firstWorker(s);
     expect(w.machineId).toBeUndefined();
@@ -135,9 +146,41 @@ describe('mounted operator', () => {
     const parked = firstMachine(s);
     expect(parked.driverId).toBeUndefined();
     expect(parked).toMatchObject({ parkId: machine.parkId, slot: machine.slot });
+    // Off the machine, he heads home like everyone else.
+    expect(w.path.at(-1)).toEqual(homeSpot(s, 0));
     // The dropped task waits in the queue for tomorrow.
-    expect(s.tasks).toHaveLength(1);
-    expect(s.tasks[0]?.workerId).toBeNull();
+    expect(s.tiles[tileIndex(30, 52)]?.state).toBe('grass');
+    expect(s.tasks).toEqual([expect.objectContaining({ id: taskId, workerId: null })]);
+  });
+
+  it.each([
+    ['breaks', (m: Machine): Machine => ({ ...m, condition: 0 })],
+    ['is taken by the mechanic', (m: Machine): Machine => ({ ...m, repairUntil: 30 * 60 })],
+  ])('drops the task and parks when the machine %s mid-task', (_label, stop) => {
+    const base = setup();
+    const id = firstWorker(base).id;
+    const machine = firstMachine(base);
+    let s = queueHoe(mount(base, id, machine.id, { x: 26.5, y: 45.5 }), [tileIndex(30, 52)]);
+    s = step(s);
+    const taskId = firstWorker(s).taskId;
+    expect(taskId).not.toBeNull();
+    expect(firstWorker(s).path.length).toBeGreaterThan(0);
+    s = { ...s, machines: s.machines.map(stop) };
+    s = step(s);
+    expect(firstWorker(s).taskId).toBeNull();
+    expect(firstWorker(s).riding).toBe(true);
+    expect(s.tasks).toEqual([expect.objectContaining({ id: taskId, workerId: null })]);
+    for (let k = 0; k < 120 && firstWorker(s).machineId !== undefined; k++) s = step(s);
+    expect(firstWorker(s).machineId).toBeUndefined();
+    expect(firstWorker(s).riding).toBeUndefined();
+    expect(firstMachine(s).driverId).toBeUndefined();
+    expect(firstMachine(s)).toMatchObject({ parkId: machine.parkId, slot: machine.slot });
+    expect(s.tiles[tileIndex(30, 52)]?.state).toBe('grass');
+    // Still on shift, he goes back to the task on foot (the machine stays in its bay).
+    s = step(s);
+    expect(firstWorker(s).taskId).toBe(taskId);
+    expect(firstWorker(s).machineId).toBeUndefined();
+    expect(firstMachine(s).driverId).toBeUndefined();
   });
 
   it('drops the reservation when the task is cancelled', () => {
