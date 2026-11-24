@@ -276,6 +276,12 @@ export const pastureArea = (tiles: readonly Tile[], shelter: Pick<StructureInsta
   return area;
 };
 
+/** True when a fence stands on the grass just outside the shelter's road ring (a pen built tight around it). */
+export const pennedTight = (tiles: readonly Tile[], shelter: Pick<StructureInstance, 'type' | 'x' | 'y' | 'rotation'>): boolean =>
+  ringAround(footprintOf(shelter.type, shelter.x, shelter.y, shelter.rotation), ROAD_RING + 1).some(
+    (c) => inBounds(c.x, c.y) && tiles[tileIndex(c.x, c.y)]?.fence !== undefined,
+  );
+
 /** Centre of the area tile nearest to p, or null when the area is empty. */
 export const nearestInArea = (area: ReadonlySet<number>, p: GridPoint): GridPoint | null => {
   let best: GridPoint | null = null;

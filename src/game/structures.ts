@@ -392,7 +392,7 @@ export const linkToNetwork = (state: GameState, s: StructureInstance): GameState
   const busy = new Set(state.tasks.map((t) => t.tile));
   const crossable = (index: number): boolean => {
     const tile = state.tiles[index];
-    return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !busy.has(index);
+    return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.fence && !busy.has(index);
   };
   const starts = ringCells(s.type, s.x, s.y, s.rotation)
     .filter((c) => inBounds(c.x, c.y))

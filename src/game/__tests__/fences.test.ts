@@ -5,7 +5,9 @@ import { stepAnimals } from '../animals';
 import { layFenceLine, setTimeOfDay, spawnAnimals } from '../dev';
 import { nearestInArea, pastureArea } from '../fences';
 import { shelterDoor } from '../shelters';
-import { placeStructure } from '../structures';
+import { footprintOf, placeStructure } from '../structures';
+import { ringAround } from '../roads';
+import { pastureCapacity } from '../shelters';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { createInitialState } from '../state';
 import type { ActionResult, GameState, GridPoint, Task, TileFence } from '../types';
@@ -338,5 +340,43 @@ describe('dev fence', () => {
     expect([0, 1, 2, 3].every((k) => s.tiles[tileIndex(20 + k, 40 + k)]?.fence)).toBe(true);
     expect(s.money).toBe(s0.money);
     expect(s.tasks).toEqual(s0.tasks);
+  });
+});
+
+// ---------- Final review fixes ----------
+
+describe('fence review fixes', () => {
+  it('a tight pen right outside the ring road keeps the hens in', () => {
+    let s = spawnAnimals(setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 28, 44)), 7), 'chicken', 3);
+    const coop = shelterOf(s, 'chickenCoop');
+    const fp = footprintOf(coop.type, coop.x, coop.y, coop.rotation);
+    const inner = new Set(ringAround(fp, 1).map((c) => `${c.x},${c.y}`));
+    const pen = ringAround(fp, 2)
+      .filter((c) => !inner.has(`${c.x},${c.y}`))
+      .filter((c) => {
+        const t = s.tiles[tileIndex(c.x, c.y)];
+        return t?.state === 'grass' && !t.road && !t.structure;
+      })
+      .map((c) => [c.x, c.y] as const);
+    s = withFences(s, pen);
+    const inPen = (p: GridPoint) => p.x >= fp.x - 2 && p.x < fp.x + fp.width + 2 && p.y >= fp.y - 2 && p.y < fp.y + fp.depth + 2;
+    for (let i = 0; i < 80; i++) {
+      s = stepAnimals(s, 10);
+      s = { ...s, gameMinutes: s.gameMinutes + 10 };
+      for (const a of s.animals) expect(inPen(a)).toBe(true);
+    }
+  });
+
+  it('linking a structure to the road network never paves over a fence', () => {
+    const fenced = withFences(createInitialState(), Array.from({ length: 30 }, (_, k) => [17 + k, 50] as const));
+    const placed = unwrap(placeStructure(fenced, 'chickenCoop', 28, 40));
+    for (let k = 0; k < 30; k++) expect(placed.tiles[tileIndex(17 + k, 50)]?.fence).toBeDefined();
+  });
+
+  it('fencing the pasture does not shrink its capacity', () => {
+    const s0 = createInitialState();
+    const before = pastureCapacity(s0);
+    const fenced = withFences(s0, Array.from({ length: 10 }, (_, k) => [20 + k, 36] as const));
+    expect(pastureCapacity(fenced)).toBe(before);
   });
 });

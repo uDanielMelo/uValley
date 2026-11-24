@@ -26,8 +26,8 @@ import { BABY_MANURE, MANURE_PER_DAY } from '../data/fertilizer';
 import { SICK_RESALE } from '../data/health';
 import { MINUTES_PER_DAY } from '../data/world';
 import { healthFactor, healthMoveSpeed, isKnownSick } from './disease';
-import { tileIndex } from './grid';
-import { animalPassable, nearestInArea, pastureArea } from './fences';
+import { inBounds, tileIndex } from './grid';
+import { animalPassable, nearestInArea, pastureArea, pennedTight } from './fences';
 import { findPath, segmentClear } from './path';
 import { hash01 } from './random';
 import {
@@ -285,7 +285,10 @@ const pickTarget = (
       y: ty + 0.2 + hash01(seed + k * 17 + 9) * 0.6,
     };
     if (Math.hypot(target.x - home.x, target.y - home.y) > LEASH_RADIUS) continue;
-    if (!onPasture || segmentClear(animal, target, pasture)) return target;
+    // Leaving the door (or a road) the walk may cross road, but never a fence.
+    const leaving = (x: number, y: number) =>
+      pasture(x, y) || (x === fx && y === fy) || (inBounds(x, y) && tiles[tileIndex(x, y)]?.road === true);
+    if (segmentClear(animal, target, onPasture ? pasture : leaving)) return target;
   }
   return null;
 };
@@ -347,7 +350,8 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
     const shelter = world.structures.find((s) => s.id === a.shelterId);
     const home = shelter ? shelterDoor(shelter) : { x: a.x, y: a.y };
     const grazing = shelter ? pastureArea(world.tiles, shelter) : null;
-    const area = grazing && grazing.size > 0 ? grazing : null;
+    // No grass to reach: fenced in tight, the animals stay by the door; boxed in by roads, they roam as before.
+    const area = grazing && (grazing.size > 0 || (shelter && pennedTight(world.tiles, shelter))) ? grazing : null;
 
     const product = animalProduct(a);
     // Penned for sale: it waits in the pen, not producing, and only walks in.

@@ -16,7 +16,7 @@ import {
 } from '../data/structures';
 import { HOME_POSITION, MAX_TASKS } from '../data/workers';
 import { PLOT_SIZE } from '../data/world';
-import { inBounds, tileCoords, tileIndex, tilesInPlot } from './grid';
+import { inBounds, tileIndex, tilesInPlot } from './grid';
 import { addCount } from './inventory';
 import {
   findFreeSpot,
@@ -131,19 +131,23 @@ export const shelterFor = (state: GameState, kind: AnimalId): StructureInstance 
 
 // ---------- pasture ----------
 
-/** Animals graze on unlocked grass without structures or roads; tilled land is off limits. */
+/** Grass that feeds animals: unlocked, without structures or roads (a fence on it still counts). */
+const grazingLand = (tile: Tile | undefined): tile is Tile =>
+  !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.road;
+
+/** Animals graze on unlocked grass without structures, roads or fences; tilled land is off limits. */
 export const isPasture = (tiles: readonly Tile[], x: number, y: number): boolean => {
   if (!inBounds(x, y)) return false;
   const tile = tiles[tileIndex(x, y)];
-  return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.road && !tile.fence;
+  return grazingLand(tile) && !tile.fence;
 };
 
 /** Pasture units a plot holds: PLOT_PASTURE_UNITS when all its tiles are free grass. */
 export const plotPastureUnits = (tiles: readonly Tile[], plot: number): number => {
   let grass = 0;
   for (const index of tilesInPlot(plot)) {
-    const { x, y } = tileCoords(index);
-    if (isPasture(tiles, x, y)) grass++;
+    // Fences stand on the pasture without taking it away.
+    if (grazingLand(tiles[index])) grass++;
   }
   return (PLOT_PASTURE_UNITS * grass) / (PLOT_SIZE * PLOT_SIZE);
 };
