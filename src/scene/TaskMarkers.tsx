@@ -18,11 +18,13 @@ const COLORS: Record<ToolId, Color> = {
 };
 const ROAD = new Color(PALETTE.taskRoad);
 const ROAD_REMOVE = new Color(PALETTE.taskRoadRemove);
+const FENCE = new Color(PALETTE.taskFence);
 
 /** Marker color for a task, or null when it has none (structure work shows as a site, chores need none). */
 const colorOf = (task: Task): Color | null => {
   if (task.kind === 'tend' || task.kind === 'haul') return null;
   if (task.kind !== 'build') return COLORS[task.kind];
+  if (task.job?.type === 'fence') return task.job.remove ? ROAD_REMOVE : FENCE;
   if (task.job?.type !== 'road') return null;
   return task.job.remove ? ROAD_REMOVE : ROAD;
 };

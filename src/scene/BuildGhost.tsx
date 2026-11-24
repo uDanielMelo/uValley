@@ -1,11 +1,13 @@
-import { fenceError } from '../game/fences';
+import { Html } from '@react-three/drei';
+import { fenceError, fencePlan } from '../game/fences';
+import { FenceCost } from '../ui/FenceCost';
 import { useMemo } from 'react';
 import { STRUCTURES } from '../data/structures';
 import { tileCoords } from '../game/grid';
 import { checkRoadOrder, previewPlacement } from '../game/construction';
 import { anchorFor, footprintOf, structureAt } from '../game/structures';
 import { useGameStore } from '../store/gameStore';
-import { cornerToWorld } from './coords';
+import { cornerToWorld, tileToWorld } from './coords';
 import { PALETTE } from './palette';
 import { TranslucentModel } from './TranslucentModel';
 
@@ -39,7 +41,48 @@ function FootprintOverlay({ area, inset = 0.04, opacity = 0.45 }: { area: Area; 
  * (sandy where a road will be opened, orange when the ring does not reach the access road, red
  * where something is in the way), or the target of demolition.
  */
+/** A fence line being dragged: green tiles to build, red ones skipped, and the price card at its end. */
+function FenceDragGhost() {
+  const drag = useGameStore((s) => s.fenceDrag);
+  const tiles = useGameStore((s) => s.game.tiles);
+  const tasks = useGameStore((s) => s.game.tasks);
+  const money = useGameStore((s) => s.game.money);
+  const plan = useMemo(
+    () => (drag ? fencePlan(useGameStore.getState().game, drag.from, drag.to) : null),
+    // The plan only changes with the drag, the tiles, the queue and the money.
+    [drag, tiles, tasks, money],
+  );
+  if (!plan) return null;
+  const end = plan.tiles[plan.tiles.length - 1];
+  const at = end === undefined ? null : tileCoords(end);
+  const cell = (tile: number, color: string) => {
+    const { x, y } = tileCoords(tile);
+    return <FootprintOverlay key={tile} area={{ x, y, width: 1, depth: 1, color }} />;
+  };
+  return (
+    <group>
+      {plan.valid.map((t) => cell(t, PALETTE.hoverValid))}
+      {plan.blocked.map((t) => cell(t, PALETTE.hoverInvalid))}
+      {at && (
+        <Html position={[...tileToWorldXZ(at.x, at.y)]} center={false} style={{ pointerEvents: 'none' }} zIndexRange={[20, 0]}>
+          <FenceCost plan={plan} money={money} />
+        </Html>
+      )}
+    </group>
+  );
+}
+
+const tileToWorldXZ = (x: number, y: number): [number, number, number] => {
+  const [wx, wz] = tileToWorld(x, y);
+  return [wx, 1.2, wz];
+};
+
 export function BuildGhost() {
+  const dragging = useGameStore((s) => s.fenceDrag !== null);
+  return dragging ? <FenceDragGhost /> : <HoverGhost />;
+}
+
+function HoverGhost() {
   const mode = useGameStore((s) => s.buildMode);
   const rotation = useGameStore((s) => s.buildRotation);
   const hovered = useGameStore((s) => s.hoveredTile);

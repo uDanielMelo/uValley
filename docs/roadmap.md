@@ -200,6 +200,19 @@ fica aberto aos predadores. A venda instantânea de animais saiu. Save v21. Deci
 na vaga do próprio curral (não precisa da vaga de caminhão da doca), a condução é uma tarefa de Tratar animais
 e o embarque usa a Carga, e um animal na lista do caminhão não pode mais ser tirado da venda.
 
+### Etapa 10a: cercas e porteiras ✅ (pedido do usuário)
+Cercas construídas pelo jogador para fechar o pasto, com diagonal a 45° para a fazenda não ficar toda quadrada.
+Desenho e plano em `docs/superpowers/specs/2026-11-24-fences-design.md` e `docs/superpowers/plans/2026-11-24-fences.md`.
+
+Feito: cerca por tile (`Tile.fence`) ligada aos 8 vizinhos; clicar, arrastar e soltar traça a linha (0°, 45° ou 90°),
+com cartão de tiles, moedas e materiais (poste, tábua, arame, dobradiça) que só detalham o preço: reta 4, diagonal 6,
+porteira 11 por tile. A equipe constrói tile a tile (Obras). Porteira na grama ou numa cerca; com a Mão, clique abre e
+fecha. A cerca bloqueia ferramentas, obras, ruas e pasto, e ninguém corta o canto de uma diagonal. Os animais só pastam
+na área alcançável da porta do abrigo sem cruzar cerca, porteira fechada ou rua; com a porteira fechada atrás deles,
+vacas e bois voltam para dentro da cerca e os outros para o abrigo. Save v23. Decidido por mim: a equipe passa por
+qualquer porteira (senão ficaria presa fora do pasto), animais voltando para casa também, e a área do pasto começa na
+grama logo fora do anel de rua (a porta fica na rua).
+
 ### Vias e mapa maior (pedido do usuário) ✅
 
 Decidido com o usuário:

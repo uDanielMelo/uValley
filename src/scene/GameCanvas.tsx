@@ -12,6 +12,7 @@ import { CropLayer } from './CropLayer';
 import { DayNightLight } from './DayNightLight';
 import { Environment } from './Environment';
 import { Fences } from './Fences';
+import { FenceLayer } from './FenceLayer';
 import { GameLoop } from './GameLoop';
 import { GrassLayer } from './GrassLayer';
 import { PostFx } from './PostFx';
@@ -51,6 +52,7 @@ export function GameCanvas() {
         <BuildGhost />
         <TaskMarkers />
         <Fences />
+        <FenceLayer />
         <CropLayer />
         <Structures />
         <Workers />

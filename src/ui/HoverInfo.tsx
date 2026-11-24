@@ -297,7 +297,11 @@ export function HoverInfo() {
       ? tile.state === 'locked'
         ? 'Estrada de acesso'
         : 'Estrada de terra'
-      : `${selfWatered ? 'Plantado' : STATE_LABELS[tile.state]}${tile.fertilized ? ` · ${FERTILIZER.icon} adubado` : ''}${tile.cover ? ' · na estufa' : ''}`;
+      : tile.fence
+        ? tile.fence.gate
+          ? `Porteira ${tile.fence.open ? 'aberta' : 'fechada'}`
+          : 'Cerca'
+        : `${selfWatered ? 'Plantado' : STATE_LABELS[tile.state]}${tile.fertilized ? ` · ${FERTILIZER.icon} adubado` : ''}${tile.cover ? ' · na estufa' : ''}`;
   return (
     <Card className="w-64 px-4 py-2">
       <p className="font-black">{title}</p>
@@ -306,6 +310,9 @@ export function HoverInfo() {
       {tile.structure && <RoadAccessDetails tileIndex={hovered} />}
       {tile.structure && <WorkDetails tileIndex={hovered} />}
       {tile.structure && <ShelterDetails tileIndex={hovered} />}
+      {tile.fence?.gate && (
+        <p className="text-sm">Com a Mão, clique para {tile.fence.open ? 'fechar' : 'abrir'}. Aberta, os animais passam.</p>
+      )}
       {tile.state === 'locked' && <PlotDetails tileIndex={hovered} />}
       <CropDetails tile={tile} />
       <QueuedTasks tileIndex={hovered} />

@@ -1,5 +1,6 @@
 import { BUILDABLE_IDS, CATEGORY_LABELS, DEMOLISH_REFUND, STRUCTURES, type StructureCategory, type StructureId } from '../data/structures';
 import { ROAD_COST, ROAD_WALK_BONUS } from '../data/roads';
+import { pieceCost } from '../game/fences';
 import { buildMinutesFor } from '../game/structures';
 import { useGameStore } from '../store/gameStore';
 import { formatCoins, formatWorkTime } from './format';
@@ -67,6 +68,42 @@ function RoadRow() {
   );
 }
 
+/** A fence piece to drag (fence) or click (gate). */
+function FenceRow({ mode }: { mode: 'fence' | 'gate' }) {
+  const money = useGameStore((s) => s.game.money);
+  const active = useGameStore((s) => s.buildMode === mode);
+  const setBuildMode = useGameStore((s) => s.setBuildMode);
+  const cost = pieceCost(mode === 'gate' ? 'gate' : 'straight');
+  return (
+    <button
+      type="button"
+      disabled={money < cost}
+      onClick={() => setBuildMode(active ? null : mode)}
+      className={`w-full rounded-xl border-2 p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
+        active ? 'border-wood bg-coin/40' : 'border-transparent bg-parchment-dark/60 hover:bg-parchment-dark'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-base font-black">{mode === 'gate' ? '🚪 Porteira' : '🪵 Cerca'}</span>
+        <span className="flex items-center gap-1 text-sm font-black">
+          <Coins value={formatCoins(cost)} className={money < cost ? 'text-red-700' : ''} />
+          {mode === 'fence' && (
+            <>
+              {' '}
+              / tile (diagonal <Coins value={formatCoins(pieceCost('diagonal'))} />)
+            </>
+          )}
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs font-bold text-wood/80">
+        {mode === 'gate'
+          ? 'Clique numa cerca ou na grama. Com a Mão, clique na porteira para abrir ou fechar: aberta, os animais passam.'
+          : 'Clique e arraste: reta ou a 45°. Fecha o pasto dos animais; a equipe passa pelas porteiras.'}
+      </p>
+    </button>
+  );
+}
+
 /** Build menu: pick a structure to place, or switch to demolition. */
 export function BuildPanel() {
   const close = useGameStore((s) => s.closePanel);
@@ -88,6 +125,13 @@ export function BuildPanel() {
         <section>
           <h3 className="mb-2 text-sm font-black tracking-wide text-wood/70 uppercase">Caminhos</h3>
           <RoadRow />
+        </section>
+        <section>
+          <h3 className="mb-2 text-sm font-black tracking-wide text-wood/70 uppercase">Cercas</h3>
+          <div className="flex flex-col gap-2">
+            <FenceRow mode="fence" />
+            <FenceRow mode="gate" />
+          </div>
         </section>
         <p className="text-xs font-bold text-wood/80">
           Cada construção (menos decoração) ganha uma rua em volta, a {ROAD_COST} moedas por trecho novo; vizinhos

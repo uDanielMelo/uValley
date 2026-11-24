@@ -31,6 +31,7 @@ export const PALETTE = {
   // Decoration
   fence: '#d6b07a',
   fencePost: '#9a7044',
+  fenceGate: '#b98a52',
   trunk: '#6b4a2b',
   foliageA: '#5e9a3a',
   foliageB: '#78b047',
@@ -77,6 +78,7 @@ export const PALETTE = {
   /** Road being opened, and road being removed. */
   taskRoad: '#e0a45a',
   taskRoadRemove: '#ff6b5a',
+  taskFence: '#c98a3e',
   // Construction sites
   siteGround: '#8a6a48',
   scaffold: '#c9a26b',
