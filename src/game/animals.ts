@@ -26,6 +26,8 @@ import { BABY_MANURE, MANURE_PER_DAY } from '../data/fertilizer';
 import { SICK_RESALE } from '../data/health';
 import { MINUTES_PER_DAY } from '../data/world';
 import { healthFactor, healthMoveSpeed, isKnownSick } from './disease';
+import { tileIndex } from './grid';
+import { animalPassable, nearestInArea, pastureArea } from './fences';
 import { findPath, segmentClear } from './path';
 import { hash01 } from './random';
 import {
@@ -255,19 +257,29 @@ export const laborMultipliers = (state: GameState): { hoe: number; walk: number 
   return { hoe: 1 + Math.min(hoe, LABOR_BONUS_CAP), walk: 1 + Math.min(walk, LABOR_BONUS_CAP) };
 };
 
-/** Picks a nearby pasture spot within reach of home, reachable in a straight line over pasture, or null. */
-const pickTarget = (tiles: readonly Tile[], animal: Animal, home: GridPoint, seed: number): GridPoint | null => {
+/**
+ * Picks a nearby pasture spot within reach of home and inside its fenced area (when it has one),
+ * reachable in a straight line over pasture and open gates, or null.
+ */
+const pickTarget = (
+  tiles: readonly Tile[],
+  animal: Animal,
+  home: GridPoint,
+  area: ReadonlySet<number> | null,
+  seed: number,
+): GridPoint | null => {
   const fx = Math.floor(animal.x);
   const fy = Math.floor(animal.y);
-  const onPasture = isPasture(tiles, fx, fy);
-  const pasture = (x: number, y: number) => isPasture(tiles, x, y);
+  const onPasture = animalPassable(tiles, fx, fy);
+  const pasture = (x: number, y: number) => animalPassable(tiles, x, y);
   for (let k = 0; k < 8; k++) {
     const dx = Math.round((hash01(seed + k * 7) * 2 - 1) * WANDER_RADIUS);
     const dy = Math.round((hash01(seed + k * 11 + 3) * 2 - 1) * WANDER_RADIUS);
     // Off-pasture animals (at the door, or their tile was tilled) look further to find grass.
     const tx = fx + dx * (onPasture ? 1 : 2);
     const ty = fy + dy * (onPasture ? 1 : 2);
-    if (!pasture(tx, ty)) continue;
+    if (!isPasture(tiles, tx, ty)) continue;
+    if (area && !area.has(tileIndex(tx, ty))) continue;
     const target = {
       x: tx + 0.2 + hash01(seed + k * 13 + 5) * 0.6,
       y: ty + 0.2 + hash01(seed + k * 17 + 9) * 0.6,
@@ -276,6 +288,13 @@ const pickTarget = (tiles: readonly Tile[], animal: Animal, home: GridPoint, see
     if (!onPasture || segmentClear(animal, target, pasture)) return target;
   }
   return null;
+};
+
+/** On grazing ground outside its shelter's area (on a road or at the door it is just passing). */
+const shutOut = (tiles: readonly Tile[], p: GridPoint, area: ReadonlySet<number>): boolean => {
+  const x = Math.floor(p.x);
+  const y = Math.floor(p.y);
+  return animalPassable(tiles, x, y) && !area.has(tileIndex(x, y));
 };
 
 /** Moves along a path for `distance` tiles. */
@@ -327,6 +346,8 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
     let spot: Pick<Animal, 'x' | 'y' | 'path'> = { x: a.x, y: a.y, path: a.path };
     const shelter = world.structures.find((s) => s.id === a.shelterId);
     const home = shelter ? shelterDoor(shelter) : { x: a.x, y: a.y };
+    const grazing = shelter ? pastureArea(world.tiles, shelter) : null;
+    const area = grazing && grazing.size > 0 ? grazing : null;
 
     const product = animalProduct(a);
     // Penned for sale: it waits in the pen, not producing, and only walks in.
@@ -352,12 +373,16 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
       const away = Math.hypot(home.x - spot.x, home.y - spot.y);
       if (!awake) {
         if (away > AT_DOOR) spot = { ...spot, path: findPath(world.tiles, spot, home) };
+      } else if (area && shutOut(world.tiles, spot, area)) {
+        // A gate closed behind it: cattle walk back into the fenced area, the others to the shelter.
+        const back = a.kind === 'cow' || a.kind === 'ox' ? nearestInArea(area, spot) : null;
+        spot = { ...spot, path: findPath(world.tiles, spot, back ?? home) };
       } else if (away > LEASH_RADIUS + 1) {
         spot = { ...spot, path: findPath(world.tiles, spot, home) };
       } else if (waitMinutes > 0) {
         waitMinutes = Math.max(0, waitMinutes - minutes);
       } else {
-        const target = pickTarget(world.tiles, a, home, a.id * 7919 + tick);
+        const target = pickTarget(world.tiles, a, home, area, a.id * 7919 + tick);
         if (target) spot = { ...spot, path: [target] };
         else waitMinutes = WANDER_PAUSE[0];
       }

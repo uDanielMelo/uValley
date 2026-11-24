@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { tileIndex, withTile } from '../grid';
+import { tileCoords, tileIndex, withTile } from '../grid';
+import { LEASH_RADIUS } from '../../data/animals';
+import { stepAnimals } from '../animals';
+import { setTimeOfDay, spawnAnimals } from '../dev';
+import { nearestInArea, pastureArea } from '../fences';
+import { shelterDoor } from '../shelters';
+import { placeStructure } from '../structures';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { createInitialState } from '../state';
 import type { ActionResult, GameState, GridPoint, Task, TileFence } from '../types';
@@ -228,5 +234,97 @@ describe('fences block', () => {
       [31, 41],
     ]);
     expect(segmentClear({ x: 30.6, y: 41.4 }, { x: 31.4, y: 40.6 }, (x, y) => isWalkable(s.tiles, x, y))).toBe(false);
+  });
+});
+
+// ---------- Task 4: animals kept in by fences ----------
+
+const RECT = { x0: 25, y0: 41, x1: 33, y1: 48 };
+
+/** Fence cells on the border of RECT, skipping roads and buildings (a road leaves through the wall). */
+const rectWall = (s: GameState): Array<readonly [number, number]> => {
+  const cells: Array<readonly [number, number]> = [];
+  for (let x = RECT.x0; x <= RECT.x1; x++) {
+    for (let y = RECT.y0; y <= RECT.y1; y++) {
+      const border = x === RECT.x0 || x === RECT.x1 || y === RECT.y0 || y === RECT.y1;
+      const tile = s.tiles[tileIndex(x, y)];
+      if (border && tile?.state === 'grass' && !tile.road && !tile.structure) cells.push([x, y]);
+    }
+  }
+  return cells;
+};
+
+const insideRect = (p: GridPoint) => p.x >= RECT.x0 && p.x < RECT.x1 + 1 && p.y >= RECT.y0 && p.y < RECT.y1 + 1;
+
+/** A coop at (28, 44) with one hen, fenced in by RECT, at 7:00. */
+const fencedCoop = (): GameState => {
+  const s = spawnAnimals(setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 28, 44)), 7), 'chicken', 1);
+  return withFences(s, rectWall(s));
+};
+
+const shelterOf = (s: GameState, type: string) => {
+  const found = s.structures.find((x) => x.type === type);
+  if (!found) throw new Error(`no ${type}`);
+  return found;
+};
+
+describe('animals and fences', () => {
+  it('with no fences the area is the connected grass and wandering stays near the door', () => {
+    let s = spawnAnimals(setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 28, 44)), 7), 'chicken', 1);
+    const coop = shelterOf(s, 'chickenCoop');
+    expect(pastureArea(s.tiles, coop).size).toBeGreaterThan(100);
+    const door = shelterDoor(coop);
+    for (let i = 0; i < 60; i++) {
+      s = stepAnimals(s, 10);
+      s = { ...s, gameMinutes: s.gameMinutes + 10 };
+      for (const a of s.animals) expect(Math.hypot(a.x - door.x, a.y - door.y)).toBeLessThanOrEqual(LEASH_RADIUS + 2);
+    }
+  });
+
+  it('a closed fence keeps a hen inside', () => {
+    let s = fencedCoop();
+    for (let i = 0; i < 300; i++) {
+      s = stepAnimals(s, 10);
+      s = { ...s, gameMinutes: s.gameMinutes + 10 };
+      for (const a of s.animals) expect(insideRect(a)).toBe(true);
+    }
+  });
+
+  it('an open gate lets it out', () => {
+    const s = fencedCoop();
+    const coop = shelterOf(s, 'chickenCoop');
+    const closed = pastureArea(s.tiles, coop);
+    const gate = withFences(s, [[RECT.x0, 45]], { gate: true, open: true });
+    const open = pastureArea(gate.tiles, coop);
+    expect([...closed].some((t) => !insideRect(tileCoords(t)))).toBe(false);
+    expect([...open].some((t) => !insideRect(tileCoords(t)))).toBe(true);
+  });
+
+  it('closing the gate sends a hen outside back to the door', () => {
+    const s = fencedCoop();
+    const coop = shelterOf(s, 'chickenCoop');
+    const door = shelterDoor(coop);
+    const outside = { x: RECT.x0 - 1.5, y: 45.5 };
+    const placed = { ...s, animals: s.animals.map((a) => ({ ...a, ...outside, path: [], waitMinutes: 0 })) };
+    const stepped = stepAnimals(placed, 1);
+    const hen = stepped.animals[0];
+    expect(hen?.path.at(-1)).toEqual(door);
+    // Once home it wanders inside again, without being sent back.
+    const home = { ...s, animals: s.animals.map((a) => ({ ...a, ...door, path: [], waitMinutes: 0 })) };
+    const next = stepAnimals(home, 1).animals[0];
+    const target = next?.path.at(-1);
+    if (target) expect(pastureArea(s.tiles, coop).has(tileIndex(Math.floor(target.x), Math.floor(target.y)))).toBe(true);
+  });
+
+  it('closing the gate brings a cow back inside the fence, not to the shelter', () => {
+    const base = spawnAnimals(setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'corral', 28, 44)), 7), 'cow', 1);
+    const s = withFences(base, rectWall(base));
+    const corral = shelterOf(s, 'corral');
+    const outside = { x: RECT.x0 - 1.5, y: 45.5 };
+    const placed = { ...s, animals: s.animals.map((a) => ({ ...a, ...outside, path: [], waitMinutes: 0 })) };
+    const cow = stepAnimals(placed, 1).animals[0];
+    const end = cow?.path.at(-1);
+    expect(end).toEqual(nearestInArea(pastureArea(s.tiles, corral), outside));
+    expect(end).not.toEqual(shelterDoor(corral));
   });
 });

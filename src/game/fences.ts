@@ -4,11 +4,25 @@
  * tile, like roads; people walk through gates, animals only through open ones.
  */
 import { FENCE_MATERIALS, FENCE_RECIPES, FENCE_WORK_MINUTES, type FenceMaterialId, type FencePiece } from '../data/fences';
+import { ROAD_RING } from '../data/roads';
 import { DEMOLISH_REFUND } from '../data/structures';
 import { MAX_TASKS } from '../data/workers';
 import { inBounds, isValidTileIndex, tileCoords, tileIndex, withTile } from './grid';
+import { ringAround } from './roads';
+import { isPasture } from './shelters';
+import { footprintOf } from './structures';
 import { dropTasks, lastTaskOn, projectTasks } from './tasks';
-import { fail, ok, type ActionError, type ActionResult, type GameState, type Task, type Tile } from './types';
+import {
+  fail,
+  ok,
+  type ActionError,
+  type ActionResult,
+  type GameState,
+  type GridPoint,
+  type StructureInstance,
+  type Task,
+  type Tile,
+} from './types';
 
 /** The 8 directions, counter-clockwise from +x, one per 45°. */
 const DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
@@ -203,3 +217,76 @@ export const toggleGate = (state: GameState, index: number): ActionResult => {
 /** Work minutes (at speed 1) of a fence task. */
 export const fenceTaskMinutes = (job: { remove: boolean; gate?: true }): number =>
   job.remove ? FENCE_WORK_MINUTES.remove : job.gate ? FENCE_WORK_MINUTES.gate : FENCE_WORK_MINUTES.build;
+
+// ---------- animals ----------
+
+/** Animals may stand here: pasture, or an open gate. */
+export const animalPassable = (tiles: readonly Tile[], x: number, y: number): boolean => {
+  if (isPasture(tiles, x, y)) return true;
+  const fence = inBounds(x, y) ? tiles[tileIndex(x, y)]?.fence : undefined;
+  return fence?.gate === true && fence.open === true;
+};
+
+const areaCache = new WeakMap<readonly Tile[], Map<string, ReadonlySet<number>>>();
+
+/**
+ * Tiles a shelter's animals may graze: everything reachable (4 directions, over pasture and open
+ * gates) from the grass just outside the shelter's road ring. Fences, closed gates, roads and
+ * buildings bound it. Cached per tiles array.
+ */
+export const pastureArea = (tiles: readonly Tile[], shelter: Pick<StructureInstance, 'type' | 'x' | 'y' | 'rotation'>): ReadonlySet<number> => {
+  const key = `${shelter.type}:${shelter.x}:${shelter.y}:${shelter.rotation}`;
+  let byShelter = areaCache.get(tiles);
+  const cached = byShelter?.get(key);
+  if (cached) return cached;
+  const area = new Set<number>();
+  const queue: number[] = [];
+  for (const c of ringAround(footprintOf(shelter.type, shelter.x, shelter.y, shelter.rotation), ROAD_RING + 1)) {
+    if (!animalPassable(tiles, c.x, c.y)) continue;
+    const index = tileIndex(c.x, c.y);
+    if (!area.has(index)) {
+      area.add(index);
+      queue.push(index);
+    }
+  }
+  while (queue.length > 0) {
+    const current = queue.pop();
+    if (current === undefined) break;
+    const { x, y } = tileCoords(current);
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (!animalPassable(tiles, nx, ny)) continue;
+      const next = tileIndex(nx, ny);
+      if (area.has(next)) continue;
+      area.add(next);
+      queue.push(next);
+    }
+  }
+  if (!byShelter) {
+    byShelter = new Map();
+    areaCache.set(tiles, byShelter);
+  }
+  byShelter.set(key, area);
+  return area;
+};
+
+/** Centre of the area tile nearest to p, or null when the area is empty. */
+export const nearestInArea = (area: ReadonlySet<number>, p: GridPoint): GridPoint | null => {
+  let best: GridPoint | null = null;
+  let bestDistance = Infinity;
+  for (const index of area) {
+    const { x, y } = tileCoords(index);
+    const d = Math.hypot(x + 0.5 - p.x, y + 0.5 - p.y);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = { x: x + 0.5, y: y + 0.5 };
+    }
+  }
+  return best;
+};
