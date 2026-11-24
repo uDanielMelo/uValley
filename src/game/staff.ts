@@ -239,14 +239,15 @@ export const createStartingWorkers = (firstId: number, home: (slot: number) => {
   STARTING_WORKERS.map((t, i) => makeWorker(firstId + i, 'staff', fromTemplate(t), home(i)));
 
 export const staffCount = (state: GameState): number => state.workers.filter((w) => w.kind === 'staff').length;
-export const tempCount = (state: GameState): number => state.workers.filter((w) => w.kind === 'temp').length;
+export const tempCount = (state: GameState): number =>
+  state.workers.filter((w) => w.kind === 'temp' && w.rentalId === undefined).length;
 export const freeBeds = (state: GameState): number => bedCount(state) - staffCount(state);
 
 /** Releases a worker's task back to the queue. */
 export const unassign = (tasks: readonly Task[], workerId: number): Task[] =>
   tasks.map((t) => (t.workerId === workerId ? { ...t, workerId: null } : t));
 
-const removeWorkers = (state: GameState, leaving: ReadonlySet<number>): GameState => {
+export const removeWorkers = (state: GameState, leaving: ReadonlySet<number>): GameState => {
   if (leaving.size === 0) return state;
   let tasks = state.tasks;
   for (const id of leaving) tasks = unassign(tasks, id);
@@ -328,7 +329,7 @@ export const payHourlyWages = (state: GameState): { state: GameState; left: stri
 
 /** Day laborers go home for good at the end of the shift. */
 export const releaseTemps = (state: GameState): GameState =>
-  removeWorkers(state, new Set(state.workers.filter((w) => w.kind === 'temp').map((w) => w.id)));
+  removeWorkers(state, new Set(state.workers.filter((w) => w.kind === 'temp' && w.rentalId === undefined).map((w) => w.id)));
 
 /** Replaces a worker's task list (unknown or repeated kinds are dropped). */
 export const setPriorities = (state: GameState, workerId: number, priorities: readonly TaskKind[]): ActionResult => {

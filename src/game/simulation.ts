@@ -17,6 +17,7 @@ import type { Animal, GameState, Offer, StructureInstance, StructureWorkKind } f
 import type { ShelterLevel, StructureId } from '../data/structures';
 import { hasRoadAccess, refundFor } from './structures';
 import { stepWorkers } from './workers';
+import { endRentals, type MachineEvent } from './machines';
 
 export interface TickResult {
   state: GameState;
@@ -47,6 +48,8 @@ export interface TickResult {
   researched: CropId | null;
   /** Vehicles that parked at the dock, were loaded and paid, or left without their load. */
   dockEvents: DockEvent[];
+  /** Rented machines taken back at the end of the rental. */
+  machineEvents: MachineEvent[];
 }
 
 export interface FinishedWork {
@@ -104,13 +107,16 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       feedOrdered: 0,
       researched: null,
       dockEvents: [],
+      machineEvents: [],
     };
   }
   const gameMinutes = state.gameMinutes + dtMinutes;
   const from = Math.floor(state.gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const to = Math.floor(gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const tiles = to > from ? growTiles(state.tiles, from, to) : state.tiles;
-  const aged = removeDeadAnimals(stepAnimals(stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes), dtMinutes));
+  const worked = stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes);
+  const rentals = endRentals(worked);
+  const aged = removeDeadAnimals(stepAnimals(rentals.state, dtMinutes));
   const animalsDied = aged.died;
   const studied = stepResearch(aged.state, dtMinutes);
   const health = stepHealth(studied.state, state.gameMinutes);
@@ -166,6 +172,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
     feedOrdered,
     researched: studied.finished,
     dockEvents: dockEvents(state.shipments, next.shipments),
+    machineEvents: rentals.events,
     workersLeft,
     hungryAnimals,
     tempsLeft,

@@ -3,6 +3,7 @@ import { STAR_LEVELS, MACHINERY_WAGE } from '../../data/workers';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { createInitialState } from '../state';
 import { hourlyWageFor } from '../staff';
+import { placeStructure } from '../structures';
 import type { GameState, Machine } from '../types';
 
 const reload = (s: GameState): GameState => {
@@ -19,17 +20,20 @@ const houseId = (s: GameState): number => {
 
 describe('machine save', () => {
   it('round-trips machines and riding workers', () => {
-    const s0 = createInitialState();
+    const placed = placeStructure(createInitialState(), 'machineShed', 20, 40, 0, { free: true });
+    if (!placed.ok) throw new Error(placed.error);
+    const s0 = placed.state;
+    const shedId = s0.structures.find((m) => m.type === 'machineShed')?.id ?? -1;
     const [first, ...rest] = s0.workers;
     if (!first) throw new Error('no worker');
     const machine: Machine = {
       id: 900,
       type: 'tractor',
-      parkId: houseId(s0),
+      parkId: shedId,
       slot: 0,
       condition: 62.5,
-      rental: { until: 5000, operatorId: 901 },
-      driverId: 901,
+      rental: { until: 5000, operatorId: first.id },
+      driverId: first.id,
       unpaidMinutes: 12,
     };
     const rider = { ...first, machineId: 900, riding: true as const, rentalId: 900 };

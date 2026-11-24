@@ -58,6 +58,7 @@ import type {
 } from './types';
 import { repairSiteTasks } from './construction';
 import { STARTING_CROPS } from './research';
+import { rehomeMachines } from './machines';
 import { rehomeAnimals } from './shelters';
 import { repairHaulTasks } from './shipments';
 import { stampStructures } from './structures';
@@ -819,7 +820,7 @@ const parseGame = (v: unknown): GameState | null => {
 
   // Every animal has a shelter, construction tasks and sites match (a site always has its crew),
   // and so do the loaders and the vehicles being loaded.
-  return repairHaulTasks(repairSiteTasks(rehomeAnimals({
+  return repairHaulTasks(repairSiteTasks(rehomeMachines(rehomeAnimals({
     gameMinutes,
     money,
     // Tile flags are derived from the structure list, so footprint changes never leave stale tiles.
@@ -844,7 +845,7 @@ const parseGame = (v: unknown): GameState | null => {
     held,
     feedOrder,
     nextId: Math.max(nextId, maxId + 1),
-  })));
+  }))));
 };
 
 const parseSettings = (v: unknown): SaveSettings => {
