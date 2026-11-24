@@ -1,11 +1,13 @@
 /** Farm machinery: buying, selling, renting and returning machines. */
+import { CROPS } from '../data/crops';
 import { CONDITION, MACHINES, RENTAL, RESALE, type MachineId, type RentalDays } from '../data/machines';
 import { MAX_WORKERS, WORK_END_HOUR } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { homeSpot } from './home';
-import { freeSlot, parkingDef } from './parking';
+import { boardingPoint, freeSlot, parkingDef } from './parking';
 import { makeWorker, removeWorkers, rollProfile } from './staff';
-import { fail, ok, type ActionResult, type GameState, type Machine, type Worker } from './types';
+import { isActive } from './structures';
+import { fail, ok, type ActionResult, type GameState, type GridPoint, type Machine, type Task, type Worker } from './types';
 
 export interface MachineEvent {
   kind: 'arrived' | 'rental-ended' | 'broke' | 'repaired' | 'no-fuel';
@@ -163,4 +165,85 @@ export const rehomeMachines = (state: GameState): GameState => {
       return rest;
     }),
   };
+};
+
+// ---------- driving ----------
+
+/** Workers with the Machinery skill drive the farm's machines. */
+export const isOperator = (w: Pick<Worker, 'skills'>): boolean => w.skills.includes('machinery');
+
+/**
+ * Whether a machine can do a task: its own kind of task, on a tile outside a greenhouse; the
+ * harvester only reaps field crops (not orchards).
+ */
+export const machineCanDo = (state: Pick<GameState, 'tiles'>, type: MachineId, task: Pick<Task, 'kind' | 'tile'>): boolean => {
+  if (task.kind !== MACHINES[type].task) return false;
+  const tile = state.tiles[task.tile];
+  if (!tile || tile.cover) return false;
+  if (task.kind !== 'hand') return true;
+  return tile.crop !== undefined && CROPS[tile.crop.cropId].kind === 'field';
+};
+
+/** A machine that has to go back to its bay: broken, at the mechanic, rental over or no money for the diesel. */
+export const mustPark = (state: Pick<GameState, 'gameMinutes' | 'money'>, m: Machine): boolean =>
+  m.condition <= 0 ||
+  (m.repairUntil !== undefined && m.repairUntil > state.gameMinutes) ||
+  (m.rental !== undefined && m.rental.until <= state.gameMinutes) ||
+  (m.rental === undefined && state.money < MACHINES[m.type].costPerHour);
+
+/** Pace multiplier from the machine's condition. */
+export const conditionFactor = (m: Pick<Machine, 'condition'>): number =>
+  m.condition < CONDITION.slowBelow ? CONDITION.slowFactor : 1;
+
+/** Where the driver of a machine gets on and off it (on the road in front of its bay). */
+export const machineBoarding = (state: Pick<GameState, 'structures'>, m: Machine): GridPoint | null => {
+  const park = state.structures.find((s) => s.id === m.parkId);
+  return park ? boardingPoint(park, m.slot) : null;
+};
+
+/**
+ * A parked machine the worker could take for the task: nobody driving it, fit to run, in a bay of
+ * a working structure (reached by road) and able to do the task. The nearest one to the worker.
+ */
+export const availableMachine = (state: GameState, worker: Pick<Worker, 'x' | 'y'>, task: Task): Machine | undefined => {
+  let best: Machine | undefined;
+  let bestDistance = Infinity;
+  for (const m of state.machines) {
+    if (m.driverId !== undefined || mustPark(state, m) || !machineCanDo(state, m.type, task)) continue;
+    const park = state.structures.find((s) => s.id === m.parkId);
+    if (!park || !isActive(state, park)) continue;
+    const p = boardingPoint(park, m.slot);
+    const d = Math.hypot(p.x - worker.x, p.y - worker.y);
+    if (d < bestDistance) {
+      best = m;
+      bestDistance = d;
+    }
+  }
+  return best;
+};
+
+/**
+ * Keeps drivers and machines pointing at each other: a machine whose driver is gone (or no longer
+ * has it) goes back to its bay at once, and a worker whose machine is gone (or driven by someone
+ * else) is back on foot.
+ */
+export const releaseOrphanMachines = (state: GameState): GameState => {
+  const machines = state.machines.map((m): Machine => {
+    if (m.driverId === undefined) return m;
+    const driverId = m.driverId;
+    if (state.workers.some((w) => w.id === driverId && w.machineId === m.id)) return m;
+    const { driverId: _driverId, ...rest } = m;
+    return rest;
+  });
+  const workers = state.workers.map((w): Worker => {
+    if (w.machineId === undefined && !w.riding) return w;
+    const machineId = w.machineId;
+    if (machineId !== undefined && machines.some((m) => m.id === machineId && m.driverId === w.id)) return w;
+    const { machineId: _machineId, riding: _riding, ...rest } = w;
+    return rest;
+  });
+  const machinesChanged = machines.some((m, i) => m !== state.machines[i]);
+  const workersChanged = workers.some((w, i) => w !== state.workers[i]);
+  if (!machinesChanged && !workersChanged) return state;
+  return { ...state, ...(machinesChanged ? { machines } : {}), ...(workersChanged ? { workers } : {}) };
 };

@@ -2,6 +2,7 @@ import type { CropId } from '../data/crops';
 import { ROAD_COST, ROAD_WALK_BONUS } from '../data/roads';
 import { MINUTES_PER_DAY } from '../data/world';
 import { ANIMALS, COLLECT_MINUTES } from '../data/animals';
+import { MACHINES } from '../data/machines';
 import { MAX_TASKS, TASK_MINUTES, WALK_SPEED, WORK_END_HOUR, WORK_START_HOUR } from '../data/workers';
 import { laborMultipliers } from './animals';
 import { careMinutes } from './health';
@@ -10,9 +11,19 @@ import { addWork, cancelAllOrders, roadTaskMinutes, workSpot } from './construct
 import { loaderSpot } from './dock';
 import { addShipmentWork, cancelAllLoading, repairHaulTasks } from './shipments';
 import { inBounds, tileCoords, tileIndex } from './grid';
+import { isActive } from './structures';
 import { homeSpot } from './home';
 import { addCount } from './inventory';
 import { fenceTaskMinutes } from './fences';
+import {
+  availableMachine,
+  conditionFactor,
+  isOperator,
+  machineBoarding,
+  machineCanDo,
+  mustPark,
+  releaseOrphanMachines,
+} from './machines';
 import { findPath, isWalkable } from './path';
 import { hash01 } from './random';
 import { gainMastery, harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
@@ -21,6 +32,7 @@ import {
   type ActionError,
   type GameState,
   type GridPoint,
+  type Machine,
   type Task,
   type TaskKind,
   type ToolId,
@@ -272,14 +284,18 @@ const availableTasks = (tasks: readonly Task[]): Task[] => {
   return result;
 };
 
-/** The task a free worker takes: the first kind in their priority list that has work, then the nearest. */
-const bestTask = (worker: Worker, tasks: readonly Task[]): Task | undefined => {
+/**
+ * The task a free worker takes: the first kind in their priority list that has work, then the
+ * nearest. `fits` narrows the choice (a mounted operator only takes what his machine does).
+ */
+const bestTask = (worker: Worker, tasks: readonly Task[], fits?: (task: Task) => boolean): Task | undefined => {
   let best: Task | undefined;
   let bestRank = Infinity;
   let bestDistance = Infinity;
   for (const task of availableTasks(tasks)) {
     const rank = worker.priorities.indexOf(task.kind);
     if (rank < 0 || rank > bestRank) continue;
+    if (fits && !fits(task)) continue;
     const c = tileCenter(task.tile);
     const d = Math.hypot(c.x - worker.x, c.y - worker.y);
     if (rank < bestRank || d < bestDistance) {
@@ -359,13 +375,37 @@ const groundSpeed = (state: GameState, worker: Worker): number => {
   return inBounds(x, y) && state.tiles[tileIndex(x, y)]?.road ? 1 + ROAD_WALK_BONUS : 1;
 };
 
+/** The worker back on foot, without the machine he had. */
+const onFoot = (w: Worker): Worker => {
+  const { machineId: _machineId, riding: _riding, ...rest } = w;
+  return rest;
+};
+
+/** The machine back in its bay (nobody driving or coming for it). */
+const releaseMachine = (world: GameState, machineId: number): GameState => ({
+  ...world,
+  machines: world.machines.map((m) => {
+    if (m.id !== machineId) return m;
+    const { driverId: _driverId, ...rest } = m;
+    return rest;
+  }),
+});
+
+const near = (a: GridPoint, b: GridPoint): boolean => Math.hypot(a.x - b.x, a.y - b.y) <= HOME_EPSILON;
+
 /**
  * Moves every worker for `minutes` of game time: picks tasks (by each worker's priorities),
  * walks, works at a speed set by their attributes and applies finished tasks to the farm.
  * Outside work hours (and when idle) workers head home.
+ *
+ * Operators (Machinery skill) fetch a free machine that can do their task: they walk to its
+ * boarding point, get on, drive to the work and do it at the machine's pace. Mounted, they only
+ * take tasks the machine does; with none left, after the shift or when the machine has to stop,
+ * they drive it back to its bay and get off.
  */
-export const stepWorkers = (state: GameState, minutes: number): GameState => {
-  if (minutes <= 0 || state.workers.length === 0) return state;
+export const stepWorkers = (input: GameState, minutes: number): GameState => {
+  if (minutes <= 0 || input.workers.length === 0) return input;
+  const state = releaseOrphanMachines(input);
   const workTime = isWorkTime(state.gameMinutes);
   const labor = laborMultipliers(state);
   let world = state;
@@ -380,32 +420,97 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
     if (assigned !== null && !tasks.some((t) => t.id === assigned)) {
       w = { ...w, taskId: null, path: [], progress: 0 };
     }
+
+    const machineId = w.machineId;
+    let machine: Machine | undefined = machineId === undefined ? undefined : world.machines.find((m) => m.id === machineId);
+    if (machine && !w.riding) {
+      // On the way to a reserved machine: get on at its boarding point, or give it back when the
+      // trip no longer makes sense (and do the task on foot if it is still there).
+      const fetched = machine;
+      const park = world.structures.find((st) => st.id === fetched.parkId);
+      const boarding = machineBoarding(world, fetched);
+      const taskId = w.taskId;
+      const task = taskId === null ? undefined : tasks.find((t) => t.id === taskId);
+      const arrived = w.path.length === 0 && boarding !== null && near(boarding, w);
+      if (
+        !workTime ||
+        !task ||
+        !park ||
+        !isActive(world, park) ||
+        mustPark(world, fetched) ||
+        !machineCanDo(world, fetched.type, task) ||
+        (w.path.length === 0 && !arrived)
+      ) {
+        world = releaseMachine(world, fetched.id);
+        w = onFoot(w);
+        machine = undefined;
+        if (workTime && task) w = { ...w, path: findPath(world.tiles, w, taskSpot(world, task, w)) };
+      } else if (arrived) {
+        w = { ...w, riding: true, path: findPath(world.tiles, w, taskSpot(world, task, w)) };
+      }
+    }
+    if (machine && w.riding && w.taskId !== null) {
+      // Mounted: drop the task (back to the queue) when the machine has to go home or cannot do it.
+      const taskId = w.taskId;
+      const task = tasks.find((t) => t.id === taskId);
+      if (!workTime || mustPark(world, machine) || !task || !machineCanDo(world, machine.type, task)) {
+        tasks = unassign(tasks, w.id);
+        w = { ...w, taskId: null, path: [], progress: 0 };
+      }
+    }
+
     if (!workTime && w.taskId !== null) {
       tasks = unassign(tasks, w.id);
       w = { ...w, taskId: null, path: [], progress: 0 };
     }
-    if (workTime && w.taskId === null) {
-      const task = bestTask(w, tasks);
+    const mounted = machine && w.riding ? machine : undefined;
+    if (workTime && w.taskId === null && !(mounted && mustPark(world, mounted))) {
+      const view = world;
+      const task = mounted ? bestTask(w, tasks, (t) => machineCanDo(view, mounted.type, t)) : bestTask(w, tasks);
       if (task) {
         const workerId = w.id;
         tasks = tasks.map((t) => (t.id === task.id ? { ...t, workerId } : t));
-        w = { ...w, taskId: task.id, progress: 0, path: findPath(world.tiles, w, taskSpot(world, task, w)) };
+        w = { ...w, taskId: task.id, progress: 0 };
+        const fetch = !mounted && isOperator(w) ? availableMachine(world, w, task) : undefined;
+        const boarding = fetch ? machineBoarding(world, fetch) : null;
+        if (fetch && boarding) {
+          world = { ...world, machines: world.machines.map((m) => (m.id === fetch.id ? { ...m, driverId: workerId } : m)) };
+          w = { ...w, machineId: fetch.id, path: findPath(world.tiles, w, boarding) };
+        } else {
+          w = { ...w, path: findPath(world.tiles, w, taskSpot(world, task, w)) };
+        }
       }
     }
-    if (w.taskId === null && w.path.length === 0) {
+    if (mounted && w.taskId === null && w.path.length === 0) {
+      // Nothing for the machine: drive it back to its bay and get off there.
+      const boarding = machineBoarding(world, mounted);
+      if (!boarding || near(boarding, w)) {
+        world = releaseMachine(world, mounted.id);
+        w = onFoot(w);
+      } else {
+        w = { ...w, path: findPath(world.tiles, w, boarding) };
+      }
+    }
+    if (w.taskId === null && w.path.length === 0 && !w.riding) {
       const home = homeSpot(world, i);
       if (Math.hypot(home.x - w.x, home.y - w.y) > HOME_EPSILON) {
         w = { ...w, path: findPath(world.tiles, w, home) };
       }
     }
 
-    const moved = walk(w, minutes, WALK_SPEED * labor.walk * groundSpeed(world, w));
+    const ride = w.riding ? mounted : undefined;
+    const speed = ride
+      ? WALK_SPEED * MACHINES[ride.type].driveSpeed * groundSpeed(world, w) * conditionFactor(ride)
+      : WALK_SPEED * labor.walk * groundSpeed(world, w);
+    const moved = walk(w, minutes, speed);
     w = moved.worker;
 
     const taskId = w.taskId;
     const task = taskId === null ? undefined : tasks.find((t) => t.id === taskId);
-    if (task && w.path.length === 0 && moved.leftover > 0) {
-      const boost = task.kind === 'hoe' ? labor.hoe : 1;
+    const fetching = w.machineId !== undefined && !w.riding;
+    if (task && !fetching && w.path.length === 0 && moved.leftover > 0) {
+      // Mounted, the machine sets the pace (and replaces the plowing bonus of oxen and horses).
+      const boost = ride ? MACHINES[ride.type].workSpeed * conditionFactor(ride) : task.kind === 'hoe' ? labor.hoe : 1;
       const context = taskContext(world, task);
       const work = moved.leftover * workSpeed(w, context) * boost;
       const job = task.job;
