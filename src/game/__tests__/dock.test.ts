@@ -268,7 +268,7 @@ describe('dock saves', () => {
     delete game.shipments;
     const loaded = deserialize(JSON.stringify(v16));
     expect(loaded).not.toBeNull();
-    expect(loaded?.game.structures.map((x) => x.type)).toEqual(['house', 'dock', 'bunkhouse']);
+    expect(loaded?.game.structures.map((x) => x.type)).toEqual(['house', 'dock']);
     expect(loaded?.game.tiles.filter((t) => t.structure === 'dock')).toHaveLength(1);
     expect(loaded?.game.shipments).toEqual([]);
     for (const w of loaded?.game.workers ?? []) expect(w.priorities).toEqual(DEFAULT_PRIORITIES);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BUNKHOUSE_BEDS, CANDIDATE_COUNT, SEVERANCE_HOURS, STARTING_WORKERS, TEMP_WORKERS, WORK_END_HOUR } from '../../data/workers';
+import { CANDIDATE_COUNT, HOUSE_BEDS, SEVERANCE_HOURS, STARTING_WORKERS, TEMP_WORKERS, WORK_END_HOUR } from '../../data/workers';
 import { MINUTES_PER_DAY } from '../../data/world';
+import { hireFree } from '../dev';
 import { tileIndex } from '../grid';
 import { homeSpot } from '../home';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
@@ -31,6 +32,12 @@ const unwrap = (result: ActionResult | QueueResult): GameState => {
 const rich = (s: GameState): GameState => ({ ...s, money: 100_000 });
 /** A second bunkhouse north of the house (2×1 at 28–29, 44). */
 const withBunkhouse = (s: GameState): GameState => unwrap(placeStructure(rich(s), 'bunkhouse', 28, 44));
+/** Hires staff until every bed is taken. */
+const fillBeds = (s: GameState): GameState => {
+  let next = s;
+  while (next.workers.filter((w) => w.kind === 'staff').length < bedCount(next)) next = hireFree(next);
+  return next;
+};
 const at = (s: GameState, hour: number): GameState => ({ ...s, gameMinutes: hour * 60 });
 
 const profile = (over: Partial<WorkerProfile>): WorkerProfile => ({
@@ -102,9 +109,9 @@ describe('worker attributes', () => {
 });
 
 describe('bunkhouse and hiring', () => {
-  it('starts with a full bunkhouse and a board of candidates', () => {
+  it('starts with the lodge beds and a board of candidates', () => {
     const s = createInitialState();
-    expect(bedCount(s)).toBe(BUNKHOUSE_BEDS);
+    expect(bedCount(s)).toBe(HOUSE_BEDS);
     expect(s.workers).toHaveLength(STARTING_WORKERS.length);
     expect(s.candidates).toHaveLength(CANDIDATE_COUNT);
     const ids = [...s.workers, ...s.candidates, ...s.structures].map((x) => x.id);
@@ -114,18 +121,18 @@ describe('bunkhouse and hiring', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('rests the crew in front of the bunkhouse door', () => {
+  it('rests the crew in front of the lodge door', () => {
     const s = createInitialState();
     const spot = homeSpot(s, 0);
-    // Bunkhouse at 27–28, 57, front facing south onto the street (row 58).
-    expect(spot.x).toBeGreaterThan(27);
-    expect(spot.x).toBeLessThan(29);
+    // Lodge at 28–31, 56–57, front facing south onto the street (row 58).
+    expect(spot.x).toBeGreaterThan(28);
+    expect(spot.x).toBeLessThan(32);
     expect(spot.y).toBeGreaterThan(58);
     expect(spot.y).toBeLessThan(59);
   });
 
   it('needs a free bed to hire a candidate', () => {
-    const s = rich(createInitialState());
+    const s = fillBeds(rich(createInitialState()));
     const candidate = s.candidates[0];
     if (!candidate) throw new Error('no candidate');
     expect(hireCandidate(s, candidate.id)).toEqual({ ok: false, error: 'no-bed' });
@@ -142,11 +149,12 @@ describe('bunkhouse and hiring', () => {
   });
 
   it('cannot demolish a bunkhouse whose beds are in use', () => {
-    const s = withBunkhouse(createInitialState());
+    const s = fillBeds(withBunkhouse(createInitialState()));
     const first = s.structures.find((x) => x.type === 'bunkhouse');
     if (!first) throw new Error('no bunkhouse');
-    expect(demolishStructure(createInitialState(), tileIndex(first.x, first.y))).toEqual({ ok: false, error: 'beds-in-use' });
-    expect(demolishStructure(s, tileIndex(first.x, first.y)).ok).toBe(true);
+    expect(demolishStructure(s, tileIndex(first.x, first.y))).toEqual({ ok: false, error: 'beds-in-use' });
+    const fewer = { ...s, workers: s.workers.slice(0, HOUSE_BEDS) };
+    expect(demolishStructure(fewer, tileIndex(first.x, first.y)).ok).toBe(true);
   });
 
   it('renews the hiring board at midnight', () => {

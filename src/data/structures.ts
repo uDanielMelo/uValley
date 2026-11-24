@@ -111,7 +111,14 @@ export interface StructureDef {
 }
 
 export const STRUCTURES: Record<StructureId, StructureDef> = {
-  house: { id: 'house', label: 'Casa', icon: '🏠', width: 2, depth: 2, description: 'A casa da família.' },
+  house: {
+    id: 'house',
+    label: 'Casa',
+    icon: '🏠',
+    width: 4,
+    depth: 2,
+    description: 'O grande alojamento da fazenda, de toras e pedra: dorme 6 pessoas.',
+  },
   dock: {
     id: 'dock',
     label: 'Doca',
@@ -390,7 +397,6 @@ export interface StructurePlacement {
  * that the access road comes up to. Each one starts with its road ring already open.
  */
 export const START_STRUCTURES: readonly StructurePlacement[] = [
-  { id: 'house', x: 30, y: 56 },
+  { id: 'house', x: 28, y: 56 },
   { id: 'dock', x: 33, y: 57 },
-  { id: 'bunkhouse', x: 27, y: 57 },
 ];

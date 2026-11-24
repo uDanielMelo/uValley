@@ -60,7 +60,7 @@ import { rehomeAnimals } from './shelters';
 import { repairHaulTasks } from './shipments';
 import { stampStructures } from './structures';
 
-export const SAVE_VERSION = 21;
+export const SAVE_VERSION = 22;
 /**
  * Saves older than this were made on the 32x32 map, before buildings needed roads; they cannot be
  * placed on the new map, so loading one starts a new game.
@@ -90,14 +90,14 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * south edge), with road rings around the buildings and ring road tasks tied to their site
  * (`job.siteId`). Earlier versions (v1–v15, on the 32x32 map) are not loaded.
  */
-export interface SaveDataV21 {
-  saveVersion: 21;
+export interface SaveDataV22 {
+  saveVersion: 22;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV21;
+export type SaveData = SaveDataV22;
 
 export interface LoadedSave {
   game: GameState;
@@ -192,6 +192,55 @@ const migrateV19 = (data: Record<string, unknown>): Record<string, unknown> => {
 const migrateV20 = (data: Record<string, unknown>): Record<string, unknown> => ({ ...data, saveVersion: 21 });
 
 /**
+ * v21 → v22: the house grew from 2×2 to a 4×2 lodge. It widens to the west (x - 2); whatever stood
+ * there (the starting bunkhouse) moves further west, one street away, with its ring opened.
+ */
+const migrateV21 = (data: Record<string, unknown>): Record<string, unknown> => {
+  const game = data.game;
+  if (!isRecord(game) || !Array.isArray(game.structures) || !Array.isArray(game.tiles)) return { ...data, saveVersion: 22 };
+  const size = 64;
+  const tiles = [...game.tiles] as unknown[];
+  const bunkhouseWidth = (s: Record<string, unknown>): number => (s.rotation === 1 || s.rotation === 3 ? 1 : 2);
+  const house = game.structures.find((s): s is Record<string, unknown> => isRecord(s) && s.type === 'house');
+  if (!house || typeof house.x !== 'number' || typeof house.y !== 'number') return { ...data, saveVersion: 22 };
+  const hx = house.x - 2;
+  const hy = house.y;
+  const structures = game.structures.map((s: unknown) => {
+    if (!isRecord(s) || s === house || typeof s.x !== 'number' || typeof s.y !== 'number') return s;
+    // Only the starting bunkhouse is a likely neighbour; others stay where they are.
+    if (s.type !== 'bunkhouse') return s;
+    const w = bunkhouseWidth(s);
+    const overlaps = s.x < hx + 4 && s.x + w > hx && s.y < hy + 2 && s.y + 1 > hy;
+    if (!overlaps) return s;
+    const nx = hx - 1 - w;
+    for (let y = s.y - 1; y <= s.y + 1; y++) {
+      for (let x = nx - 1; x <= nx + w; x++) {
+        const i = y * size + x;
+        const t = tiles[i];
+        if (x < 0 || x >= size || y < 0 || y >= size || !isRecord(t) || t.state !== 'grass' || t.structure !== undefined) continue;
+        tiles[i] = { ...t, road: true };
+      }
+    }
+    return { ...s, x: nx };
+  });
+  // The lodge covers the old street column and anything under it.
+  for (let y = hy; y < hy + 2; y++) {
+    for (let x = hx; x < hx + 4; x++) {
+      const t = tiles[y * size + x];
+      if (isRecord(t) && t.road !== undefined) {
+        const { road: _road, ...rest } = t;
+        tiles[y * size + x] = rest;
+      }
+    }
+  }
+  return {
+    ...data,
+    saveVersion: 22,
+    game: { ...game, tiles, structures: structures.map((s: unknown) => (s === house ? { ...house, x: hx } : s)) },
+  };
+};
+
+/**
  * Migrations from version N to N + 1. Add an entry here whenever SAVE_VERSION is bumped:
  * `migrations[21] = (v21) => v22`.
  */
@@ -201,6 +250,7 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
   18: migrateV18,
   19: migrateV19,
   20: migrateV20,
+  21: migrateV21,
 };
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {

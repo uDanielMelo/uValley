@@ -43,8 +43,8 @@ describe('roads', () => {
     }
     expect(s.tiles[ACCESS_AT_EDGE]?.state).toBe('grass');
     expect(accessEntryTile()).toBe(ACCESS_AT_EDGE);
-    // It meets the yard's street, which runs in front of the bunkhouse, the house and the bin.
-    for (let x = 26; x <= 34; x++) expect(s.tiles[tileIndex(x, ACCESS_ROAD_FARM_Y - 1)]?.road).toBe(true);
+    // It meets the yard's street, which runs in front of the lodge and the dock.
+    for (let x = 27; x <= 34; x++) expect(s.tiles[tileIndex(x, ACCESS_ROAD_FARM_Y - 1)]?.road).toBe(true);
     expect(s.tiles[tileIndex(ACCESS_ROAD_X - 1, 60)]?.road).toBeUndefined();
   });
 
@@ -52,7 +52,7 @@ describe('roads', () => {
     const s = createInitialState();
     const network = roadNetwork(s.tiles);
     expect(network.has(ACCESS_AT_EDGE)).toBe(true);
-    expect(network.has(tileIndex(26, 58))).toBe(true);
+    expect(network.has(tileIndex(27, 58))).toBe(true);
     // A loose road far away is not part of it until a road joins them.
     const loose = unwrap(layRoad(s, FREE));
     expect(roadNetwork(loose.tiles).has(FREE)).toBe(false);

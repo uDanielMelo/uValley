@@ -1,7 +1,7 @@
 import { ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS } from '../data/animals';
 import { FERTILIZER } from '../data/fertilizer';
 import { SHELTER_LEVELS, SHELTER_LEVEL_IDS, STRUCTURES, type ShelterLevel, type StructureId } from '../data/structures';
-import { BUNKHOUSE_BEDS } from '../data/workers';
+import { BUNKHOUSE_BEDS, HOUSE_BEDS } from '../data/workers';
 import { workProgress } from '../game/construction';
 import { isKnownSick } from '../game/health';
 import {
@@ -204,10 +204,22 @@ function ExtraSection({ type }: { type: StructureId }) {
       </div>
     );
   }
+  if (type === 'house') {
+    return (
+      <div className="flex items-center justify-between text-xs font-bold">
+        <span>
+          Camas da fazenda: <span className="tabular-nums">{beds}</span> ({HOUSE_BEDS} na casa)
+        </span>
+        <Button variant="ghost" className="text-xs" onClick={() => showPanel('workers')}>
+          Equipe
+        </Button>
+      </div>
+    );
+  }
   if (type === 'dock') return <DockSection />;
   if (type === 'loadingPen') return id === null ? null : <PenSection penId={id} />;
   const storage = STRUCTURES[type].storage;
-  if (storage || type === 'house') {
+  if (storage) {
     return (
       <div className="flex flex-col gap-1.5">
         <p className="text-xs font-bold text-wood/70">

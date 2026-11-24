@@ -117,6 +117,9 @@ export const STARTING_WORKERS: readonly WorkerTemplate[] = [
 
 /** Beds per bunkhouse: hired (staff) workers need one. */
 export const BUNKHOUSE_BEDS = 3;
+
+/** Beds in the main house (the starting lodge): it always counts, no road needed. */
+export const HOUSE_BEDS = 6;
 /** Dismissing a staff worker costs this many hours of their wage (severance). */
 export const SEVERANCE_HOURS = 14;
 
@@ -154,4 +157,4 @@ export const TASK_MINUTES: Record<ToolId, number> = {
 };
 
 /** Fallback resting spot (in front of the house door) when the farm has no bunkhouse. */
-export const HOME_POSITION = { x: 30.7, y: 58.35 } as const;
+export const HOME_POSITION = { x: 30, y: 58.35 } as const;

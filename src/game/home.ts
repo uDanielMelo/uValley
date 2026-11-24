@@ -6,11 +6,11 @@ import type { GameState, GridPoint } from './types';
 const DOOR_GAP = 0.4;
 
 /**
- * Resting spot for the n-th worker: a small cluster in front of the first working bunkhouse's
- * door (in front of the house when there is none).
+ * Resting spot for the n-th worker: a small cluster in front of the house door (the lodge is the
+ * main home; without it, the first working bunkhouse).
  */
 export const homeSpot = (state: Pick<GameState, 'structures' | 'tiles'>, slot: number): GridPoint => {
-  const bunkhouse = state.structures.find((s) => s.type === 'bunkhouse' && isActive(state, s));
+  const bunkhouse = state.structures.find((s) => s.type === 'house' || (s.type === 'bunkhouse' && isActive(state, s)));
   const across = ((slot % 4) - 1.5) * 0.3;
   const back = Math.floor(slot / 4) * 0.25;
   if (!bunkhouse) return { x: HOME_POSITION.x + across, y: HOME_POSITION.y + back };

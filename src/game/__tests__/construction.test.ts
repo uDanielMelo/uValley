@@ -14,7 +14,7 @@ import {
   roadClick,
   workSpot,
 } from '../construction';
-import { setTimeOfDay } from '../dev';
+import { hireFree, setTimeOfDay } from '../dev';
 import { tileCoords, tileIndex, withTile } from '../grid';
 import { homeSpot } from '../home';
 import { isWalkable } from '../path';
@@ -30,6 +30,7 @@ import {
   footprintCells,
   footprintOf,
   hasRoadAccess,
+  placeStructure,
   refundFor,
   ringCells,
 } from '../structures';
@@ -279,8 +280,10 @@ describe('demolition', () => {
   });
 
   it('refuses a bunkhouse whose beds are in use and buildings that cannot be demolished', () => {
-    const s = farm();
-    expect(orderDemolish(s, tileIndex(27, 57))).toEqual({ ok: false, error: 'beds-in-use' });
+    // Staff fills the lodge (6 beds) and a bunkhouse west of it, so the bunkhouse's beds are needed.
+    let s = unwrap(placeStructure(farm(), 'bunkhouse', 24, 57));
+    while (s.workers.filter((w) => w.kind === 'staff').length < bedCount(s)) s = hireFree(s);
+    expect(orderDemolish(s, tileIndex(24, 57))).toEqual({ ok: false, error: 'beds-in-use' });
     expect(orderDemolish(s, tileIndex(30, 56))).toEqual({ ok: false, error: 'not-demolishable' });
   });
 });

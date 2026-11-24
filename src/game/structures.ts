@@ -8,7 +8,7 @@ import {
 } from '../data/structures';
 import { ROAD_COST, ROAD_RING } from '../data/roads';
 import { DOCK_LEVELS } from '../data/docks';
-import { BUNKHOUSE_BEDS } from '../data/workers';
+import { BUNKHOUSE_BEDS, HOUSE_BEDS } from '../data/workers';
 import { GRID_SIZE } from '../data/world';
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { findPath, isWalkable } from './path';
@@ -145,8 +145,9 @@ export const isActive = (state: Pick<GameState, 'tiles'>, s: StructureInstance):
 export const isCutOff = (state: Pick<GameState, 'tiles'>, s: StructureInstance): boolean =>
   s.work?.kind !== 'build' && !hasRoadAccess(state.tiles, s);
 
-/** Beds for staff workers: one set per working bunkhouse (finished and reached by road). */
+/** Beds for staff workers: the house's, plus one set per working bunkhouse (finished and reached by road). */
 export const bedCount = (state: Pick<GameState, 'structures' | 'tiles'>): number =>
+  (state.structures.some((s) => s.type === 'house') ? HOUSE_BEDS : 0) +
   state.structures.filter((s) => s.type === 'bunkhouse' && isActive(state, s)).length * BUNKHOUSE_BEDS;
 
 export const buildCost = (type: StructureId): number => STRUCTURES[type].cost ?? 0;

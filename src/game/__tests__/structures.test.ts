@@ -29,9 +29,9 @@ const FREE_X = 28;
 const FREE_Y = 44;
 
 describe('structure placement', () => {
-  it('starts with the house, shipping bin and bunkhouse as placed instances', () => {
+  it('starts with the lodge and the dock as placed instances', () => {
     const s = createInitialState();
-    expect(s.structures.map((x) => x.type)).toEqual(['house', 'dock', 'bunkhouse']);
+    expect(s.structures.map((x) => x.type)).toEqual(['house', 'dock']);
     expect(new Set([...s.workers.map((w) => w.id), ...s.structures.map((x) => x.id)]).size).toBe(
       s.workers.length + s.structures.length,
     );
@@ -142,4 +142,24 @@ describe('structure saves', () => {
     expect(loaded?.game.tiles[tileIndex(29, 44)]?.structure).toBe('chickenCoop');
   });
 
+});
+
+describe('lodge migration (v21 → v22)', () => {
+  it('widens the old 2×2 house to the west and moves the starting bunkhouse out of the way', () => {
+    const s = createInitialState();
+    const old = {
+      ...s,
+      structures: [
+        { ...s.structures[0]!, x: 30 },
+        s.structures[1]!,
+        { id: 99, type: 'bunkhouse', x: 27, y: 57, rotation: 0 },
+      ],
+    };
+    const loaded = deserialize(JSON.stringify({ saveVersion: 21, savedAt: 0, game: old, settings: DEFAULT_SETTINGS }));
+    const house = loaded?.game.structures.find((x) => x.type === 'house');
+    const bunk = loaded?.game.structures.find((x) => x.type === 'bunkhouse');
+    expect(house?.x).toBe(28);
+    expect(bunk?.x).toBeLessThan(28);
+    expect(bunk && bunk.x + 2).toBeLessThanOrEqual(27);
+  });
 });
