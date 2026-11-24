@@ -4,7 +4,7 @@ import { CONDITION, MACHINES, RENTAL, REPAIR, RESALE, type MachineId, type Renta
 import { MAX_WORKERS, WORK_END_HOUR } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { homeSpot } from './home';
-import { boardingPoint, freeSlot, hasWorkshop, parkingDef } from './parking';
+import { boardingPoint, freeSlot, hasWorkshop, parkingDef, slotPoint } from './parking';
 import { makeWorker, removeWorkers, rollProfile } from './staff';
 import { isActive } from './structures';
 import { fail, ok, type ActionResult, type GameState, type GridPoint, type Machine, type Task, type Worker } from './types';
@@ -334,4 +334,25 @@ export const callMechanic = (state: GameState, machineId: number): ActionResult 
     money: state.money - cost,
     machines: state.machines.map((m) => (m.id === machineId ? { ...m, repairUntil } : m)),
   });
+};
+
+/** Where a machine is drawn: in its slot (facing out, in quarter turns), or under its driver (heading from movement). */
+export interface MachinePose {
+  x: number;
+  y: number;
+  /** Quarter turns when parked; null when driven (the scene turns it the way it moves). */
+  heading: number | null;
+  /** The driver is at a task (the harvester's reel turns). */
+  working: boolean;
+}
+
+export const machinePose = (state: Pick<GameState, 'structures' | 'workers'>, m: Machine): MachinePose | null => {
+  const driver = m.driverId === undefined ? undefined : state.workers.find((w) => w.id === m.driverId);
+  if (driver?.riding) {
+    return { x: driver.x, y: driver.y, heading: null, working: driver.taskId !== null && driver.path.length === 0 };
+  }
+  const park = state.structures.find((s) => s.id === m.parkId);
+  if (!park) return null;
+  const spot = slotPoint(park, m.slot);
+  return { x: spot.x, y: spot.y, heading: spot.heading, working: false };
 };

@@ -96,3 +96,33 @@ export const PALETTE = {
 
 /** Body colors of the customers' cars at the dock (picked per visit). */
 export const CUSTOMER_CAR_COLORS: readonly string[] = ['#c0392b', '#2e6da4', '#3f7d4a', '#d9d4c7', '#e1a83a', '#5b5f66', '#7a3b6e'];
+
+/** Farm machines and their buildings (generic colors, no maker's livery). */
+export const MACHINE_COLORS = {
+  tractorBody: '#d9822b',
+  harvesterBody: '#a8452f',
+  harvesterTrim: '#e8dcc0',
+  graphite: '#3b3f44',
+  grille: '#26292d',
+  tire: '#232323',
+  tireTread: '#2f2f2f',
+  hub: '#c9c2b0',
+  seat: '#2b2b2b',
+  implement: '#4d5a3f',
+  steel: '#9aa3a8',
+  reel: '#d8c690',
+  driverShirt: '#4f6f8f',
+  driverSkin: '#d2a27a',
+  driverHat: '#d8c690',
+  shedWall: '#8a9aa3',
+  shedFrame: '#5c676e',
+  shedRoof: '#6f7c84',
+  paint: '#ece6d2',
+  bench: '#7a5a3a',
+  benchTop: '#9b7a52',
+  toolBoard: '#c9b48a',
+  compressor: '#b8382f',
+  sign: '#2f4a5c',
+  signMark: '#e9e1c9',
+  gravel: '#a8a091',
+} as const;

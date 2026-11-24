@@ -9,6 +9,7 @@ import { House } from './models/House';
 import { Corral, Pigsty, Sheepfold, Stable } from './models/Shelters';
 import { Dock } from './models/Dock';
 import { LoadingPen } from './models/LoadingPen';
+import { MachineShed, ParkingLot } from './models/Machines';
 
 export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   house: House,
@@ -31,9 +32,8 @@ export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   tree: PlantedTree,
   fountain: Fountain,
   greenhouse: Greenhouse,
-  // Placeholders until the machine models arrive.
-  machineShed: Warehouse,
-  parkingLot: Warehouse,
+  machineShed: MachineShed,
+  parkingLot: ParkingLot,
 };
 
 export interface PlacedProps {

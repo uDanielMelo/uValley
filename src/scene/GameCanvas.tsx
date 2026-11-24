@@ -6,6 +6,7 @@ import { Blueprint } from './Blueprint';
 import { BuildGhost } from './BuildGhost';
 import { CameraRig } from './CameraRig';
 import { Cars } from './Car';
+import { Machines } from './Machines';
 import { Predators } from './Predators';
 import { Rain } from './Rain';
 import { CropLayer } from './CropLayer';
@@ -56,6 +57,7 @@ export function GameCanvas() {
         <CropLayer />
         <Structures />
         <Workers />
+        <Machines />
         <Animals />
         <Carcasses />
         <Predators />

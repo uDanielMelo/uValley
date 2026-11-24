@@ -67,3 +67,42 @@ describe('machine save', () => {
     expect(hourlyWageFor(2, null, ['farming'])).toBe(STAR_LEVELS[2].hourlyWage);
   });
 });
+
+describe('machine pose', () => {
+  it('sits in its slot when parked and under its driver when driven', async () => {
+    const { machinePose } = await import('../machines');
+    const { slotPoint } = await import('../parking');
+    const placed = placeStructure(createInitialState(), 'machineShed', 20, 40, 0, { free: true });
+    if (!placed.ok) throw new Error('no shed');
+    const shed = placed.state.structures[placed.state.structures.length - 1];
+    if (!shed) throw new Error('no shed');
+    const worker = placed.state.workers[0];
+    if (!worker) throw new Error('no worker');
+    const machine = { id: 900, type: 'tractor' as const, parkId: shed.id, slot: 1, condition: 100 };
+    const parked = machinePose(placed.state, machine);
+    const spot = slotPoint(shed, 1);
+    expect(parked).toEqual({ x: spot.x, y: spot.y, heading: spot.heading, working: false });
+    const driven = {
+      ...placed.state,
+      workers: placed.state.workers.map((w) => (w.id === worker.id ? { ...w, x: 30.2, y: 50.7, machineId: 900, riding: true as const } : w)),
+    };
+    const pose = machinePose(driven, { ...machine, driverId: worker.id });
+    expect(pose).toMatchObject({ x: 30.2, y: 50.7, heading: null });
+  });
+});
+
+describe('machine dev tools', () => {
+  it('adds a tractor, building a shed when there is none, and wears machines down', async () => {
+    const { addMachine, wearMachines } = await import('../dev');
+    const s = addMachine(createInitialState(), 'tractor');
+    const shed = s.structures.find((x) => x.type === 'machineShed');
+    expect(shed?.work).toBeUndefined();
+    expect(s.machines).toHaveLength(1);
+    expect(s.machines[0]).toMatchObject({ type: 'tractor', parkId: shed?.id, slot: 0, condition: 100 });
+    const rented = addMachine(s, 'harvester', true);
+    expect(rented.machines[1]?.rental).toBeDefined();
+    const worn = wearMachines(rented, 30);
+    expect(worn.machines[0]?.condition).toBe(70);
+    expect(worn.machines[1]?.condition).toBe(100);
+  });
+});

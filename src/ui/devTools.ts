@@ -30,7 +30,11 @@ import {
   forceOffer,
   addFeed,
   layFenceLine,
+  addMachine,
+  hireOperator,
+  wearMachines,
 } from '../game/dev';
+import type { MachineId } from '../data/machines';
 import type { GameState } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 
@@ -76,6 +80,9 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.offer()            um comprador faz oferta agora no primeiro anúncio sem oferta
   dev.feed(100)          +100 kg de ração
   dev.fence(x0,y0,x1,y1) cerca pronta (reta ou a 45°)
+  dev.machine('tractor'|'harvester', alugada?) máquina na vaga (cria galpão)
+  dev.wear(n)          tira n de estado das máquinas próprias
+  dev.operator()       contrata um operador de máquinas grátis
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -153,6 +160,10 @@ const devApi = {
   manure: () => apply(fillManure, 'Abrigos cheios de esterco'),
   offer: () => apply(forceOffer, 'Oferta forçada no primeiro anúncio'),
   feed: (kg = 100) => apply((g) => addFeed(g, kg), `+${kg} kg de ração`),
+  machine: (type: MachineId = 'tractor', rented = false) =>
+    apply((g) => addMachine(g, type, rented), `${type === 'tractor' ? 'Trator' : 'Colheitadeira'}${rented ? ' alugado(a)' : ''} na vaga`),
+  wear: (points = 30) => apply((g) => wearMachines(g, points), `Máquinas −${points} de estado`),
+  operator: () => apply(hireOperator, 'Operador de máquinas contratado'),
   fence: (x0 = 20, y0 = 40, x1 = 26, y1 = 40) => apply((g) => layFenceLine(g, x0, y0, x1, y1), `Cerca de (${x0}, ${y0}) até (${x1}, ${y1})`),
   customer: () => {
     const before = useGameStore.getState().game.shipments.length;

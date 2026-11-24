@@ -26,6 +26,9 @@ import { completeAllWork } from './construction';
 import { applyTask } from './tasks';
 import { spawnWalkIn } from './shipments';
 import { OFFERS } from '../data/docks';
+import { CONDITION, type MachineId } from '../data/machines';
+import { freeSlot } from './parking';
+import { rentalEnd } from './machines';
 
 export const addMoney = (state: GameState, amount: number): GameState => ({
   ...state,
@@ -258,4 +261,44 @@ export const layFenceLine = (state: GameState, x0: number, y0: number, x1: numbe
     const laid = layFence(s, tile, false);
     return laid.ok ? laid.state : s;
   }, state);
+};
+
+/**
+ * Puts a machine in the first free slot (a rented one for 3 days when `rented`), building a
+ * finished machine shed near the house first when there is no room.
+ */
+export const addMachine = (state: GameState, type: MachineId, rented = false): GameState => {
+  let s = state;
+  if (!freeSlot(s, rented)) {
+    const spot = findFreeSpot(s, 'machineShed', HOME_POSITION);
+    const placed = spot && placeStructure(s, 'machineShed', spot.x, spot.y, spot.rotation, { free: true });
+    if (!placed?.ok) return state;
+    s = placed.state;
+  }
+  const slot = freeSlot(s, rented);
+  if (!slot) return state;
+  const machine = {
+    id: s.nextId,
+    type,
+    parkId: slot.parkId,
+    slot: slot.slot,
+    condition: CONDITION.max,
+    ...(rented ? { rental: { until: rentalEnd(s.gameMinutes, 3) } } : {}),
+  };
+  return { ...s, machines: [...s.machines, machine], nextId: s.nextId + 1 };
+};
+
+/** Takes `points` of condition off every owned machine. */
+export const wearMachines = (state: GameState, points: number): GameState => ({
+  ...state,
+  machines: state.machines.map((m) => (m.rental ? m : { ...m, condition: Math.max(0, m.condition - points) })),
+});
+
+/** Adds a free 2-star staff worker with the machinery skill. */
+export const hireOperator = (state: GameState): GameState => {
+  if (state.workers.length >= MAX_WORKERS) return state;
+  const profile = rollProfile(state.nextId * 17 + 3, new Set(state.workers.map((w) => w.name)));
+  const skills = profile.skills.includes('machinery') ? profile.skills : [...profile.skills, 'machinery' as const];
+  const worker = makeWorker(state.nextId, 'staff', { ...profile, stars: 2, skills }, homeSpot(state, state.workers.length));
+  return { ...state, workers: [...state.workers, worker], nextId: state.nextId + 1 };
 };

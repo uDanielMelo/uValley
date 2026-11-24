@@ -1,3 +1,4 @@
+import { ShedWorkshop } from './models/Machines';
 import type { ThreeEvent } from '@react-three/fiber';
 import { SHELTER_LEVEL_IDS, STRUCTURE_IDS, type ShelterLevel, type StructureId } from '../data/structures';
 import { needsRoadAccess } from '../game/structures';
@@ -34,6 +35,7 @@ function PlacedStructure({ id, type, x, y, rotation, level }: PlacedProps & { id
       <StructureTransform type={type} x={x} y={y} rotation={rotation}>
         <Model />
         <ShelterUpgrades type={type} level={level} />
+        {type === 'machineShed' && level >= 2 && <ShedWorkshop />}
         {type === 'dock' && <DockUpgrades level={level === 2 || level === 3 ? level : 1} />}
       </StructureTransform>
     </group>

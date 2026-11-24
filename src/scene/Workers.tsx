@@ -160,7 +160,8 @@ function WorkerFigure({ id }: { id: number }) {
 
     const a = anim.current;
     const activity = workerActivity(game, worker);
-    root.visible = activity !== 'resting';
+    // A driver rides in the machine's cab (drawn by Machines).
+    root.visible = activity !== 'resting' && !worker.riding;
     const dt = Math.min(delta, 0.1);
     a.time += dt * settings.speed;
 
