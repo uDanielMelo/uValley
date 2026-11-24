@@ -16,7 +16,7 @@ import { dailyFeedKg, purchasePrice, rollAnimalStars } from './animals';
 import { emptyDelivery, pendingFeed, seatAnimals, type AnimalOrder } from './delivery';
 import { addCount } from './inventory';
 import { isUnlocked } from './research';
-import { freightCapacity, scheduleFreight, supplyWeight, workingDock } from './shipments';
+import { maxFreightKg, pickVehicle, scheduleFreight, supplyWeight, workingDock } from './shipments';
 import { fail, ok, type ActionError, type ActionResult, type Delivery, type GameState, type HeldPurchase } from './types';
 import type { VehicleLevel } from '../data/market';
 
@@ -60,16 +60,31 @@ export const purchaseFreight = (level: VehicleLevel, d: Pick<Delivery, 'seeds' |
   return Math.round(supplies + animals);
 };
 
+/**
+ * The vehicle a delivery comes with: the supplies pick it by weight (see pickVehicle); animals
+ * come on the livestock truck, which parks at a car bay (it looks like the SUV with a trailer).
+ */
+export const deliveryVehicle = (
+  state: GameState,
+  d: Pick<Delivery, 'seeds' | 'medicine' | 'fertilizer' | 'feed'> & { animals: readonly unknown[] },
+): { freight: VehicleLevel; look: VehicleLevel } | ActionError => {
+  const kg = supplyWeight(d);
+  const picked = kg > 0 ? pickVehicle(state, kg) : 1;
+  if (typeof picked === 'string') return picked;
+  return { freight: picked, look: d.animals.length > 0 && picked < 2 ? 2 : picked };
+};
+
 /** Why the cart cannot be ordered, or null when it can. */
 export const checkPurchase = (state: GameState, cart: Cart): ActionError | null => {
   if (cartIsEmpty(cart)) return 'empty-cart';
   if (CROP_IDS.some((id) => (cart.seeds[id] ?? 0) > 0 && !isUnlocked(state, id))) return 'not-researched';
   if (workingDock(state) === null) return 'dock-no-road';
-  if (supplyWeight(cart) > freightCapacity(state.vehicleLevel)) return 'vehicle-full';
+  const vehicle = deliveryVehicle(state, cart);
+  if (typeof vehicle === 'string') return vehicle;
   if (cart.animals.length > LIVESTOCK.maxHeads) return 'too-many-heads';
   const seated = seatAnimals(state, cart.animals, () => 1, () => 0);
   if (typeof seated === 'string') return seated;
-  return state.money < cartGoodsCost(cart) + purchaseFreight(state.vehicleLevel, cart) ? 'not-enough-money' : null;
+  return state.money < cartGoodsCost(cart) + purchaseFreight(vehicle.freight, cart) ? 'not-enough-money' : null;
 };
 
 /**
@@ -87,22 +102,13 @@ export const orderPurchase = (state: GameState, cart: Cart): ActionResult => {
     (a) => purchasePrice(a.kind, a.breed, a.age),
   );
   if (typeof animals === 'string') return fail(animals);
+  const vehicle = deliveryVehicle(state, cart);
+  if (typeof vehicle === 'string') return fail(vehicle);
   const delivery: Delivery = { ...emptyDelivery(), seeds: { ...cart.seeds }, medicine: { ...cart.medicine }, fertilizer: cart.fertilizer, feed: cart.feed, animals };
   const goodsCost = cartGoodsCost(cart);
-  const freight = purchaseFreight(state.vehicleLevel, cart);
+  const freight = purchaseFreight(vehicle.freight, cart);
   const paid = { ...state, money: state.money - goodsCost - freight };
-  return ok(
-    scheduleFreight(paid, {
-      kind: 'purchase',
-      goods: [],
-      payment: 0,
-      freight,
-      // Animals come on the livestock truck.
-      vehicle: animals.length > 0 ? 3 : state.vehicleLevel,
-      delivery,
-      goodsCost,
-    }),
-  );
+  return ok(scheduleFreight(paid, { kind: 'purchase', goods: [], payment: 0, freight, vehicle: vehicle.look, delivery, goodsCost }));
 };
 
 // ---------- held in town ----------
@@ -112,7 +118,9 @@ export const reorderHeld = (state: GameState, heldId: number): ActionResult => {
   const held = state.held.find((h) => h.id === heldId);
   if (!held) return fail('no-held');
   if (workingDock(state) === null) return fail('dock-no-road');
-  const freight = purchaseFreight(state.vehicleLevel, held.delivery);
+  const vehicle = deliveryVehicle(state, held.delivery);
+  if (typeof vehicle === 'string') return fail(vehicle);
+  const freight = purchaseFreight(vehicle.freight, held.delivery);
   if (state.money < freight) return fail('not-enough-money');
   const paid: GameState = { ...state, money: state.money - freight, held: state.held.filter((h) => h.id !== heldId) };
   return ok(
@@ -121,7 +129,7 @@ export const reorderHeld = (state: GameState, heldId: number): ActionResult => {
       goods: [],
       payment: 0,
       freight,
-      vehicle: held.delivery.animals.length > 0 ? 3 : state.vehicleLevel,
+      vehicle: vehicle.look,
       delivery: held.delivery,
       goodsCost: held.cost,
     }),
@@ -178,7 +186,7 @@ export const autoOrderFeed = (state: GameState): { state: GameState; ordered: nu
   const have = state.inventory.feed + pendingFeed(state);
   if (have >= daily * FEED.reorderBelowDays) return none;
   const wanted = Math.ceil((daily * state.feedOrder.days - have) / FEED.orderStep) * FEED.orderStep;
-  const feed = Math.min(wanted, Math.floor(freightCapacity(state.vehicleLevel) / FEED.orderStep) * FEED.orderStep);
+  const feed = Math.min(wanted, Math.floor(maxFreightKg(state) / FEED.orderStep) * FEED.orderStep);
   if (feed <= 0) return none;
   const ordered = orderPurchase(state, { ...emptyCart(), feed });
   return ordered.ok ? { state: ordered.state, ordered: feed } : none;

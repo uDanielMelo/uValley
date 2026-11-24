@@ -28,9 +28,10 @@ import {
 import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type DemolishChange } from '../game/construction';
 import { medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
 import { emptyCart, giveUpHeld, giveUpRefund, orderPurchase, reorderHeld, setFeedOrder, type Cart } from '../game/purchases';
-import { LIVESTOCK } from '../data/docks';
+import { DOCK_LEVELS, LIVESTOCK } from '../data/docks';
 import type { Delivery } from '../game/types';
-import { upgradeVehicle, type Good } from '../game/market';
+import { setFreightVehicle, upgradeVehicle, type Good } from '../game/market';
+import type { VehicleLevel } from '../data/market';
 import { acceptOffer, declineOffer, postListing, removeListing, repriceListing, sendOrder } from '../game/listings';
 import { startResearch } from '../game/research';
 import { CAMERA } from '../data/camera';
@@ -42,7 +43,7 @@ import type { Spoiled } from '../game/storage';
 import { createInitialState } from '../game/state';
 import { cancelLoading, dismissShipment, startLoading, type DockEvent } from '../game/shipments';
 import { bayPoint, docksOf } from '../game/dock';
-import { anchorFor, structureAt, upgradeCost } from '../game/structures';
+import { anchorFor, structureAt } from '../game/structures';
 import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/staff';
 import type { ActionError, ActionResult, Animal, GameState, Rotation, TaskKind, ToolId } from '../game/types';
 import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
@@ -199,6 +200,8 @@ export interface GameStore {
   shopTab: ShopTab;
   setShopTab: (tab: ShopTab) => void;
   upgradeVehicle: () => void;
+  /** Which vehicle the freight comes with ('auto': the smallest that fits each load). */
+  setFreightVehicle: (choice: 'auto' | VehicleLevel) => void;
   startResearch: (cropId: CropId) => void;
   /** Last request to move the camera to a spot (tile space); the camera rig follows new ids. */
   cameraFocus: { id: number; x: number; y: number; distance?: number } | null;
@@ -274,6 +277,7 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'invalid-price': 'Preço inválido.',
   'no-order': 'Este pedido não está mais aberto.',
   'dock-no-road': 'A doca está sem acesso por estrada: o frete não chega.',
+  'no-truck-bay': 'O caminhão precisa de uma vaga de caminhão: melhore a doca (nível 3).',
   'too-many-heads': `O caminhão boiadeiro leva até ${LIVESTOCK.maxHeads} animais por viagem.`,
   'empty-cart': 'O carrinho está vazio.',
   'no-held': 'Esta entrega não está mais retida na cidade.',
@@ -662,10 +666,12 @@ export const useGameStore = create<GameStore>()(
           commit(result);
           return;
         }
-        commit(
-          result,
-          `Reforma na fila: ${label(target.type).toLowerCase()} ${SHELTER_LEVELS[toLevel].label.toLowerCase()} (${upgradeCost(target.type, toLevel)} moedas).`,
-        );
+        const paid = game.money - (result.ok ? result.state.money : game.money);
+        const levelName =
+          target.type === 'dock' && (toLevel === 2 || toLevel === 3)
+            ? DOCK_LEVELS[toLevel].label.toLowerCase()
+            : `${label(target.type).toLowerCase()} ${SHELTER_LEVELS[toLevel].label.toLowerCase()}`;
+        commit(result, `Reforma na fila: ${levelName} (${paid} moedas). A equipe com Obras vai fazer.`);
       },
       demolishOrCancel: (id) => {
         const target = get().game.structures.find((s) => s.id === id);
@@ -835,10 +841,13 @@ export const useGameStore = create<GameStore>()(
           research ? `🔬 Pesquisa de ${CROPS[cropId].label.toLowerCase()} começou (${research.hours} h de jogo).` : undefined,
         );
       },
+      setFreightVehicle: (choice) => {
+        commit(setFreightVehicle(get().game, choice));
+      },
       upgradeVehicle: () => {
         const game = get().game;
         const next = game.vehicleLevel < 3 ? VEHICLES[(game.vehicleLevel + 1) as 2 | 3] : null;
-        commit(upgradeVehicle(game), next ? `${next.icon} Novo veículo: ${next.label.toLowerCase()} (${next.capacity} kg).` : undefined);
+        commit(upgradeVehicle(game), next ? `${next.icon} Frete contratado: ${next.label.toLowerCase()} (${next.capacity} kg por viagem).` : undefined);
       },
       cameraFocus: null,
       focusCamera: (x, y, distance) =>

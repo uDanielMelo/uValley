@@ -60,7 +60,7 @@ import { rehomeAnimals } from './shelters';
 import { repairHaulTasks } from './shipments';
 import { stampStructures } from './structures';
 
-export const SAVE_VERSION = 19;
+export const SAVE_VERSION = 20;
 /**
  * Saves older than this were made on the 32x32 map, before buildings needed roads; they cannot be
  * placed on the new map, so loading one starts a new game.
@@ -79,7 +79,8 @@ export interface SaveSettings {
 export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphics: 'high' };
 
 /**
- * v19 buys by freight: purchases are shipments carrying a `delivery`, deliveries nobody unloaded
+ * v20 has dock levels with several bays (`Shipment.bay`, loader `slot`s) and the freight vehicle the
+ * farm chose (`freightVehicle`). v19 buys by freight: purchases are shipments carrying a `delivery`, deliveries nobody unloaded
  * are `held` in town, and feed is a stock (`inventory.feed`, kg) with automatic orders
  * (`feedOrder`). v18 sells through the dock only: listings, offers and hired freight (`listings`, `offers`, sale
  * shipments with the goods set aside), and the town load (`cargo`) is gone. v17 replaced the
@@ -88,14 +89,14 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * south edge), with road rings around the buildings and ring road tasks tied to their site
  * (`job.siteId`). Earlier versions (v1–v15, on the 32x32 map) are not loaded.
  */
-export interface SaveDataV19 {
-  saveVersion: 19;
+export interface SaveDataV20 {
+  saveVersion: 20;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV19;
+export type SaveData = SaveDataV20;
 
 export interface LoadedSave {
   game: GameState;
@@ -176,14 +177,25 @@ const migrateV18 = (data: Record<string, unknown>): Record<string, unknown> => {
   };
 };
 
+/** v19 → v20: vehicles under way hold the only bay there was, and the freight picks its vehicle by weight. */
+const migrateV19 = (data: Record<string, unknown>): Record<string, unknown> => {
+  const game = data.game;
+  if (!isRecord(game)) return data;
+  const shipments = Array.isArray(game.shipments)
+    ? game.shipments.map((s: unknown) => (isRecord(s) && s.phase !== 'scheduled' ? { ...s, bay: 0 } : s))
+    : game.shipments;
+  return { ...data, saveVersion: 20, game: { ...game, shipments, freightVehicle: 'auto' } };
+};
+
 /**
  * Migrations from version N to N + 1. Add an entry here whenever SAVE_VERSION is bumped:
- * `migrations[19] = (v19) => v20`.
+ * `migrations[20] = (v20) => v21`.
  */
 const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {
   16: migrateV16,
   17: migrateV17,
   18: migrateV18,
+  19: migrateV19,
 };
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {
@@ -352,7 +364,8 @@ const parseJob = (v: unknown): TaskJob | null => {
   }
   if (v.type === 'medicate' && isId(v.animalId)) return { type: 'medicate', animalId: v.animalId };
   if (v.type === 'carcass' && isId(v.carcassId)) return { type: 'carcass', carcassId: v.carcassId };
-  if (v.type === 'shipment' && isId(v.shipmentId)) return { type: 'shipment', shipmentId: v.shipmentId };
+  // Loaders saved before slots (v19) get none and are queued again by repairHaulTasks.
+  if (v.type === 'shipment' && isId(v.shipmentId)) return { type: 'shipment', shipmentId: v.shipmentId, slot: isId(v.slot) ? v.slot : -1 };
   return null;
 };
 
@@ -512,6 +525,8 @@ const parseShipment = (v: unknown): Shipment | null => {
   const staged = v.staged === true;
   if (phase === 'loading' && !staged) return null;
   const shipment: Shipment = { id, kind, dockId, phase, setOffAt, arrivesAt, deadline, goods, payment };
+  if (isId(v.bay)) shipment.bay = v.bay;
+  else if (phase !== 'scheduled') return null;
   if (work) shipment.work = work;
   if (staged && phase !== 'leaving') shipment.staged = true;
   if (kind === 'purchase') {
@@ -661,6 +676,8 @@ const parseGame = (v: unknown): GameState | null => {
   if (!orders || !research || !isVehicleLevel(v.vehicleLevel)) return null;
   const offers = allOffers.filter((o) => listings.some((l) => l.id === o.listingId));
   const vehicleLevel = v.vehicleLevel;
+  const freightVehicle = v.freightVehicle === 'auto' || isVehicleLevel(v.freightVehicle) ? v.freightVehicle : null;
+  if (freightVehicle === null) return null;
   if (!workers || !candidates || !tasks || !animals || !carcasses || !structures || !isId(nextId)) return null;
   const maxId = Math.max(
     0,
@@ -696,6 +713,7 @@ const parseGame = (v: unknown): GameState | null => {
     animals,
     carcasses,
     vehicleLevel,
+    freightVehicle,
     orders,
     listings,
     offers,

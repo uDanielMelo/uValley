@@ -53,6 +53,7 @@ export const createInitialState = (): GameState => {
     animals: [],
     carcasses: [],
     vehicleLevel: 1,
+    freightVehicle: 'auto',
     orders: [],
     listings: [],
     offers: [],

@@ -78,7 +78,13 @@ export const refreshOrders = (state: GameState, day: number): GameState => {
 
 export const nextVehicle = (level: VehicleLevel): VehicleLevel | null => (level < 3 ? ((level + 1) as VehicleLevel) : null);
 
-/** Trades the vehicle up at the dealership. */
+/** Which vehicle the freight comes with: 'auto' (the smallest that fits) or one with a contract. */
+export const setFreightVehicle = (state: GameState, choice: 'auto' | VehicleLevel): ActionResult => {
+  if (choice !== 'auto' && choice > state.vehicleLevel) return fail('max-level');
+  return ok({ ...state, freightVehicle: choice });
+};
+
+/** Signs a contract for the next freight vehicle at the dealership. */
 export const upgradeVehicle = (state: GameState): ActionResult => {
   const next = nextVehicle(state.vehicleLevel);
   if (!next) return fail('max-level');

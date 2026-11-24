@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { LISTINGS, OFFERS, WALK_IN } from '../data/docks';
+import { DOCK_LEVELS, DOCK_LEVEL_IDS, LISTINGS, OFFERS, WALK_IN } from '../data/docks';
 import { TOWN_SHOPS, VEHICLES } from '../data/market';
-import { bayCount, isDock } from '../game/dock';
+import { bayTotals, dockLevel, isDock, nextDockLevel } from '../game/dock';
+import { checkUpgrade, upgradeTotal } from '../game/construction';
+import { upgradeMinutes } from '../game/structures';
 import { offerChance, referencePrice } from '../game/listings';
 import { giveUpRefund, heldFee, purchaseFreight } from '../game/purchases';
 import { ALL_GOODS, countIn, goodKey, type Good } from '../game/market';
@@ -9,7 +11,7 @@ import { checkSale, freightCost, hasGoods, knownGoods, loadingProgress } from '.
 import { formatClock, toClock } from '../game/time';
 import type { GameState, HeldPurchase, Listing, Offer, Order, Shipment, ShipmentLine } from '../game/types';
 import { ERROR_MESSAGES, deliveryText, useGameStore, type DockTab, type GameStore } from '../store/gameStore';
-import { formatCoins } from './format';
+import { formatCoins, formatWorkTime } from './format';
 import { goodName } from './goods';
 import { Button, Coins, Panel } from './primitives';
 
@@ -236,18 +238,22 @@ function BayList({ compact = false }: { compact?: boolean }) {
   const ids = useGameStore((s) => active(s.game).map((x) => x.id).join(','));
   const bays = useGameStore((s) => {
     const dock = s.game.structures.find(isDock);
-    return dock ? bayCount(dock) : 0;
+    if (!dock) return '';
+    const car = bayTotals(s.game.tiles, dock, 'car');
+    const truck = bayTotals(s.game.tiles, dock, 'truck');
+    const held = (size: 'car' | 'truck') =>
+      active(s.game).filter((x) => x.phase !== 'scheduled' && (x.vehicle === 3 ? 'truck' : 'car') === size).length;
+    const part = (label: string, t: { total: number; usable: number }, used: number) =>
+      t.total === 0 ? '' : `${label} ${used}/${t.usable}${t.usable < t.total ? ` (${t.total - t.usable} sem estrada)` : ''}`;
+    return [part('carro', car, held('car')), part('caminhão', truck, held('truck'))].filter(Boolean).join(' · ');
   });
-  const parked = useGameStore((s) => active(s.game).filter((x) => x.phase !== 'scheduled' && x.phase !== 'enroute').length);
   const list = ids.split(',').filter(Boolean).map(Number);
   const hours = WALK_IN.hours.map((h) => `${h}h`).join(', ');
   return (
     <div className="flex flex-col gap-2">
-      <p className="flex justify-between text-xs font-bold">
-        <span className="text-wood/70">Vagas de carro</span>
-        <span className="tabular-nums">
-          {parked}/{bays} ocupada{bays === 1 ? '' : 's'}
-        </span>
+      <p className="flex justify-between gap-2 text-xs font-bold">
+        <span className="text-wood/70">Vagas ocupadas</span>
+        <span className="text-right tabular-nums">{bays}</span>
       </p>
       {list.map((id) => (
         <ShipmentCard key={id} id={id} />
@@ -534,13 +540,64 @@ export function DockPanel() {
   );
 }
 
-/** The dock's card: the bay at a glance, and the way to sell. */
+/** The dock's level, what each level adds, and the upgrade (with the road its new bays need). */
+function DockLevelSection() {
+  const level = useGameStore((s) => {
+    const dock = selectedDock(s);
+    return dock ? dockLevel(dock) : 1;
+  });
+  const id = useGameStore((s) => selectedDock(s)?.id ?? null);
+  const upgrading = useGameStore((s) => selectedDock(s)?.work?.kind === 'upgrade');
+  const total = useGameStore((s) => {
+    const dock = selectedDock(s);
+    const next = dock ? nextDockLevel(dock) : null;
+    return dock && next ? upgradeTotal(s.game, dock, next) : 0;
+  });
+  const error = useGameStore((s) => {
+    const r = id === null ? 'no-structure' : checkUpgrade(s.game, id);
+    return typeof r === 'string' ? r : null;
+  });
+  const upgrade = useGameStore((s) => s.upgradeShelter);
+  const next = level < 3 ? ((level + 1) as 2 | 3) : null;
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1" aria-label={`Nível ${level} de 3`}>
+        {DOCK_LEVEL_IDS.map((l) => (
+          <span key={l} title={DOCK_LEVELS[l].label} className={`h-1.5 flex-1 rounded-full ${l <= level ? 'bg-coin' : 'bg-wood/20'}`} />
+        ))}
+        <span className="ml-2 text-xs font-black">{DOCK_LEVELS[level].label}</span>
+      </div>
+      <ul className="flex flex-col gap-0.5 text-xs font-bold">
+        {DOCK_LEVEL_IDS.map((l) => (
+          <li key={l} className={l <= level ? 'text-green-900' : 'text-wood/50'}>
+            {l <= level ? '✓' : '·'} {DOCK_LEVELS[l].perk}
+          </li>
+        ))}
+      </ul>
+      {!upgrading && id !== null && next && (
+        <>
+          <Button className="flex flex-col items-center text-sm" disabled={error !== null} onClick={() => upgrade(id)}>
+            <span>Melhorar: {DOCK_LEVELS[next].label.toLowerCase()}</span>
+            <span className="flex items-center gap-2 text-xs font-bold opacity-90">
+              <Coins value={formatCoins(total)} /> · obra de {formatWorkTime(upgradeMinutes('dock', next))}
+            </span>
+          </Button>
+          {error && error !== 'not-enough-money' && <p className="text-xs font-bold text-red-700">{ERROR_MESSAGES[error]}</p>}
+          <p className="text-[11px] font-bold text-wood/60">As vagas novas ficam na rua, à direita da doca; a obra abre a estrada delas.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** The dock's card: the level, the bays at a glance, and the way to sell. */
 export function DockSection() {
   const dockId = useGameStore((s) => selectedDock(s)?.id ?? null);
   const openDock = useGameStore((s) => s.openDock);
   if (dockId === null) return null;
   return (
     <div className="flex flex-col gap-2">
+      <DockLevelSection />
       <BayList compact />
       <div className="flex gap-2">
         <Button variant="leaf" className="flex-1 text-xs" onClick={() => openDock('sell')}>

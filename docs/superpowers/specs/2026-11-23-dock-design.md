@@ -1,6 +1,6 @@
 # Doca e frete: design
 
-Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **9a, 9b e 9c implementadas** (branches `fase-4a-etapa-9a`, `fase-4b-etapa-9b` e `fase-4c-etapa-9c`); próximas: 9d–9e, uma sub-etapa por vez. As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
+Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **9a a 9d implementadas** (branches `fase-4a-etapa-9a` a `fase-4d-etapa-9d`); falta a 9e. As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
 
 Este documento é a memória do que foi conversado e decidido. Tudo que está em "Decidido pelo usuário" veio da conversa; o que está em "Minhas escolhas" são propostas minhas, provisórias, para o usuário confirmar ou ajustar.
 
@@ -168,8 +168,15 @@ Diferenças da 9a para o modelo proposto: `Shipment` tem `setOffAt` (para desenh
 - Ração virou estoque (kg, `inventory.feed`); `feedCostPerDay` virou `feedKgPerDay` (mesmos números, 1 moeda/kg). Pedido automático (`feedOrder`, ligado por padrão, 3 dias) roda de hora em hora no horário do frete.
 - A compra só pode ser cancelada antes de o frete sair; descarregar não tem avaria; o remédio do card do animal é pedido direto.
 
+## Como ficou a 9d
+
+- `DOCK_LEVELS` 1–3 com `bays: BayDef[]` (`size` car/truck, `along` na rua à direita da doca, `roads` que precisam ser estrada). A reforma usa o `work.kind = 'upgrade'` das construções, com preço e tempo próprios, e enfileira as estradas que faltam.
+- `Shipment.bay` guarda a vaga desde a saída; tarefas `haul` ficam no tile da vaga com `slot` (posição do carregador).
+- `GameState.vehicleLevel` virou o maior veículo de frete contratado; `freightVehicle` ('auto' ou fixo) escolhe o veículo; `pickVehicle` por peso, caminhão só com vaga de caminhão.
+- Os animais comprados seguem no boiadeiro em vaga de carro (a exigência de caminhão para gado fica com a venda de gado, 9e).
+
 ## Como retomar numa nova sessão
 
 1. Ler este documento e `docs/roadmap.md` (seção "Etapa 9").
-2. Implementar a próxima sub-etapa (9d: caminhão e níveis da doca) quando o usuário pedir.
+2. Implementar a 9e (embarque de gado) quando o usuário pedir.
 3. Cada sub-etapa termina atualizando `CLAUDE.md` e `docs/roadmap.md`, com testes e `npm run build`.

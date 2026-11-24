@@ -13,7 +13,7 @@ import { LISTINGS, OFFERS } from '../data/docks';
 import { MINUTES_PER_DAY } from '../data/world';
 import { basePrice, goodKey, marketPrice, sameGood, unitWeight, type Good } from './market';
 import { hash01 } from './random';
-import { between, freightCapacity, scheduleSale } from './shipments';
+import { between, maxFreightKg, scheduleSale } from './shipments';
 import { fail, ok, type ActionResult, type GameState, type Listing, type Offer } from './types';
 
 const isPositiveInt = (n: number): boolean => Number.isInteger(n) && n > 0;
@@ -100,7 +100,7 @@ export const generateOffers = (state: GameState, hour: number): GameState => {
       .reduce((sum, l) => sum + l.offered.units, fresh.get(goodKey(listing.good)) ?? 0);
     const left = dailyDemand(listing.good, day) - offeredToday;
     const wanted = Math.max(1, Math.round(dailyDemand(listing.good, day) * between(OFFERS.share, hash01(hour * 389 + listing.id * 71 + 5))));
-    const fits = Math.floor(freightCapacity(state.vehicleLevel) / unitWeight(listing.good));
+    const fits = Math.floor(maxFreightKg(state) / unitWeight(listing.good));
     const quantity = Math.min(wanted, left, listing.quantity, fits);
     if (quantity <= 0) return listing;
     fresh.set(goodKey(listing.good), (fresh.get(goodKey(listing.good)) ?? 0) + quantity);

@@ -108,7 +108,7 @@ export const CITY_SHOPS: Record<CityShopId, CityShopDef> = {
   dealer: {
     id: 'dealer',
     label: 'Concessionária',
-    hint: 'Trocar de veículo',
+    hint: 'Contratar e escolher o frete',
     size: { width: 12, depth: 9, height: 4.5 },
     position: [21, 12],
     facing: 'north',

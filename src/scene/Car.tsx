@@ -19,10 +19,10 @@ const angleDelta = (a: number, b: number): number => Math.atan2(Math.sin(b - a),
  * One vehicle visiting the dock. Its position is derived every frame from its saved shipment and
  * the road network (game/visitors.ts); the routes are only rebuilt when the roads change.
  */
-function ShipmentCar({ id, dockId, vehicle }: { id: number; dockId: number; vehicle: number }) {
+function ShipmentCar({ id, dockId, bay, vehicle }: { id: number; dockId: number; bay: number; vehicle: number }) {
   const tiles = useGameStore((s) => s.game.tiles);
   const structures = useGameStore((s) => s.game.structures);
-  const routes = useMemo(() => shipmentRoutes({ tiles, structures }, dockId), [tiles, structures, dockId]);
+  const routes = useMemo(() => shipmentRoutes({ tiles, structures }, dockId, bay), [tiles, structures, dockId, bay]);
   const root = useRef<Group>(null);
   const wheels = useRef<Array<Group | null>>([]);
   const last = useRef({ x: NaN, z: NaN, heading: NaN });
@@ -66,15 +66,17 @@ function ShipmentCar({ id, dockId, vehicle }: { id: number; dockId: number; vehi
 
 /** The vehicles on their way to, parked at or leaving the dock. Re-renders only when one comes or goes. */
 export function Cars() {
-  const list = useGameStore((s) => s.game.shipments.map((x) => `${x.id}:${x.dockId}:${x.vehicle ?? 0}`).join(','));
+  const list = useGameStore((s) => s.game.shipments.map((x) => `${x.id}:${x.dockId}:${x.vehicle ?? 0}:${x.bay ?? -1}`).join(','));
   return (
     <>
       {list
         .split(',')
         .filter(Boolean)
         .map((entry) => {
-          const [id, dockId, vehicle = 0] = entry.split(':').map(Number);
-          return id === undefined || dockId === undefined ? null : <ShipmentCar key={id} id={id} dockId={dockId} vehicle={vehicle} />;
+          const [id, dockId, vehicle = 0, bay = -1] = entry.split(':').map(Number);
+          // Scheduled freight has no bay yet (and is not drawn).
+          if (id === undefined || dockId === undefined || bay < 0) return null;
+          return <ShipmentCar key={`${id}:${bay}`} id={id} dockId={dockId} bay={bay} vehicle={vehicle} />;
         })}
     </>
   );

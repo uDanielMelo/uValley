@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DOCK, WALK_IN } from '../../data/docks';
 import { DEFAULT_PRIORITIES } from '../../data/workers';
 import { MINUTES_PER_DAY } from '../../data/world';
-import { bayPoint, crewTilesOf, docksOf, loaderSpot } from '../dock';
+import { bayPoint, bayTile, docksOf, loaderSpot } from '../dock';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import {
   cancelLoading,
@@ -80,12 +80,10 @@ describe('the dock', () => {
     expect(dock).toMatchObject({ type: 'dock', x: 33, y: 57 });
     if (!dock) return;
     expect(bayPoint(dock)).toEqual({ x: 33.5, y: 58.5 });
-    const tiles = crewTilesOf(dock);
-    expect(tiles).toHaveLength(DOCK.crewMax);
-    expect(new Set(tiles).size).toBe(tiles.length);
-    for (const tile of tiles) {
-      expect(s.tiles[tile]?.road).toBe(true);
-      const spot = loaderSpot(dock, tile);
+    expect(s.tiles[bayTile(dock, 0)]?.road).toBe(true);
+    const spots = Array.from({ length: DOCK.crewMax }, (_, slot) => loaderSpot(dock, 0, slot));
+    expect(new Set(spots.map((p) => p.x)).size).toBe(DOCK.crewMax);
+    for (const spot of spots) {
       // Between the platform (rows ≤ 57) and the vehicle parked mid-row 58.
       expect(spot.y).toBeGreaterThan(58);
       expect(spot.y).toBeLessThan(58.3);

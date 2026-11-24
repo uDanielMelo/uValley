@@ -18,13 +18,13 @@
  *   unloaded by the crew as soon as it parks. If nobody unloads it in time it drives back and the
  *   delivery is held in town until the farm pays a new freight.
  */
-import { DOCK, FREIGHT, FREIGHT_RULES, LIVESTOCK, SUPPLY_WEIGHT, WALK_IN } from '../data/docks';
-import { VEHICLES, type VehicleLevel } from '../data/market';
+import { DOCK, FREIGHT, FREIGHT_RULES, LIVESTOCK, SUPPLY_WEIGHT, VEHICLE_BAY, WALK_IN, type BaySize } from '../data/docks';
+import { VEHICLES, VEHICLE_LEVELS, type VehicleLevel } from '../data/market';
 import { MAX_TASKS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { animalProduct } from './animals';
 import { receiveDelivery } from './delivery';
-import { bayCount, bayPoint, crewTilesOf, dockWorks, docksOf } from './dock';
+import { bayPoint, bayTile, bayUsable, dockBays, dockWorks, docksOf } from './dock';
 import { addTo, basePrice, countIn, unitWeight, type Good } from './market';
 import { hash01 } from './random';
 import { dropTasks } from './tasks';
@@ -93,31 +93,56 @@ const restock = (state: GameState, lines: readonly ShipmentLine[]): GameState =>
 
 // ---------- routes ----------
 
-/** The routes of a vehicle parking at a dock (from the road network as it is now). */
-export const shipmentRoutes = (state: Pick<GameState, 'tiles' | 'structures'>, dockId: number): CarRoutes | null => {
+/** The routes of a vehicle parking at a bay of a dock (from the road network as it is now). */
+export const shipmentRoutes = (state: Pick<GameState, 'tiles' | 'structures'>, dockId: number, bay = 0): CarRoutes | null => {
   const dock = state.structures.find((s) => s.id === dockId);
-  return dock ? carRoutes(state.tiles, bayPoint(dock)) : null;
+  return dock ? carRoutes(state.tiles, bayPoint(dock, bay)) : null;
 };
 
-/** Game minutes to drive in to a dock (and the same to drive back out). */
-const driveTime = (state: Pick<GameState, 'tiles' | 'structures'>, dockId: number): number => {
-  const routes = shipmentRoutes(state, dockId);
+/** Game minutes to drive in to a bay (and the same to drive back out). */
+const driveTime = (state: Pick<GameState, 'tiles' | 'structures'>, dockId: number, bay = 0): number => {
+  const routes = shipmentRoutes(state, dockId, bay);
   return routes ? driveMinutes(routeLength(routes.arrive)) : 0;
 };
 
 // ---------- bays ----------
 
-/** Shipments parked at, or driving to, a dock (each one holds a bay). */
-const holdingBay = (state: Pick<GameState, 'shipments'>, dockId: number): number =>
-  state.shipments.filter((s) => s.dockId === dockId && s.phase !== 'leaving' && s.phase !== 'scheduled').length;
+/** Bays taken: by vehicles on their way, parked or being loaded. */
+const takenBays = (state: Pick<GameState, 'shipments'>, dockId: number): Set<number> =>
+  new Set(
+    state.shipments.flatMap((s) =>
+      s.dockId === dockId && s.phase !== 'leaving' && s.phase !== 'scheduled' && s.bay !== undefined ? [s.bay] : [],
+    ),
+  );
 
-const bayFree = (state: GameState, dockId: number): boolean => {
+/** The first free, working bay of a size at a dock, or null. */
+export const freeBay = (state: GameState, dockId: number, size: BaySize): number | null => {
   const dock = state.structures.find((s) => s.id === dockId);
-  return !!dock && dockWorks(state, dock) && holdingBay(state, dockId) < bayCount(dock);
+  if (!dock || !dockWorks(state, dock)) return null;
+  const taken = takenBays(state, dockId);
+  const bays = dockBays(dock);
+  for (let i = 0; i < bays.length; i++) {
+    const bay = bays[i];
+    if (bay && bay.size === size && !taken.has(i) && bayUsable(state.tiles, dock, bay)) return i;
+  }
+  return null;
 };
 
-/** The first working dock with a free bay. */
-const freeDock = (state: GameState): number | null => docksOf(state).find((d) => bayFree(state, d.id))?.id ?? null;
+/** A working dock has a working bay of this size (taken or not). */
+export const hasBay = (state: GameState, size: BaySize): boolean =>
+  docksOf(state).some((d) => dockWorks(state, d) && dockBays(d).some((b) => b.size === size && bayUsable(state.tiles, d, b)));
+
+/** The bay a shipment's vehicle needs: hired trucks a truck bay, everything else a car bay. */
+const baySizeOf = (s: Pick<Shipment, 'vehicle'>): BaySize => (s.vehicle ? VEHICLE_BAY[s.vehicle] : 'car');
+
+/** The first working dock with a free car bay, and the bay. */
+const freeCarBay = (state: GameState): { dockId: number; bay: number } | null => {
+  for (const dock of docksOf(state)) {
+    const bay = freeBay(state, dock.id, 'car');
+    if (bay !== null) return { dockId: dock.id, bay };
+  }
+  return null;
+};
 
 /** The dock the farm's freight goes to: the first one reached by road. */
 export const workingDock = (state: GameState): number | null => docksOf(state).find((d) => dockWorks(state, d))?.id ?? null;
@@ -177,18 +202,19 @@ export const walkInRequest = (
   return { line: { good, quantity }, payment: Math.round(unit * quantity) };
 };
 
-/** A customer sets off at `at` (skipped when no bay is free, or freight is waiting for one). */
+/** A customer sets off at `at` (skipped when no car bay is free, or freight is waiting for one). */
 export const spawnWalkIn = (state: GameState, walkIn: WalkInSlot): GameState => {
-  if (state.shipments.some((s) => s.phase === 'scheduled')) return state;
-  const dockId = freeDock(state);
-  if (dockId === null) return state;
+  if (state.shipments.some((s) => s.phase === 'scheduled' && baySizeOf(s) === 'car')) return state;
+  const free = freeCarBay(state);
+  if (!free) return state;
   const request = walkInRequest(state, walkIn.day * 101 + walkIn.slot);
   if (!request) return state;
-  const arrivesAt = walkIn.at + driveTime(state, dockId);
+  const arrivesAt = walkIn.at + driveTime(state, free.dockId, free.bay);
   const shipment: Shipment = {
     id: state.nextId,
     kind: 'walkin',
-    dockId,
+    dockId: free.dockId,
+    bay: free.bay,
     phase: 'enroute',
     setOffAt: walkIn.at,
     arrivesAt,
@@ -205,8 +231,41 @@ export const spawnWalkIn = (state: GameState, walkIn: WalkInSlot): GameState => 
 export const freightCost = (level: VehicleLevel, lines: readonly ShipmentLine[]): number =>
   Math.round(FREIGHT[level].base + FREIGHT[level].perKg * linesWeight(lines));
 
-/** Most kg one freight trip takes. */
+/** Most kg one freight trip takes with a vehicle. */
 export const freightCapacity = (level: VehicleLevel): number => VEHICLES[level].capacity;
+
+/**
+ * The freight vehicles that may come: the one the farm chose, or (automatic) every one it has a
+ * contract for, smallest first. A truck only comes to a dock with a truck bay.
+ */
+const freightChoices = (state: GameState): VehicleLevel[] => {
+  const contracted = VEHICLE_LEVELS.filter((l) => l <= state.vehicleLevel);
+  const choice = state.freightVehicle;
+  return choice !== 'auto' && contracted.includes(choice) ? [choice] : contracted;
+};
+
+/** The vehicle a load of `kg` comes with: the first choice that fits it and has its bay, or why none. */
+export const pickVehicle = (state: GameState, kg: number): VehicleLevel | ActionError => {
+  let error: ActionError = 'vehicle-full';
+  for (const level of freightChoices(state)) {
+    if (kg > freightCapacity(level)) continue;
+    if (VEHICLE_BAY[level] === 'truck' && !hasBay(state, 'truck')) {
+      error = 'no-truck-bay';
+      continue;
+    }
+    return level;
+  }
+  return error;
+};
+
+/** Most kg one trip can take now (the biggest vehicle that may come). */
+export const maxFreightKg = (state: GameState): number =>
+  Math.max(
+    0,
+    ...freightChoices(state)
+      .filter((l) => VEHICLE_BAY[l] === 'car' || hasBay(state, 'truck'))
+      .map(freightCapacity),
+  );
 
 const inFreightHours = (gameMinutes: number): boolean => {
   const hour = (((gameMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY) / 60;
@@ -225,8 +284,9 @@ export const freightStart = (at: number): number => {
 export const checkSale = (state: GameState, lines: readonly ShipmentLine[]): ActionError | null => {
   if (workingDock(state) === null) return 'dock-no-road';
   if (!hasGoods(state, lines)) return 'not-enough-goods';
-  if (linesWeight(lines) > freightCapacity(state.vehicleLevel)) return 'vehicle-full';
-  return state.money < freightCost(state.vehicleLevel, lines) ? 'not-enough-money' : null;
+  const vehicle = pickVehicle(state, linesWeight(lines));
+  if (typeof vehicle === 'string') return vehicle;
+  return state.money < freightCost(vehicle, lines) ? 'not-enough-money' : null;
 };
 
 /** What every hired freight trip shares; the rest is filled in by `scheduleFreight`. */
@@ -260,9 +320,11 @@ export const scheduleFreight = (state: GameState, trip: FreightTrip, due = Infin
 export const scheduleSale = (state: GameState, lines: ShipmentLine[], payment: number, order?: Order): ActionResult => {
   const error = checkSale(state, lines);
   if (error) return fail(error);
-  const freight = freightCost(state.vehicleLevel, lines);
+  const vehicle = pickVehicle(state, linesWeight(lines));
+  if (typeof vehicle === 'string') return fail(vehicle);
+  const freight = freightCost(vehicle, lines);
   const paid = takeGoods({ ...state, money: state.money - freight }, lines);
-  const trip: FreightTrip = { kind: 'sale', goods: lines, payment, staged: true, freight, vehicle: state.vehicleLevel, ...(order ? { order } : {}) };
+  const trip: FreightTrip = { kind: 'sale', goods: lines, payment, staged: true, freight, vehicle, ...(order ? { order } : {}) };
   return ok(scheduleFreight(paid, trip, order ? order.dueDay * MINUTES_PER_DAY : Infinity));
 };
 
@@ -298,7 +360,7 @@ const depart = (
   const dropped = dropTasks(restocked, isHaulFor(shipment.id));
   const { work: _work, staged: _staged, ...rest } = shipment;
   const lost = outcome === 'sold' || !shipment.staged ? 0 : linesUnits(shipment.goods) - linesUnits(back);
-  const drive = shipment.phase === 'scheduled' ? 0 : driveTime(state, shipment.dockId);
+  const drive = shipment.phase === 'scheduled' ? 0 : driveTime(state, shipment.dockId, shipment.bay);
   const leaving: Shipment = {
     ...rest,
     phase: 'leaving',
@@ -333,16 +395,17 @@ const expire = (state: GameState, shipment: Shipment, at: number): GameState => 
   return depart(state, shipment, 'expired', at, back);
 };
 
-/** Queues the loaders of a shipment (one per crew tile not already queued). */
+/** Queues the loaders of a shipment (one per loader slot not already queued), on its bay's tile. */
 const addHaulTasks = (state: GameState, shipment: Shipment): GameState => {
   const dock = state.structures.find((s) => s.id === shipment.dockId);
-  if (!dock) return state;
-  const queued = new Set(state.tasks.filter(isHaulFor(shipment.id)).map((t) => t.tile));
+  const tile = dock ? bayTile(dock, shipment.bay ?? 0) : -1;
+  if (!dock || tile < 0) return state;
+  const queued = new Set(state.tasks.flatMap((t) => (t.job?.type === 'shipment' && t.job.shipmentId === shipment.id ? [t.job.slot] : [])));
   let nextId = state.nextId;
   const added: Task[] = [];
-  for (const tile of crewTilesOf(dock)) {
-    if (queued.has(tile)) continue;
-    added.push({ id: nextId++, kind: 'haul', tile, cropId: null, workerId: null, job: { type: 'shipment', shipmentId: shipment.id } });
+  for (let slot = 0; slot < DOCK.crewMax; slot++) {
+    if (queued.has(slot)) continue;
+    added.push({ id: nextId++, kind: 'haul', tile, cropId: null, workerId: null, job: { type: 'shipment', shipmentId: shipment.id, slot } });
   }
   return added.length === 0 ? state : { ...state, tasks: [...state.tasks, ...added], nextId };
 };
@@ -358,8 +421,10 @@ const dispatch = (state: GameState, shipment: Shipment, now: number): GameState 
   if (now < shipment.setOffAt || !inFreightHours(now)) return state;
   const drive = driveTime(state, shipment.dockId);
   if (now + drive + FREIGHT_RULES.minLoadMinutes > shipment.deadline) return expire(state, shipment, now);
-  if (!bayFree(state, shipment.dockId)) return state;
-  return update(state, shipment.id, (s) => ({ ...s, phase: 'enroute', setOffAt: now, arrivesAt: now + drive }));
+  const bay = freeBay(state, shipment.dockId, baySizeOf(shipment));
+  if (bay === null) return state;
+  const arrivesAt = now + driveTime(state, shipment.dockId, bay);
+  return update(state, shipment.id, (s) => ({ ...s, phase: 'enroute', bay, setOffAt: now, arrivesAt }));
 };
 
 /** A vehicle parks: a customer waits for the player, hired freight is (un)loaded right away. */
@@ -480,7 +545,10 @@ export const loadingProgress = (shipment: Pick<Shipment, 'work'>): number | null
  */
 export const repairHaulTasks = (state: GameState): GameState => {
   const loading = new Set(state.shipments.filter((s) => s.phase === 'loading').map((s) => s.id));
-  let next = dropTasks(state, (t) => t.kind === 'haul' && (t.job?.type !== 'shipment' || !loading.has(t.job.shipmentId)));
+  let next = dropTasks(
+    state,
+    (t) => t.kind === 'haul' && (t.job?.type !== 'shipment' || t.job.slot < 0 || !loading.has(t.job.shipmentId)),
+  );
   for (const s of next.shipments) if (s.phase === 'loading') next = addHaulTasks(next, s);
   return next;
 };

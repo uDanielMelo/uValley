@@ -147,7 +147,7 @@ Backend, login GitHub, save na nuvem, perfis e amigos. Decidido com o usuário: 
 projeto, de forma web (requisição ao GitHub e atualização pela web). O que havia sido feito localmente
 (bônus de contribuições, painel Perfil, save em arquivo e cliente Supabase) foi removido do código.
 
-### Etapa 9: doca e frete (em andamento: 9a ✅, 9b ✅, 9c ✅)
+### Etapa 9: doca e frete (em andamento: 9a ✅, 9b ✅, 9c ✅, 9d ✅)
 A caixa de venda vira uma doca com vagas; vender e comprar passam por veículos, frete e trabalho da equipe
 (carregamento como obra). Desenho completo, decisões do usuário e sub-etapas 9a a 9e em
 `docs/superpowers/specs/2026-11-23-dock-design.md` (aprovado pelo usuário em 2026-11-23).
@@ -181,6 +181,15 @@ virou estoque (kg) comido à meia-noite, com pedido automático ligado por padr�
 Decidido por mim: ração com pedido automático (para não virar microgerenciamento), caminhão boiadeiro à
 parte do veículo da fazenda, a compra só pode ser cancelada antes de o frete sair, e o remédio pedido do
 card do animal vai direto, sem passar pelo carrinho.
+
+9d ✅: a doca tem níveis, reformados pela equipe: nível 2 "Doca dupla" (segunda vaga de carro, 600) e nível 3
+"Doca com caminhão" (vaga de caminhão, 1.600). As vagas novas ficam na rua, à direita da doca, pintadas no
+chão (amarela a do caminhão), e a reforma abre a estrada delas. Cada veículo segura sua vaga e tem sua
+própria equipe de carga. O frete escolhe o veículo pelo peso (o menor contratado em que a carga cabe) ou
+sempre o que o jogador fixar na Concessionária, que agora contrata picape, caminhonete e caminhão; o
+caminhão (1.500 kg, frete por kg mais barato) só vem com vaga de caminhão. Save v20. Decidido por mim: vagas
+a duas casas uma da outra (a picape tem 5,2 m), animais comprados continuam vindo no boiadeiro em vaga de
+carro, e carregadores de um mesmo veículo dividem o tile da vaga.
 
 ### Vias e mapa maior (pedido do usuário) ✅
 

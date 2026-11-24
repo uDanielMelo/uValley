@@ -175,6 +175,8 @@ export interface Shipment {
   kind: ShipmentKind;
   /** The dock whose bay it parks at. */
   dockId: number;
+  /** The bay it holds (index in the dock's bays), from the moment it sets off. */
+  bay?: number;
   phase: ShipmentPhase;
   /** Game minute it set off from the highway's east end (scheduled: the earliest it may). */
   setOffAt: number;
@@ -241,8 +243,8 @@ export type TaskJob =
   | { type: 'medicate'; animalId: number }
   /** Taking a carcass away ('tend'); the task tile is under the carcass. */
   | { type: 'carcass'; carcassId: number }
-  /** Loading a vehicle at the dock ('haul'); the task tile is one of the bay's crew tiles. */
-  | { type: 'shipment'; shipmentId: number };
+  /** Loading a vehicle at the dock ('haul'); the task tile is the bay's tile, `slot` the loader's spot. */
+  | { type: 'shipment'; shipmentId: number; slot: number };
 
 /** A queued order on a tile, executed by a worker. */
 export interface Task {
@@ -374,8 +376,10 @@ export interface GameState {
   tasks: Task[];
   animals: Animal[];
   carcasses: Carcass[];
-  /** The farm's vehicle (1 pickup, 2 SUV, 3 truck). */
+  /** The biggest freight vehicle the farm has a contract for (1 pickup, 2 SUV, 3 truck). */
   vehicleLevel: VehicleLevel;
+  /** Which vehicle the freight comes with: the smallest that fits each load, or always one. */
+  freightVehicle: 'auto' | VehicleLevel;
   /** Open town orders (sent from the dock). */
   orders: Order[];
   /** What the farm put up for sale, and the offers buyers made on it. */
@@ -460,6 +464,7 @@ export type ActionError =
   | 'invalid-price'
   | 'no-order'
   | 'dock-no-road'
+  | 'no-truck-bay'
   | 'too-many-heads'
   | 'empty-cart'
   | 'no-held'

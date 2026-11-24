@@ -1,3 +1,6 @@
+import { DOCK_LEVELS, type DockLevel } from '../../data/docks';
+import { TILE_METERS } from '../../data/scale';
+import { LAMP_MATERIAL } from '../materials';
 import { Block, Meters } from './Buildings';
 
 const CONCRETE = '#b9b4a8';
@@ -60,6 +63,76 @@ export function Dock() {
       <Block position={[1.0, DECK_H + 0.9, DECK_Z - 0.45]} size={[0.55, 0.45, 0.5]} color={WOOD_DARK} />
       <Block position={[0.25, DECK_H + 0.3, DECK_Z - 0.6]} size={[0.6, 0.5, 0.55]} color={WOOD_DARK} />
       <Block position={[-0.8, DECK_H + 0.22, DECK_Z - 0.5]} size={[0.7, 0.35, 0.5]} color={SACK} rotation={[0, 0.3, 0]} />
+    </Meters>
+  );
+}
+
+const PAINT = '#efe9da';
+const PAINT_TRUCK = '#e9c03a';
+const STEEL = '#8e969b';
+/** Paint sits just above the road surface (meters). */
+const PAINT_Y = 0.08;
+const LINE = 0.12;
+
+/** A painted bay outline on the street: `along` tiles to the dock's right, one tile in front of it. */
+function BayLines({ along, length, width, color }: { along: number; length: number; width: number; color: string }) {
+  const x = along * TILE_METERS;
+  const z = TILE_METERS;
+  const sides: Array<[number, number, number, number]> = [
+    [x, z - width / 2, length, LINE],
+    [x, z + width / 2, length, LINE],
+    [x - length / 2, z, LINE, width],
+    [x + length / 2, z, LINE, width],
+  ];
+  return (
+    <>
+      {sides.map(([px, pz, sx, sz]) => (
+        <mesh key={`${px},${pz}`} position={[px, PAINT_Y, pz]} raycast={noRaycast}>
+          <boxGeometry args={[sx, 0.01, sz]} />
+          <meshStandardMaterial color={color} roughness={0.9} />
+        </mesh>
+      ))}
+    </>
+  );
+}
+
+const noRaycast = () => null;
+
+/**
+ * What each dock level adds: painted bays on the street (white for cars, yellow for the truck),
+ * stacked pallets and a second sign at level 2, a steel dock leveler and a floodlight at level 3.
+ */
+export function DockUpgrades({ level }: { level: DockLevel }) {
+  const bays = DOCK_LEVELS[level].bays;
+  return (
+    <Meters>
+      {bays.map((bay) => (
+        <BayLines
+          key={bay.along}
+          along={bay.along}
+          length={bay.size === 'truck' ? 8 : 5.8}
+          width={2.7}
+          color={bay.size === 'truck' ? PAINT_TRUCK : PAINT}
+        />
+      ))}
+      {level >= 2 && (
+        <>
+          <Block position={[1.45, 0.12, DECK_Z - DECK_D / 2 - 0.4]} size={[0.9, 0.24, 0.7]} color={WOOD_DARK} />
+          <Block position={[1.45, 0.45, DECK_Z - DECK_D / 2 - 0.4]} size={[0.8, 0.4, 0.6]} color={WOOD} />
+          <Block position={[-0.9, ROOF_H - 0.25, DECK_FRONT + 0.2]} size={[0.5, 0.4, 0.06]} color={PAINT} shadow={false} />
+        </>
+      )}
+      {level >= 3 && (
+        <>
+          {/* Steel leveler plate bridging the deck to a truck bed */}
+          <Block position={[0, DECK_H - 0.02, DECK_FRONT + 0.25]} size={[1.6, 0.05, 0.5]} color={STEEL} rotation={[0.15, 0, 0]} />
+          {/* Floodlight on a pole at the street corner */}
+          <Block position={[1.6, 2.2, DECK_FRONT + 0.05]} size={[0.12, 4.4, 0.12]} color={POST} />
+          <mesh position={[1.6, 4.35, DECK_FRONT + 0.3]} material={LAMP_MATERIAL}>
+            <boxGeometry args={[0.45, 0.2, 0.3]} />
+          </mesh>
+        </>
+      )}
     </Meters>
   );
 }

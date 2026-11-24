@@ -190,7 +190,7 @@ export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoi
   if (job?.type === 'shipment') {
     const shipment = state.shipments.find((s) => s.id === job.shipmentId);
     const dock = shipment && state.structures.find((s) => s.id === shipment.dockId);
-    return dock ? loaderSpot(dock, task.tile) : tileCenter(task.tile);
+    return dock ? loaderSpot(dock, shipment?.bay ?? 0, job.slot) : tileCenter(task.tile);
   }
   if (job?.type !== 'structure' && job?.type !== 'shelter') return tileCenter(task.tile);
   const site = state.structures.find((s) => s.id === job.structureId);
@@ -221,11 +221,18 @@ export const taskProgress = (state: GameState, worker: Worker): number | null =>
   return Math.min(1, worker.progress / taskMinutes(task));
 };
 
-/** Tasks a free worker may take: unassigned and first in the queue for their tile. */
+/**
+ * Tasks a free worker may take: unassigned and first in the queue for their tile. Loaders never
+ * change their tile, so several of them (each at their own spot by the vehicle) share it.
+ */
 const availableTasks = (tasks: readonly Task[]): Task[] => {
   const seen = new Set<number>();
   const result: Task[] = [];
   for (const task of tasks) {
+    if (task.kind === 'haul') {
+      if (task.workerId === null) result.push(task);
+      continue;
+    }
     if (seen.has(task.tile)) continue;
     seen.add(task.tile);
     if (task.workerId === null) result.push(task);

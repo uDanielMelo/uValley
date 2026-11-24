@@ -9,6 +9,7 @@ import { footprintOf } from '../game/structures';
 import type { StructureWorkKind } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { cornerToWorld } from './coords';
+import { DockUpgrades } from './models/Dock';
 import { ShelterUpgrades } from './models/ShelterUpgrades';
 import { PALETTE } from './palette';
 import { STRUCTURE_MODELS, StructureTransform, type PlacedProps } from './structureModels';
@@ -177,6 +178,7 @@ export function ConstructionSite({
         <StructureTransform type={type} x={x} y={y} rotation={rotation}>
           <Model />
           <ShelterUpgrades type={type} level={level} />
+          {type === 'dock' && <DockUpgrades level={level === 2 || level === 3 ? level : 1} />}
         </StructureTransform>
       )}
     </group>

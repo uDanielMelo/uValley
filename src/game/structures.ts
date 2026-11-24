@@ -7,6 +7,7 @@ import {
   type StructureId,
 } from '../data/structures';
 import { ROAD_COST, ROAD_RING } from '../data/roads';
+import { DOCK_LEVELS } from '../data/docks';
 import { BUNKHOUSE_BEDS } from '../data/workers';
 import { GRID_SIZE } from '../data/world';
 import { inBounds, tileCoords, tileIndex } from './grid';
@@ -153,13 +154,17 @@ export const buildCost = (type: StructureId): number => STRUCTURES[type].cost ??
 /** Work minutes (at speed 1) to raise a structure. */
 export const buildMinutesFor = (type: StructureId): number => STRUCTURES[type].buildMinutes ?? 0;
 
-/** Price of upgrading a shelter to a level: a share of its build cost. */
-export const upgradeCost = (type: StructureId, toLevel: ShelterLevel): number =>
-  Math.round(buildCost(type) * SHELTER_LEVELS[toLevel].upgradeShare);
+const dockLevelDef = (level: ShelterLevel) => (level === 2 || level === 3 ? DOCK_LEVELS[level] : null);
 
-/** Work minutes (at speed 1) of upgrading a shelter to a level: a share of its build work. */
+/** Price of upgrading to a level: the dock's own price, or a share of a shelter's build cost. */
+export const upgradeCost = (type: StructureId, toLevel: ShelterLevel): number =>
+  type === 'dock' ? (dockLevelDef(toLevel)?.cost ?? 0) : Math.round(buildCost(type) * SHELTER_LEVELS[toLevel].upgradeShare);
+
+/** Work minutes (at speed 1) of upgrading to a level: the dock's own, or a share of a shelter's build work. */
 export const upgradeMinutes = (type: StructureId, toLevel: ShelterLevel): number =>
-  Math.round(buildMinutesFor(type) * SHELTER_LEVELS[toLevel].upgradeShare);
+  type === 'dock'
+    ? (dockLevelDef(toLevel)?.buildMinutes ?? 0)
+    : Math.round(buildMinutesFor(type) * SHELTER_LEVELS[toLevel].upgradeShare);
 
 /** Everything paid for a structure: building it and every upgrade up to its level. */
 export const investedIn = (type: StructureId, level: ShelterLevel = 1): number => {

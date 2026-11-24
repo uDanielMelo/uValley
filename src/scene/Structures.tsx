@@ -5,6 +5,7 @@ import type { Rotation, StructureWorkKind } from '../game/types';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { ConstructionSite } from './ConstructionSite';
 import { setHoverCursor } from './cursor';
+import { DockUpgrades } from './models/Dock';
 import { ShelterUpgrades } from './models/ShelterUpgrades';
 import { SelectionOutline } from './SelectionOutline';
 import { StructureBadge } from './StructureBadge';
@@ -33,6 +34,7 @@ function PlacedStructure({ id, type, x, y, rotation, level }: PlacedProps & { id
       <StructureTransform type={type} x={x} y={y} rotation={rotation}>
         <Model />
         <ShelterUpgrades type={type} level={level} />
+        {type === 'dock' && <DockUpgrades level={level === 2 || level === 3 ? level : 1} />}
       </StructureTransform>
     </group>
   );

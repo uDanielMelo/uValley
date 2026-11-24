@@ -3,18 +3,53 @@
 import type { AnimalId } from './animals';
 import type { VehicleLevel } from './market';
 
-/** Dock levels (reached by upgrades in a later stage): how many vehicles can park at once. */
-export type DockLevel = 1;
+/** Dock levels, reached by upgrades the crew builds: more bays, then a truck bay. */
+export type DockLevel = 1 | 2 | 3;
+export const DOCK_LEVEL_IDS: readonly DockLevel[] = [1, 2, 3];
+
+/** A truck needs a truck bay; pickups and SUVs park at car bays. */
+export type BaySize = 'car' | 'truck';
+
+/**
+ * A bay on the street in front of the dock. `along` is how far (tiles) its middle is from the
+ * middle of the dock's front, to the dock's right (east when it faces south); `roads` are the
+ * offsets along the street (whole tiles from the dock's own tile) that must be road for it to work.
+ */
+export interface BayDef {
+  size: BaySize;
+  along: number;
+  roads: readonly number[];
+}
 
 export interface DockLevelDef {
   label: string;
-  /** Car bays (one vehicle each). */
-  carBays: number;
+  bays: readonly BayDef[];
+  /** Price and work minutes (at speed 1) of the upgrade to this level (level 1: none). */
+  cost: number;
+  buildMinutes: number;
+  /** What the level adds (pt-BR), for the card. */
+  perk: string;
 }
 
+const CAR_BAY: BayDef = { size: 'car', along: 0, roads: [0] };
+// Bays are two tiles apart: a pickup is 5.2 m long, a tile 3.5 m.
+const SECOND_CAR_BAY: BayDef = { size: 'car', along: 2, roads: [1, 2] };
+const TRUCK_BAY: BayDef = { size: 'truck', along: 4, roads: [3, 4, 5] };
+
 export const DOCK_LEVELS: Record<DockLevel, DockLevelDef> = {
-  1: { label: 'Doca simples', carBays: 1 },
+  1: { label: 'Doca simples', bays: [CAR_BAY], cost: 0, buildMinutes: 0, perk: 'Uma vaga de carro' },
+  2: { label: 'Doca dupla', bays: [CAR_BAY, SECOND_CAR_BAY], cost: 600, buildMinutes: 300, perk: 'Segunda vaga de carro' },
+  3: {
+    label: 'Doca com caminhão',
+    bays: [CAR_BAY, SECOND_CAR_BAY, TRUCK_BAY],
+    cost: 1600,
+    buildMinutes: 540,
+    perk: 'Vaga de caminhão: o frete pode vir de caminhão (1.500 kg, frete por kg mais barato)',
+  },
 };
+
+/** The bay each freight vehicle needs. */
+export const VEHICLE_BAY: Record<VehicleLevel, BaySize> = { 1: 'car', 2: 'car', 3: 'truck' };
 
 export const DOCK = {
   /** Game minutes a vehicle waits at the dock before driving off, loaded or not. */
@@ -26,6 +61,8 @@ export const DOCK = {
   damage: 0.15,
   /** Most workers loading one vehicle (each takes a spot along the bay). */
   crewMax: 3,
+  /** How far apart (tiles) the loaders stand along a car and along a truck. */
+  crewSpread: { car: 0.32, truck: 0.6 },
   /** Work minutes (at speed 1) to load a vehicle: a fixed part plus a part per kg. */
   loadMinutes: { base: 15, perKg: 0.25 },
 } as const;

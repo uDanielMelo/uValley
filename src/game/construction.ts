@@ -10,6 +10,7 @@ import { inBounds, tileCoords, tileIndex } from './grid';
 import { isWalkable } from './path';
 import { roadError, roadNetwork } from './roads';
 import { collectShelter, nextShelterLevel, shelterDef } from './shelters';
+import { isDock, nextDockLevel, upgradeRoads } from './dock';
 import {
   buildCost,
   buildMinutesFor,
@@ -223,25 +224,56 @@ export const orderDemolish = (state: GameState, tile: number): ActionResult => {
   return ok(startWork(state, found.id, { kind: 'demolish', done: 0, total: demolishMinutesFor(found.type) }));
 };
 
-/** Why a shelter cannot be upgraded now, or the level it would reach. */
-export const checkUpgrade = (state: GameState, structureId: number): ShelterLevel | ActionError => {
-  const s = state.structures.find((x) => x.id === structureId);
-  if (!s || !shelterDef(s.type)) return 'no-structure';
-  if (s.work) return 'under-construction';
-  const toLevel = nextShelterLevel(s);
-  if (!toLevel) return 'max-level';
-  if (state.money < upgradeCost(s.type, toLevel)) return 'not-enough-money';
-  return checkStructureOrder(state) ?? toLevel;
+/** New road tiles a dock upgrade needs for its bays (judged on the queued future), or why it cannot have them. */
+export const dockUpgradeRoads = (state: GameState, s: StructureInstance, toLevel: ShelterLevel): number[] | ActionError => {
+  if (!isDock(s) || (toLevel !== 2 && toLevel !== 3)) return [];
+  const future = projectTasks(state);
+  const tiles = upgradeRoads(future.tiles, s, toLevel);
+  return tiles.some((t) => t < 0 || roadError(future, t) !== null) ? 'no-room-for-road' : tiles;
 };
 
-/** Queues upgrading a shelter to its next level, paying for it now. The shelter keeps working meanwhile. */
+/** What an upgrade costs in all: the upgrade itself plus the new road it needs. */
+export const upgradeTotal = (state: GameState, s: StructureInstance, toLevel: ShelterLevel): number => {
+  const roads = dockUpgradeRoads(state, s, toLevel);
+  return upgradeCost(s.type, toLevel) + (typeof roads === 'string' ? 0 : roads.length * ROAD_COST);
+};
+
+/** Why a shelter or the dock cannot be upgraded now, or the level it would reach. */
+export const checkUpgrade = (state: GameState, structureId: number): ShelterLevel | ActionError => {
+  const s = state.structures.find((x) => x.id === structureId);
+  if (!s || (!shelterDef(s.type) && !isDock(s))) return 'no-structure';
+  if (s.work) return 'under-construction';
+  const toLevel = isDock(s) ? nextDockLevel(s) : nextShelterLevel(s);
+  if (!toLevel) return 'max-level';
+  const roads = dockUpgradeRoads(state, s, toLevel);
+  if (typeof roads === 'string') return roads;
+  if (state.money < upgradeCost(s.type, toLevel) + roads.length * ROAD_COST) return 'not-enough-money';
+  return checkStructureOrder(state, roads.length) ?? toLevel;
+};
+
+/**
+ * Queues upgrading a shelter or the dock to its next level, paying for it now (a dock also pays for
+ * and queues the road its new bays need). It keeps working meanwhile.
+ */
 export const orderUpgrade = (state: GameState, structureId: number): ActionResult => {
   const toLevel = checkUpgrade(state, structureId);
   if (typeof toLevel === 'string') return fail(toLevel);
   const s = state.structures.find((x) => x.id === structureId);
   if (!s) return fail('no-structure');
-  const paid = { ...state, money: state.money - upgradeCost(s.type, toLevel) };
-  return ok(startWork(paid, structureId, { kind: 'upgrade', done: 0, total: upgradeMinutes(s.type, toLevel), toLevel }));
+  const roads = dockUpgradeRoads(state, s, toLevel);
+  if (typeof roads === 'string') return fail(roads);
+  const paid = { ...state, money: state.money - upgradeCost(s.type, toLevel) - roads.length * ROAD_COST };
+  const site = startWork(paid, structureId, { kind: 'upgrade', done: 0, total: upgradeMinutes(s.type, toLevel), toLevel });
+  let nextId = site.nextId;
+  const roadTasks: Task[] = roads.map((tile) => ({
+    id: nextId++,
+    kind: 'build',
+    tile,
+    cropId: null,
+    workerId: null,
+    job: { type: 'road', remove: false, siteId: structureId },
+  }));
+  return ok({ ...site, tasks: [...site.tasks, ...roadTasks], nextId });
 };
 
 const isRingRoadOf = (structureId: number) => (t: Task) =>
@@ -257,8 +289,10 @@ export const cancelWork = (state: GameState, structureId: number): ActionResult 
   if (!s?.work) return fail('no-structure');
   if (s.work.kind === 'demolish') return ok(withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined));
   if (s.work.kind === 'upgrade') {
-    const refund = s.work.toLevel ? upgradeCost(s.type, s.work.toLevel) : 0;
-    const called = withWork(dropTasks(state, isSiteTask(structureId)), structureId, undefined);
+    // The upgrade and the road still queued for it come back (a dock's new bays).
+    const roads = state.tasks.filter(isRingRoadOf(structureId)).length;
+    const refund = (s.work.toLevel ? upgradeCost(s.type, s.work.toLevel) : 0) + roads * ROAD_COST;
+    const called = withWork(dropTasks(state, (t) => isSiteTask(structureId)(t) || isRingRoadOf(structureId)(t)), structureId, undefined);
     return ok({ ...called, money: called.money + refund });
   }
   const roads = state.tasks.filter(isRingRoadOf(structureId)).length;
@@ -405,7 +439,7 @@ export const demolishClick = (state: GameState, tile: number): DemolishClick => 
       kind === 'build'
         ? { kind: 'build-cancelled', type: found.type, refund: buildCost(found.type) + ringRefund }
         : kind === 'upgrade'
-          ? { kind: 'upgrade-cancelled', type: found.type, refund: toLevel ? upgradeCost(found.type, toLevel) : 0 }
+          ? { kind: 'upgrade-cancelled', type: found.type, refund: (toLevel ? upgradeCost(found.type, toLevel) : 0) + ringRefund }
           : { kind: 'demolish-cancelled', type: found.type };
     return { ok: true, state: result.state, change };
   }
