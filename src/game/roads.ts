@@ -58,12 +58,41 @@ const SIDES: ReadonlyArray<readonly [number, number]> = [
   [0, 1],
   [-1, 0],
 ];
+const CORNERS: ReadonlyArray<readonly [number, number]> = [
+  [1, -1],
+  [1, 1],
+  [-1, 1],
+  [-1, -1],
+];
+
+const roadAt = (tiles: readonly Tile[], x: number, y: number): boolean => inBounds(x, y) && !!tiles[tileIndex(x, y)]?.road;
+
+/**
+ * True when the road tiles at (x, y) and (x + dx, y + dy), which touch only at a corner, link
+ * through it: neither tile beside the corner is road (then the road already turns through it),
+ * none holds a building and they are not both fenced (a diagonal fence crosses there).
+ */
+export const diagonalRoadLink = (tiles: readonly Tile[], x: number, y: number, dx: number, dy: number): boolean => {
+  if (!roadAt(tiles, x, y) || !roadAt(tiles, x + dx, y + dy)) return false;
+  const a = inBounds(x + dx, y) ? tiles[tileIndex(x + dx, y)] : undefined;
+  const b = inBounds(x, y + dy) ? tiles[tileIndex(x, y + dy)] : undefined;
+  if (!a || !b || a.road || b.road) return false;
+  if (a.structure || b.structure || a.cover || b.cover) return false;
+  return !(a.fence && b.fence);
+};
+
+/** Offsets of the road tiles a road tile links to: road on each side, and diagonal links through its corners. */
+export const roadLinks = (tiles: readonly Tile[], x: number, y: number): Array<readonly [number, number]> => [
+  ...SIDES.filter(([dx, dy]) => roadAt(tiles, x + dx, y + dy)),
+  ...CORNERS.filter(([dx, dy]) => diagonalRoadLink(tiles, x, y, dx, dy)),
+];
 
 const networks = new WeakMap<readonly Tile[], ReadonlySet<number>>();
 
 /**
- * Road tiles linked (4-connected) to the access road: the network people and the vehicle use to
- * reach the buildings. Cached per tile array, which only changes on game events.
+ * Road tiles linked (by sides, or diagonally through a corner) to the access road: the network
+ * people and the vehicle use to reach the buildings. Cached per tile array, which only changes on
+ * game events.
  */
 export const roadNetwork = (tiles: readonly Tile[]): ReadonlySet<number> => {
   const cached = networks.get(tiles);
@@ -77,12 +106,9 @@ export const roadNetwork = (tiles: readonly Tile[]): ReadonlySet<number> => {
       const current = queue[head];
       if (current === undefined) break;
       const { x, y } = tileCoords(current);
-      for (const [dx, dy] of SIDES) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (!inBounds(nx, ny)) continue;
-        const next = tileIndex(nx, ny);
-        if (result.has(next) || !tiles[next]?.road) continue;
+      for (const [dx, dy] of roadLinks(tiles, x, y)) {
+        const next = tileIndex(x + dx, y + dy);
+        if (result.has(next)) continue;
         result.add(next);
         queue.push(next);
       }

@@ -1,12 +1,14 @@
 import { useEffect, useMemo } from 'react';
 import { Matrix4, Quaternion, Vector3 } from 'three';
-import { TILE_COUNT } from '../game/grid';
+import { TILE_COUNT, tileCoords } from '../game/grid';
+import { diagonalRoadLink } from '../game/roads';
 import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { hash01, indexToWorld } from './coords';
 import { InstancedProps } from './InstancedProps';
 import { bush, flowerTuft, grassTuft, rock, roundTree } from './models/natureModels';
 import { PALETTE } from './palette';
+import { ROAD_REACH } from './RoadLayer';
 
 const UP = new Vector3(0, 1, 0);
 const TUFTS_PER_TILE = 3;
@@ -26,6 +28,28 @@ const pickVariant = (r: number): Variant => {
 const hasGrass = (tile: Tile): boolean =>
   !tile.structure && !tile.road && (tile.state === 'grass' || tile.state === 'locked');
 
+const CORNER_SIGNS: ReadonlyArray<readonly [number, number]> = [
+  [1, 1],
+  [-1, 1],
+  [1, -1],
+  [-1, -1],
+];
+/** Room kept between a diagonal road's edge and a tuft. */
+const TUFT_CLEARANCE = 0.06;
+
+/** Corners of a grass tile that a diagonal road runs across (linking the tiles on either side of it). */
+const roadCorners = (tiles: readonly Tile[], index: number): Array<readonly [number, number]> => {
+  const { x, y } = tileCoords(index);
+  return CORNER_SIGNS.filter(([sx, sy]) => diagonalRoadLink(tiles, x + sx, y, -sx, sy));
+};
+
+/**
+ * True when a prop at (u, v) from the tile center would poke through a diagonal road across one
+ * of these corners: the road runs through the tile centers beside the corner, (sx, 0) and (0, sy).
+ */
+const underRoad = (corners: ReadonlyArray<readonly [number, number]>, u: number, v: number): boolean =>
+  corners.some(([sx, sy]) => (1 - (sx * u + sy * v)) / Math.SQRT2 < ROAD_REACH + TUFT_CLEARANCE);
+
 /** Matrices per variant for every grassy tile. Deterministic per tile, so props never jump. */
 const layout = (tiles: readonly Tile[]): Record<Variant, Matrix4[]> => {
   const result: Record<Variant, Matrix4[]> = { grass: [], flowerW: [], flowerY: [], rock: [], tree: [], bush: [] };
@@ -34,6 +58,7 @@ const layout = (tiles: readonly Tile[]): Record<Variant, Matrix4[]> => {
     if (!hasGrass(tile)) return;
     const [cx, cz] = indexToWorld(i);
     const y = tile.state === 'locked' ? -0.02 : 0;
+    const corners = roadCorners(tiles, i);
     // Land for sale is a bit wild: a few trees and bushes, cleared when the plot is bought.
     if (tile.state === 'locked') {
       const r = hash01(i * 7 + 5);
@@ -54,10 +79,13 @@ const layout = (tiles: readonly Tile[]): Record<Variant, Matrix4[]> => {
       const seed = i * 13 + k * 101;
       const variant = pickVariant(hash01(seed));
       const s = variant === 'rock' ? 0.35 + hash01(seed + 4) * 0.3 : 0.95 + hash01(seed + 5) * 0.6;
+      const u = (hash01(seed + 1) - 0.5) * 0.85;
+      const v = (hash01(seed + 2) - 0.5) * 0.85;
+      if (underRoad(corners, u, v)) continue;
       q.setFromAxisAngle(UP, hash01(seed + 3) * Math.PI * 2);
       result[variant].push(
         new Matrix4().compose(
-          new Vector3(cx + (hash01(seed + 1) - 0.5) * 0.85, y, cz + (hash01(seed + 2) - 0.5) * 0.85),
+          new Vector3(cx + u, y, cz + v),
           q,
           new Vector3(s, s, s),
         ),

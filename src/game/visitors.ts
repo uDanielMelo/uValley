@@ -1,6 +1,6 @@
 import { ACCESS_ROAD_X, CAR } from '../data/roads';
-import { inBounds, tileCoords, tileIndex } from './grid';
-import { accessRoadExit } from './roads';
+import { tileCoords, tileIndex } from './grid';
+import { accessRoadExit, roadLinks } from './roads';
 import type { GridPoint, Shipment, Tile } from './types';
 
 /**
@@ -9,13 +9,6 @@ import type { GridPoint, Shipment, Tile } from './types';
  * closest to its bay and, when it leaves, drives back out until it disappears. Only the times are
  * saved; the routes are derived from the road network.
  */
-
-const DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
-  [0, -1],
-  [1, 0],
-  [0, 1],
-  [-1, 0],
-];
 
 /** Radius (tiles) of the turns on farm roads: the bend drawn on a corner road tile. */
 const FARM_TURN_RADIUS = 0.5;
@@ -69,9 +62,6 @@ export const roundCorners = (points: readonly GridPoint[], radius: (i: number) =
 const smoothDrive = (points: readonly GridPoint[], junction: GridPoint): GridPoint[] =>
   roundCorners(points, (i) => (points[i] === junction ? CAR.junctionRadius : FARM_TURN_RADIUS));
 
-const isRoad = (tiles: readonly Tile[], x: number, y: number): boolean =>
-  inBounds(x, y) && !!tiles[tileIndex(x, y)]?.road;
-
 /** Drops points that lie on a straight line between their neighbours. */
 const simplify = (points: GridPoint[]): GridPoint[] =>
   points.filter((p, i) => {
@@ -89,7 +79,7 @@ export interface CarRoutes {
 
 /**
  * A vehicle's routes in tile space. It comes along the highway, turns into the access road at the
- * junction and follows road tiles (4-connected) from the map entry to the parking spot: the
+ * junction and follows road tiles (by sides and diagonal links) from the map entry to the parking spot: the
  * reachable road tile closest to `goal`, its bay (ties: the shorter drive). It leaves the same way
  * back and turns the other way on the highway, so both drives have the same length.
  */
@@ -118,8 +108,7 @@ export const carRoutes = (tiles: readonly Tile[], goal: GridPoint): CarRoutes =>
       best = current;
       bestDistance = distance;
     }
-    for (const [dx, dy] of DIRECTIONS) {
-      if (!isRoad(tiles, x + dx, y + dy)) continue;
+    for (const [dx, dy] of roadLinks(tiles, x, y)) {
       const next = tileIndex(x + dx, y + dy);
       if (parent.has(next)) continue;
       parent.set(next, current);

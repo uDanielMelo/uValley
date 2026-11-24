@@ -7,7 +7,7 @@ import { isPasture } from '../animals';
 import { tileIndex, tileLine, withTile } from '../grid';
 import { checkRoadOrder, orderRoad } from '../construction';
 import { findPath } from '../path';
-import { accessEntryTile, layRoad, removeRoad, roadNetwork } from '../roads';
+import { accessEntryTile, diagonalRoadLink, layRoad, removeRoad, roadNetwork } from '../roads';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { tick } from '../simulation';
 import { createInitialState } from '../state';
@@ -58,6 +58,28 @@ describe('roads', () => {
     expect(roadNetwork(loose.tiles).has(FREE)).toBe(false);
     const joined = withRoads(loose.tiles, tileLine(tileIndex(29, 46), tileIndex(29, 54)));
     expect(roadNetwork(joined).has(FREE)).toBe(true);
+  });
+
+  it('links roads that touch only at a corner, unless something stands across the corner', () => {
+    // (34, 58) is the east end of the yard's street; (35, 59) touches it only at a corner.
+    const s = createInitialState();
+    const corner = tileIndex(35, 59);
+    const diagonal = withRoads(s.tiles, [corner, tileIndex(36, 60)]);
+    expect(roadNetwork(diagonal).has(corner)).toBe(true);
+    expect(roadNetwork(diagonal).has(tileIndex(36, 60))).toBe(true);
+    expect(diagonalRoadLink(diagonal, 34, 58, 1, 1)).toBe(true);
+    // A road beside the corner already turns through it: no diagonal link on top.
+    const turned = withRoads(diagonal, [tileIndex(35, 58)]);
+    expect(diagonalRoadLink(turned, 34, 58, 1, 1)).toBe(false);
+    expect(roadNetwork(turned).has(corner)).toBe(true);
+    // A diagonal fence across the corner cuts it.
+    const fenced = withTile(withTile(diagonal, tileIndex(35, 58), { state: 'grass', fence: {} }), tileIndex(34, 59), {
+      state: 'grass',
+      fence: {},
+    });
+    expect(roadNetwork(fenced).has(corner)).toBe(false);
+    // One fence beside it does not.
+    expect(roadNetwork(withTile(diagonal, tileIndex(35, 58), { state: 'grass', fence: {} })).has(corner)).toBe(true);
   });
 
   it('charges ROAD_COST when the road is ordered; the crew opens it later', () => {
@@ -209,6 +231,17 @@ describe('visiting car', () => {
       () => 2,
     );
     expect(tight[1]?.y).toBeCloseTo(0.5, 5);
+  });
+
+  it('drives along roads linked through a corner', () => {
+    const s = createInitialState();
+    const tiles = withRoads(s.tiles, [tileIndex(35, 59), tileIndex(36, 60)]);
+    const goal = { x: 36.5, y: 60.5 };
+    const { arrive } = carRoutes(tiles, goal);
+    expect(arrive[arrive.length - 1]).toEqual(goal);
+    // The last leg runs straight down the diagonal, through the shared corners.
+    const before = arrive[arrive.length - 2];
+    expect(before && before.x - before.y).toBeCloseTo(-24, 5);
   });
 
   it('follows player-built roads and parks at the reachable tile closest to the bay', () => {

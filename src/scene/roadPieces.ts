@@ -189,3 +189,34 @@ export const junctionFillets = (half: number, radius: number): Point[][] => [
   [[half, 0], [half + radius, 0], ...arc(half + radius, -radius, radius, QUARTER, Math.PI, FILLET_STEPS * 2).slice(1)],
   [[-half, 0], ...arc(-half - radius, -radius, radius, 0, QUARTER, FILLET_STEPS * 2).slice(0, -1), [-half - radius, 0]],
 ];
+
+/** Length of a diagonal link, from one tile center to the other through their shared corner. */
+const DIAGONAL_LENGTH = Math.SQRT2;
+/**
+ * How far a diagonal link sits below the tile pieces, so the pieces' dirt and ruts win where they
+ * overlap at the tile centers (its own ruts are raised to match theirs).
+ */
+const DIAGONAL_DROP = 0.002;
+
+/** A band with round ends from u = -length / 2 to u = length / 2, `half` wide on each side of v = 0. */
+const stadium = (length: number, half: number): Point[] => [
+  ...arc(length / 2, 0, half, -QUARTER, QUARTER, BEND_STEPS),
+  ...arc(-length / 2, 0, half, QUARTER, 3 * QUARTER, BEND_STEPS),
+];
+
+/**
+ * A diagonal link between two road tiles touching at a corner, centered on that corner and running
+ * along u from one tile center to the other (turned 45° when placed). Its round ends sit under the
+ * tile pieces, so it joins a straight, an end or a lone patch cleanly.
+ */
+export const diagonalGeometry = (style: PieceStyle): BufferGeometry => {
+  const surface = style.surfaceHeight - DIAGONAL_DROP;
+  const l = DIAGONAL_LENGTH;
+  return merge([
+    slab(stadium(l, style.half + style.verge), style.vergeHeight - DIAGONAL_DROP, PALETTE.roadVerge),
+    slab(stadium(l, style.half), surface, PALETTE.road),
+    ...[-style.rutOffset, style.rutOffset].map((o) =>
+      slab(band(-l / 2, o, l / 2, o, style.rutWidth), style.surfaceHeight + 0.003, PALETTE.roadRut),
+    ),
+  ]);
+};

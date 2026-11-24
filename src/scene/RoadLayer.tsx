@@ -3,6 +3,7 @@ import { Color, Matrix4, Quaternion, Vector3, type InstancedMesh } from 'three';
 import { HIGHWAY, OFFMAP_ROAD_LENGTH } from '../data/roads';
 import { PROP_SIZES, meters } from '../data/scale';
 import { TILE_COUNT, inBounds, tileCoords, tileIndex } from '../game/grid';
+import { diagonalRoadLink, roadLinks } from '../game/roads';
 import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { hash01, tileToWorld } from './coords';
@@ -14,6 +15,7 @@ import {
   PIECE_KINDS,
   S,
   W,
+  diagonalGeometry,
   junctionFillets,
   pieceFor,
   pieceGeometry,
@@ -34,6 +36,8 @@ const STYLE: PieceStyle = {
   rutOffset: meters(0.8),
   rutWidth: meters(0.25),
 };
+/** How far a road's edge (dirt and verge) reaches from its center line, in tiles. */
+export const ROAD_REACH = STYLE.half + STYLE.verge;
 /** Pieces sink this much so their edges meet the ground without a gap. */
 const SINK = 0.006;
 /** Terrain height of the graded corridor outside the farm. */
@@ -70,6 +74,31 @@ const roadMask = (tiles: readonly Tile[], x: number, y: number): number => {
 
 type Layout = Record<PieceKind, Matrix4[]>;
 
+/** Corners a road tile may link through to the row below (each diagonal link is found once, from its upper tile). */
+const DOWN_CORNERS: ReadonlyArray<readonly [number, number]> = [
+  [1, 1],
+  [-1, 1],
+];
+
+/** One matrix per diagonal link between road tiles, centered on the shared corner and turned along it. */
+const layoutDiagonals = (tiles: readonly Tile[]): Matrix4[] => {
+  const result: Matrix4[] = [];
+  const one = new Vector3(1, 1, 1);
+  tiles.forEach((tile, i) => {
+    if (!tile.road) return;
+    const { x, y } = tileCoords(i);
+    for (const [dx, dy] of DOWN_CORNERS) {
+      if (!diagonalRoadLink(tiles, x, y, dx, dy)) continue;
+      const [cx, cz] = tileToWorld(x + dx / 2, y + dy / 2);
+      const other = tiles[tileIndex(x + dx, y + dy)];
+      const base = (tile.state === 'locked' || other?.state === 'locked' ? -0.02 : 0) - SINK;
+      const q = new Quaternion().setFromAxisAngle(UP, -Math.atan2(dy, dx));
+      result.push(new Matrix4().compose(new Vector3(cx, base, cz), q, one));
+    }
+  });
+  return result;
+};
+
 /** One matrix per road tile, grouped by the piece it draws. */
 const layoutRoads = (tiles: readonly Tile[]): { matrices: Layout; shades: Record<PieceKind, number[]> } => {
   const matrices = Object.fromEntries(PIECE_KINDS.map((k) => [k, [] as Matrix4[]])) as Layout;
@@ -81,6 +110,8 @@ const layoutRoads = (tiles: readonly Tile[]): { matrices: Layout; shades: Record
     const { x, y } = tileCoords(i);
     const [cx, cz] = tileToWorld(x, y);
     const { kind, turns } = pieceFor(roadMask(tiles, x, y));
+    // A tile linked only through its corners is drawn by the diagonal links' round ends.
+    if (kind === 'dot' && roadLinks(tiles, x, y).length > 0) return;
     // Land for sale sits a little lower.
     const base = (tile.state === 'locked' ? -0.02 : 0) - SINK;
     q.setFromAxisAngle(UP, (-Math.PI / 2) * turns);
@@ -119,19 +150,43 @@ function PieceMesh({ kind, matrices, shades }: { kind: PieceKind; matrices: Matr
 
 /**
  * Dirt roads drawn as pieces that follow their neighbours (straights, bends, T junctions,
- * crossings and dead ends), the access road beyond the map and the highway.
+ * crossings and dead ends) joined by diagonal links where tiles touch at a corner, the access road beyond the map and the highway.
  */
 export function RoadLayer() {
   const tiles = useGameStore((s) => s.game.tiles);
   const { matrices, shades } = useMemo(() => layoutRoads(tiles), [tiles]);
+  const diagonals = useMemo(() => layoutDiagonals(tiles), [tiles]);
   return (
     <group>
       {PIECE_KINDS.map((kind) => (
         <PieceMesh key={kind} kind={kind} matrices={matrices[kind]} shades={shades[kind]} />
       ))}
+      <DiagonalMesh matrices={diagonals} />
       <OffMapRoad />
       <Highway />
     </group>
+  );
+}
+
+/** The diagonal links between road tiles that touch at a corner. */
+function DiagonalMesh({ matrices }: { matrices: Matrix4[] }) {
+  const meshRef = useRef<InstancedMesh>(null);
+  const geometry = useMemo(() => diagonalGeometry(STYLE), []);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
+  useLayoutEffect(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    matrices.forEach((m, i) => mesh.setMatrixAt(i, m));
+    mesh.count = matrices.length;
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [matrices]);
+
+  return (
+    <instancedMesh ref={meshRef} args={[geometry, undefined, TILE_COUNT]} receiveShadow raycast={noRaycast}>
+      <meshStandardMaterial vertexColors roughness={1} />
+    </instancedMesh>
   );
 }
 
