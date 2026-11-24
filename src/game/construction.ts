@@ -7,6 +7,7 @@ import { ROAD_COST, ROAD_WORK_MINUTES } from '../data/roads';
 import { BUILD_CREW_MAX, type ShelterLevel, type StructureId } from '../data/structures';
 import { MAX_TASKS } from '../data/workers';
 import { inBounds, tileCoords, tileIndex } from './grid';
+import { cancelFenceTask, orderFenceRemoval, pendingFenceTask } from './fences';
 import { isWalkable } from './path';
 import { roadError, roadNetwork } from './roads';
 import { collectShelter, nextShelterLevel, shelterDef } from './shelters';
@@ -415,7 +416,9 @@ export type DemolishChange =
   | { kind: 'demolish-queued'; type: StructureId; refund: number }
   | { kind: 'demolish-cancelled'; type: StructureId }
   | { kind: 'road-cancelled'; refund: number }
-  | { kind: 'road-removal-queued' };
+  | { kind: 'road-removal-queued' }
+  | { kind: 'fence-cancelled'; refund: number }
+  | { kind: 'fence-removal-queued' };
 
 export type DemolishClick = { ok: true; state: GameState; change: DemolishChange } | { ok: false; error: ActionError };
 
@@ -428,6 +431,10 @@ export const demolishClick = (state: GameState, tile: number): DemolishClick => 
   if (pending?.job?.type === 'road') {
     const refund = pending.job.remove ? 0 : ROAD_COST;
     return { ok: true, state: cancelRoadTask(state, pending), change: { kind: 'road-cancelled', refund } };
+  }
+  const fence = pendingFenceTask(state, tile);
+  if (fence?.job?.type === 'fence') {
+    return { ok: true, state: cancelFenceTask(state, fence), change: { kind: 'fence-cancelled', refund: fence.job.cost } };
   }
   const found = structureAt(state, tile);
   if (found?.work) {
@@ -448,6 +455,10 @@ export const demolishClick = (state: GameState, tile: number): DemolishClick => 
     const refund = refundFor(found.type, found.level);
     return result.ok ? { ok: true, state: result.state, change: { kind: 'demolish-queued', type: found.type, refund } } : result;
   }
+  if (state.tiles[tile]?.fence) {
+    const result = orderFenceRemoval(state, tile);
+    return result.ok ? { ok: true, state: result.state, change: { kind: 'fence-removal-queued' } } : result;
+  }
   if (state.tiles[tile]?.road) {
     const result = orderRoadRemoval(state, tile);
     return result.ok ? { ok: true, state: result.state, change: { kind: 'road-removal-queued' } } : result;
@@ -467,7 +478,8 @@ export const cancelAllOrders = (state: GameState): GameState => {
     if (result.ok) next = result.state;
   }
   const roadRefund = next.tasks.filter((t) => t.job?.type === 'road' && !t.job.remove).length * ROAD_COST;
-  return dropTasks({ ...next, money: next.money + roadRefund }, () => true);
+  const fenceRefund = next.tasks.reduce((sum, t) => sum + (t.job?.type === 'fence' ? t.job.cost : 0), 0);
+  return dropTasks({ ...next, money: next.money + roadRefund + fenceRefund }, () => true);
 };
 
 /**

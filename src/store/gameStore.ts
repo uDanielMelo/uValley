@@ -315,6 +315,10 @@ const demolishText = (change: DemolishChange): string => {
       return change.refund > 0 ? `Estrada cancelada: +${change.refund} moedas.` : 'Remoção de estrada cancelada.';
     case 'road-removal-queued':
       return 'Remoção da estrada na fila.';
+    case 'fence-cancelled':
+      return change.refund > 0 ? `Cerca cancelada: +${change.refund} moedas.` : 'Remoção de cerca cancelada.';
+    case 'fence-removal-queued':
+      return 'Remoção da cerca na fila: devolve parte do preço ao terminar.';
   }
 };
 

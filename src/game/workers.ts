@@ -12,6 +12,7 @@ import { addShipmentWork, cancelAllLoading, repairHaulTasks } from './shipments'
 import { inBounds, tileCoords, tileIndex } from './grid';
 import { homeSpot } from './home';
 import { addCount } from './inventory';
+import { fenceTaskMinutes } from './fences';
 import { findPath } from './path';
 import { hash01 } from './random';
 import { gainMastery, harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
@@ -206,7 +207,10 @@ export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoi
 export const taskMinutes = (task: Task): number => {
   if (task.kind === 'haul') return 1;
   if (task.kind === 'tend') return careMinutes(task.job) ?? COLLECT_MINUTES;
-  if (task.kind === 'build') return roadTaskMinutes(task.job?.type === 'road' && task.job.remove);
+  if (task.kind === 'build') {
+    if (task.job?.type === 'fence') return fenceTaskMinutes(task.job);
+    return roadTaskMinutes(task.job?.type === 'road' && task.job.remove);
+  }
   return TASK_MINUTES[task.kind];
 };
 
@@ -406,6 +410,7 @@ export const stepWorkers = (state: GameState, minutes: number): GameState => {
           if (result.ok) world = effectivenessBonus(result.state, w, task, context);
           // A road that can no longer be opened gives its money back.
           else if (job?.type === 'road' && !job.remove) world = { ...world, money: world.money + ROAD_COST };
+          else if (job?.type === 'fence' && !job.remove) world = { ...world, money: world.money + job.cost };
           tasks = tasks.filter((t) => t.id !== task.id);
           w = { ...w, taskId: null, progress: 0 };
           // Work on a crop builds mastery of it.
