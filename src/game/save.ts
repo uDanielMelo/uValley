@@ -90,14 +90,14 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * south edge), with road rings around the buildings and ring road tasks tied to their site
  * (`job.siteId`). Earlier versions (v1–v15, on the 32x32 map) are not loaded.
  */
-export interface SaveDataV22 {
+export interface SaveDataV23 {
   saveVersion: 23;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV22;
+export type SaveData = SaveDataV23;
 
 export interface LoadedSave {
   game: GameState;

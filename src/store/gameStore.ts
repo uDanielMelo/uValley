@@ -690,7 +690,10 @@ export const useGameStore = create<GameStore>()(
           return;
         }
         set({ game: result.state });
-        if (result.state.tasks.length < before) get().showMessage('Cerca cancelada.', 'info');
+        if (result.state.tasks.length < before) {
+          const refund = result.state.money - game.money;
+          get().showMessage(refund > 0 ? `Cerca cancelada: +${refund} moedas.` : 'Remoção de cerca cancelada.', 'info');
+        }
         else {
           const skipped = plan.blocked.length > 0 ? ` (${plan.blocked.length} ocupado(s) pulado(s))` : '';
           get().showMessage(`Cerca na fila: ${plan.valid.length} tile(s), ${plan.cost} moedas${skipped}.`, 'info');

@@ -94,13 +94,15 @@ export const stampStructures = (tiles: readonly Tile[], structures: readonly Str
     const { structure: _removed, cover: _uncovered, ...rest } = tile;
     return rest;
   });
+  // A building or greenhouse never stands on a fence (only a hand-edited save could say so).
+  const unfenced = ({ fence: _fence, ...rest }: Tile): Tile => rest;
   for (const s of structures) {
     const cover = STRUCTURES[s.type].cover;
     for (const c of footprintCells(footprintOf(s.type, s.x, s.y, s.rotation))) {
       if (!inBounds(c.x, c.y)) continue;
       const index = tileIndex(c.x, c.y);
       const tile = result[index];
-      if (tile) result[index] = cover ? { ...tile, cover: true } : { ...tile, structure: s.type };
+      if (tile) result[index] = cover ? { ...unfenced(tile), cover: true } : { ...unfenced(tile), structure: s.type };
     }
   }
   return result;
@@ -359,12 +361,14 @@ export const occupyFootprint = (
     structures: [...state.structures, built],
     nextId: state.nextId + 1,
   };
-  return {
-    ...next,
-    animals: next.animals.map((a) => evictAnimal(a, fp, next)),
-    workers: next.workers.map((w) => evictWorker(w, fp, next)),
-  };
+  return { ...evictAnimals(next, fp), workers: next.workers.map((w) => evictWorker(w, fp, next)) };
 };
+
+/** Moves every animal standing inside the footprint just outside it. */
+export const evictAnimals = (state: GameState, fp: Footprint): GameState => ({
+  ...state,
+  animals: state.animals.map((a) => evictAnimal(a, fp, state)),
+});
 
 /** Opens road on tiles at once (free grass or roads already). */
 export const withRoads = (tiles: readonly Tile[], indices: readonly number[]): Tile[] => {

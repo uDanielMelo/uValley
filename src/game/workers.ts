@@ -13,7 +13,7 @@ import { inBounds, tileCoords, tileIndex } from './grid';
 import { homeSpot } from './home';
 import { addCount } from './inventory';
 import { fenceTaskMinutes } from './fences';
-import { findPath } from './path';
+import { findPath, isWalkable } from './path';
 import { hash01 } from './random';
 import { gainMastery, harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
 import { applyTask, lastTaskOn, projectTasks } from './tasks';
@@ -186,6 +186,28 @@ const tileCenter = (tile: number): GridPoint => {
  * Where a worker stands to do a task: on its tile, beside the wall for structure and shelter
  * work, or between the platform and the vehicle when loading at the dock.
  */
+/** Centre of the walkable side neighbour of a tile nearest to `from` (where a fence is built from), or the tile's own centre. */
+const besideTile = (state: GameState, tile: number, from: GridPoint): GridPoint => {
+  const { x, y } = tileCoords(tile);
+  let best: GridPoint | null = null;
+  let bestDistance = Infinity;
+  for (const [dx, dy] of [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ] as const) {
+    if (!isWalkable(state.tiles, x + dx, y + dy)) continue;
+    const spot = { x: x + dx + 0.5, y: y + dy + 0.5 };
+    const d = Math.hypot(spot.x - from.x, spot.y - from.y);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = spot;
+    }
+  }
+  return best ?? tileCenter(tile);
+};
+
 export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoint => {
   const job = task.job;
   if (job?.type === 'herd') {
@@ -198,6 +220,7 @@ export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoi
     const dock = shipment && state.structures.find((s) => s.id === shipment.dockId);
     return dock ? loaderSpot(dock, shipment?.bay ?? 0, job.slot) : tileCenter(task.tile);
   }
+  if (job?.type === 'fence') return besideTile(state, task.tile, from);
   if (job?.type !== 'structure' && job?.type !== 'shelter') return tileCenter(task.tile);
   const site = state.structures.find((s) => s.id === job.structureId);
   return (site && workSpot(state, site, task.tile, from)) ?? tileCenter(task.tile);

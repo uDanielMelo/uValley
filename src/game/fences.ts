@@ -10,7 +10,7 @@ import { MAX_TASKS } from '../data/workers';
 import { inBounds, isValidTileIndex, tileCoords, tileIndex, withTile } from './grid';
 import { ringAround } from './roads';
 import { isPasture } from './shelters';
-import { footprintOf } from './structures';
+import { evictAnimals, footprintOf } from './structures';
 import { dropTasks, lastTaskOn, projectTasks } from './tasks';
 import {
   fail,
@@ -171,7 +171,8 @@ const queuePlan = (state: GameState, plan: FencePlan): ActionResult => {
 export const orderFenceLine = (state: GameState, from: number, to: number): ActionResult => {
   if (from === to) {
     const pending = pendingFenceTask(state, from);
-    if (pending?.job?.type === 'fence' && !pending.job.remove) return ok(cancelFenceTask(state, pending));
+    // A fence (or its removal) still queued there: the click takes the order back.
+    if (pending?.job?.type === 'fence') return ok(cancelFenceTask(state, pending));
   }
   return queuePlan(state, fencePlan(state, from, to));
 };
@@ -183,7 +184,11 @@ export const orderGate = (state: GameState, tile: number): ActionResult => queue
 export const layFence = (state: GameState, index: number, gate: boolean): ActionResult => {
   const error = tileFenceError(state.tiles, index, gate);
   if (error) return fail(error);
-  return ok({ ...state, tiles: withTile(state.tiles, index, { state: 'grass', fence: gate ? { gate: true } : {} }) });
+  const tiles = withTile(state.tiles, index, { state: 'grass', fence: gate ? { gate: true } : {} });
+  const { x, y } = tileCoords(index);
+  // Animals standing there step off (people pass gates, so only a plain fence moves them).
+  const laid = { ...state, tiles };
+  return ok(gate ? laid : evictAnimals(laid, { x, y, width: 1, depth: 1 }));
 };
 
 /** Coins a finished removal gives back. */

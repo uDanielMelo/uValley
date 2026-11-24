@@ -18,7 +18,8 @@ import { findPath, isWalkable, segmentClear } from '../path';
 import { DEMOLISH_REFUND } from '../../data/structures';
 import { till } from '../actions';
 import { cancelAllOrders, demolishClick, repairSiteTasks } from '../construction';
-import { fenceError, fenceLine, fencePlan, orderFenceLine, orderGate, pieceCost, toggleGate } from '../fences';
+import { fenceError, fenceLine, fencePlan, layFence, orderFenceLine, orderGate, pieceCost, toggleGate } from '../fences';
+import { taskSpot } from '../workers';
 import { applyTask } from '../tasks';
 
 /** Free owned grass, away from the yard. */
@@ -279,7 +280,7 @@ describe('animals and fences', () => {
     for (let i = 0; i < 60; i++) {
       s = stepAnimals(s, 10);
       s = { ...s, gameMinutes: s.gameMinutes + 10 };
-      for (const a of s.animals) expect(Math.hypot(a.x - door.x, a.y - door.y)).toBeLessThanOrEqual(LEASH_RADIUS + 2);
+      for (const a of s.animals) expect(Math.hypot(a.x - door.x, a.y - door.y)).toBeLessThanOrEqual(LEASH_RADIUS + 1);
     }
   });
 
@@ -378,5 +379,47 @@ describe('fence review fixes', () => {
     const before = pastureCapacity(s0);
     const fenced = withFences(s0, Array.from({ length: 10 }, (_, k) => [20 + k, 36] as const));
     expect(pastureCapacity(fenced)).toBe(before);
+  });
+});
+
+// ---------- Deferred minors ----------
+
+describe('fence polish', () => {
+  it('clicking a queued fence removal in fence mode cancels it instead of buying a new fence', () => {
+    const s0 = { ...createInitialState(), money: 1000 };
+    const built = finishAll(unwrap(orderFenceLine(s0, FREE, FREE)));
+    const removal = demolishClick(built, FREE);
+    if (!removal.ok) throw new Error(removal.error);
+    const clicked = unwrap(orderFenceLine(removal.state, FREE, FREE));
+    expect(fenceTasks(clicked)).toHaveLength(0);
+    expect(clicked.money).toBe(built.money);
+  });
+
+  it('an animal standing where a fence is laid is moved off the tile', () => {
+    const s0 = spawnAnimals(setTimeOfDay(unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 28, 44)), 7), 'chicken', 1);
+    const placed = { ...s0, animals: s0.animals.map((a) => ({ ...a, x: 22.5, y: 40.5, path: [] })) };
+    const laid = unwrap(layFence(placed, FREE, false));
+    const hen = laid.animals[0];
+    expect(hen && tileIndex(Math.floor(hen.x), Math.floor(hen.y))).not.toBe(FREE);
+  });
+
+  it('the crew builds a fence from beside the tile, not on it', () => {
+    const s0 = { ...createInitialState(), money: 1000 };
+    const queued = unwrap(orderFenceLine(s0, FREE, FREE));
+    const task = fenceTasks(queued)[0];
+    if (!task) throw new Error('no task');
+    const spot = taskSpot(queued, task, { x: 20.5, y: 40.5 });
+    expect(tileIndex(Math.floor(spot.x), Math.floor(spot.y))).not.toBe(FREE);
+    expect(Math.hypot(spot.x - 22.5, spot.y - 40.5)).toBeLessThanOrEqual(1);
+  });
+
+  it('a save with a fence under a building loads without that fence', () => {
+    const s0 = unwrap(placeStructure({ ...createInitialState(), money: 100_000 }, 'chickenCoop', 28, 44));
+    const under = tileIndex(28, 44);
+    const raw = JSON.parse(serialize(s0, DEFAULT_SETTINGS)) as { game: { tiles: Record<string, unknown>[] } };
+    raw.game.tiles[under] = { state: 'grass', fence: {} };
+    const loaded = deserialize(JSON.stringify(raw));
+    expect(loaded?.game.tiles[under]?.fence).toBeUndefined();
+    expect(loaded?.game.tiles[under]?.structure).toBe('chickenCoop');
   });
 });
