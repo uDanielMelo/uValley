@@ -23,10 +23,12 @@ export const STRUCTURE_IDS = [
   'tree',
   'fountain',
   'greenhouse',
+  'machineShed',
+  'parkingLot',
 ] as const;
 export type StructureId = (typeof STRUCTURE_IDS)[number];
 
-export type StructureCategory = 'housing' | 'farming' | 'animals' | 'storage' | 'decor';
+export type StructureCategory = 'housing' | 'farming' | 'animals' | 'storage' | 'machines' | 'decor';
 
 /** Shelter levels: basic, reinforced, comfortable, automated. */
 export type ShelterLevel = 1 | 2 | 3 | 4;
@@ -77,6 +79,18 @@ export interface StorageDef {
   cold?: boolean;
 }
 
+/** Bays for machines: `owned: false` lots only take rented machines. */
+export interface ParkingDef {
+  slots: number;
+  owned: boolean;
+}
+
+/** Machine shed levels: the plain shed and the one with a workshop (level 1: no upgrade). */
+export const SHED_LEVELS: Record<1 | 2, { label: string; cost: number; buildMinutes: number; workshop: boolean }> = {
+  1: { label: 'Galpão', cost: 0, buildMinutes: 0, workshop: false },
+  2: { label: 'Galpão com oficina', cost: 450, buildMinutes: 600, workshop: true },
+};
+
 /**
  * Footprints are in tiles of TILE_METERS (3.5 m, see data/scale.ts) and the models are built to
  * match real sizes: bunkhouse 7 × 3.5 m, coop 7 × 3.5 m, pigsty 7 × 3.5 m, sheepfold 7 × 7 m,
@@ -106,6 +120,8 @@ export interface StructureDef {
   needsRoad?: boolean;
   /** Present on lights: shelters whose door is within `radius` tiles gain `safety` (see LIGHT_SAFETY_CAP). */
   light?: { radius: number; safety: number };
+  /** Present on the machine shed and the parking lot: how many machines fit, and whether owned ones may stay. */
+  parking?: ParkingDef;
   /** Short pt-BR description for the build menu. */
   description: string;
 }
@@ -359,6 +375,32 @@ export const STRUCTURES: Record<StructureId, StructureDef> = {
     cover: true,
     description: 'Cobre 6 tiles plantáveis: rega sozinha, ignora a estação, protege da tempestade e permite morango.',
   },
+  machineShed: {
+    id: 'machineShed',
+    label: 'Galpão de máquinas',
+    icon: '🚜',
+    width: 3,
+    depth: 2,
+    cost: 600,
+    buildMinutes: 900,
+    category: 'machines',
+    needsRoad: true,
+    parking: { slots: 3, owned: true },
+    description: 'Guarda 3 máquinas. Reforme para ter oficina.',
+  },
+  parkingLot: {
+    id: 'parkingLot',
+    label: 'Estacionamento',
+    icon: '🅿️',
+    width: 2,
+    depth: 2,
+    cost: 120,
+    buildMinutes: 180,
+    category: 'machines',
+    needsRoad: true,
+    parking: { slots: 2, owned: false },
+    description: '2 vagas para máquinas alugadas.',
+  },
 };
 
 /** Most safety lights can add to one shelter. */
@@ -374,6 +416,7 @@ export const CATEGORY_LABELS: Record<StructureCategory, string> = {
   housing: 'Moradia',
   animals: 'Animais',
   storage: 'Armazenamento',
+  machines: 'Máquinas',
   farming: 'Lavoura',
   decor: 'Decoração e iluminação',
 };

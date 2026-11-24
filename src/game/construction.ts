@@ -12,6 +12,7 @@ import { isWalkable } from './path';
 import { roadError, roadNetwork } from './roads';
 import { collectShelter, nextShelterLevel, shelterDef } from './shelters';
 import { isDock, nextDockLevel, upgradeRoads } from './dock';
+import { nextShedLevel } from './parking';
 import {
   buildCost,
   buildMinutesFor,
@@ -242,9 +243,9 @@ export const upgradeTotal = (state: GameState, s: StructureInstance, toLevel: Sh
 /** Why a shelter or the dock cannot be upgraded now, or the level it would reach. */
 export const checkUpgrade = (state: GameState, structureId: number): ShelterLevel | ActionError => {
   const s = state.structures.find((x) => x.id === structureId);
-  if (!s || (!shelterDef(s.type) && !isDock(s))) return 'no-structure';
+  if (!s || (!shelterDef(s.type) && !isDock(s) && s.type !== 'machineShed')) return 'no-structure';
   if (s.work) return 'under-construction';
-  const toLevel = isDock(s) ? nextDockLevel(s) : nextShelterLevel(s);
+  const toLevel = isDock(s) ? nextDockLevel(s) : s.type === 'machineShed' ? nextShedLevel(s) : nextShelterLevel(s);
   if (!toLevel) return 'max-level';
   const roads = dockUpgradeRoads(state, s, toLevel);
   if (typeof roads === 'string') return roads;

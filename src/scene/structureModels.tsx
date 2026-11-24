@@ -31,6 +31,9 @@ export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   tree: PlantedTree,
   fountain: Fountain,
   greenhouse: Greenhouse,
+  // Placeholders until the machine models arrive.
+  machineShed: Warehouse,
+  parkingLot: Warehouse,
 };
 
 export interface PlacedProps {

@@ -1,6 +1,7 @@
 import {
   DEMOLISH_REFUND,
   DEMOLISH_WORK,
+  SHED_LEVELS,
   SHELTER_LEVELS,
   STRUCTURES,
   type ShelterLevel,
@@ -159,15 +160,23 @@ export const buildMinutesFor = (type: StructureId): number => STRUCTURES[type].b
 
 const dockLevelDef = (level: ShelterLevel) => (level === 2 || level === 3 ? DOCK_LEVELS[level] : null);
 
-/** Price of upgrading to a level: the dock's own price, or a share of a shelter's build cost. */
+const shedLevelDef = (level: ShelterLevel) => (level === 2 ? SHED_LEVELS[2] : null);
+
+/** Price of upgrading to a level: the dock's or the shed's own price, or a share of a shelter's build cost. */
 export const upgradeCost = (type: StructureId, toLevel: ShelterLevel): number =>
-  type === 'dock' ? (dockLevelDef(toLevel)?.cost ?? 0) : Math.round(buildCost(type) * SHELTER_LEVELS[toLevel].upgradeShare);
+  type === 'dock'
+    ? (dockLevelDef(toLevel)?.cost ?? 0)
+    : type === 'machineShed'
+      ? (shedLevelDef(toLevel)?.cost ?? 0)
+      : Math.round(buildCost(type) * SHELTER_LEVELS[toLevel].upgradeShare);
 
 /** Work minutes (at speed 1) of upgrading to a level: the dock's own, or a share of a shelter's build work. */
 export const upgradeMinutes = (type: StructureId, toLevel: ShelterLevel): number =>
   type === 'dock'
     ? (dockLevelDef(toLevel)?.buildMinutes ?? 0)
-    : Math.round(buildMinutesFor(type) * SHELTER_LEVELS[toLevel].upgradeShare);
+    : type === 'machineShed'
+      ? (shedLevelDef(toLevel)?.buildMinutes ?? 0)
+      : Math.round(buildMinutesFor(type) * SHELTER_LEVELS[toLevel].upgradeShare);
 
 /** Everything paid for a structure: building it and every upgrade up to its level. */
 export const investedIn = (type: StructureId, level: ShelterLevel = 1): number => {
@@ -483,6 +492,7 @@ export const checkDemolish = (state: GameState, tile: number): StructureInstance
   if (found.work) return 'under-construction';
   if (state.animals.some((a) => a.shelterId === found.id || a.penned?.penId === found.id)) return 'shelter-in-use';
   if (state.shipments.some((s) => s.dockId === found.id && s.phase !== 'leaving')) return 'reserved';
+  if (state.machines.some((m) => m.parkId === found.id)) return 'reserved';
   // Animals on their way (or held in town) keep a seat here.
   const kept = [...state.shipments.map((s) => s.delivery), ...state.held.map((h) => h.delivery)];
   if (kept.some((d) => d?.animals.some((a) => a.shelterId === found.id))) return 'reserved';
