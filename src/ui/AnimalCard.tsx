@@ -3,7 +3,6 @@ import { DISEASES, MEDICINES, type DiseaseId } from '../data/health';
 import { STRUCTURES } from '../data/structures';
 import {
   animalProduct,
-  animalSalePrice,
   draftStrength,
   lifeProgress,
   lifeStage,
@@ -13,6 +12,7 @@ import {
 import { freeMedicine, healthFactor, isKnownSick, medicateTaskFor, minutesToDeath } from '../game/health';
 import type { Animal, GameState } from '../game/types';
 import { emptyCart, purchaseFreight } from '../game/purchases';
+import { penPrice, pensOf, saleStatus, type SaleStatus } from '../game/pen';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { formatCoins } from './format';
 import { Button, Card, Coins, Stars } from './primitives';
@@ -94,6 +94,49 @@ function HealthLine({ id, disease }: { id: number; disease: DiseaseId }) {
   );
 }
 
+const SALE_TEXT: Record<Exclude<SaleStatus, 'none'>, string> = {
+  herding: '🐄 À venda: a equipe vai levar ao curral',
+  penned: '🚛 No curral de embarque, esperando o comprador',
+  'on-truck': '🚛 Na lista do caminhão boiadeiro',
+};
+
+/** Selling: mark for sale (the crew leads it to the loading pen), or where it stands in its sale. */
+function SaleLine({
+  status,
+  price,
+  hasPen,
+  onMark,
+  onUnmark,
+}: {
+  status: SaleStatus;
+  price: number;
+  hasPen: boolean;
+  onMark: () => void;
+  onUnmark: () => void;
+}) {
+  if (status === 'none') {
+    return hasPen ? (
+      <Button variant="ghost" className="self-start text-xs" onClick={onMark} title="A equipe leva ao curral de embarque; o comprador vem de caminhão">
+        Separar para venda (vale <Coins value={formatCoins(price)} />)
+      </Button>
+    ) : (
+      <p className="text-[11px] font-bold text-wood/60">Para vender, construa um curral de embarque (Construir, Animais).</p>
+    );
+  }
+  return (
+    <div className="flex items-center justify-between gap-2 text-xs font-bold">
+      <span>
+        {SALE_TEXT[status]} · <Coins value={formatCoins(price)} />
+      </span>
+      {status !== 'on-truck' && (
+        <Button variant="ghost" className="text-[11px]" onClick={onUnmark}>
+          Tirar
+        </Button>
+      )}
+    </div>
+  );
+}
+
 /** Card of the animal selected with the hand: breed, stars, age, production and selling. */
 export function AnimalCard() {
   const kind = useAnimal((a) => a.kind, null);
@@ -112,7 +155,9 @@ export function AnimalCard() {
     },
     0,
   );
-  const price = useAnimal((a, game) => animalSalePrice(game.gameMinutes, a), 0);
+  const price = useAnimal((a, game) => penPrice(game.gameMinutes, a), 0);
+  const sale = useAnimal((a, game) => saleStatus(game, a), 'none' as SaleStatus);
+  const hasPen = useGameStore((s) => pensOf(s.game).length > 0);
   const home = useAnimal((a, game) => {
     const s = game.structures.find((x) => x.id === a.shelterId);
     return s ? STRUCTURES[s.type].label : '';
@@ -120,7 +165,8 @@ export function AnimalCard() {
   const disease = useAnimal((a) => (isKnownSick(a) ? (a.health?.disease ?? null) : null), null);
   const id = useGameStore((s) => s.selectedAnimal);
   const select = useGameStore((s) => s.selectAnimal);
-  const sell = useGameStore((s) => s.sellAnimal);
+  const mark = useGameStore((s) => s.markForSale);
+  const unmark = useGameStore((s) => s.unmarkForSale);
   if (!kind || !breed || id === null) return null;
   const def = ANIMALS[kind];
   const productId = animalProduct({ kind, breed });
@@ -162,9 +208,13 @@ export function AnimalCard() {
         {BREEDS[breed].note}
         {!fed && <span className="text-red-700"> Com fome hoje: sem produção.</span>}
       </p>
-      <Button variant="ghost" className="self-start text-xs" onClick={() => sell(id)}>
-        Vender <Coins value={formatCoins(price)} />
-      </Button>
+      <SaleLine
+        status={sale}
+        price={price}
+        hasPen={hasPen}
+        onMark={() => mark(id)}
+        onUnmark={() => unmark(id)}
+      />
     </Card>
   );
 }

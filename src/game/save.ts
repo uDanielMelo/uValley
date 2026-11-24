@@ -60,7 +60,7 @@ import { rehomeAnimals } from './shelters';
 import { repairHaulTasks } from './shipments';
 import { stampStructures } from './structures';
 
-export const SAVE_VERSION = 20;
+export const SAVE_VERSION = 21;
 /**
  * Saves older than this were made on the 32x32 map, before buildings needed roads; they cannot be
  * placed on the new map, so loading one starts a new game.
@@ -79,7 +79,8 @@ export interface SaveSettings {
 export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphics: 'high' };
 
 /**
- * v20 has dock levels with several bays (`Shipment.bay`, loader `slot`s) and the freight vehicle the
+ * v21 sells live animals through the loading pen (`Animal.penned`, 'herd' tasks, 'livestock' trucks
+ * with their `animals`). v20 has dock levels with several bays (`Shipment.bay`, loader `slot`s) and the freight vehicle the
  * farm chose (`freightVehicle`). v19 buys by freight: purchases are shipments carrying a `delivery`, deliveries nobody unloaded
  * are `held` in town, and feed is a stock (`inventory.feed`, kg) with automatic orders
  * (`feedOrder`). v18 sells through the dock only: listings, offers and hired freight (`listings`, `offers`, sale
@@ -89,14 +90,14 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * south edge), with road rings around the buildings and ring road tasks tied to their site
  * (`job.siteId`). Earlier versions (v1–v15, on the 32x32 map) are not loaded.
  */
-export interface SaveDataV20 {
-  saveVersion: 20;
+export interface SaveDataV21 {
+  saveVersion: 21;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
 }
 
-export type SaveData = SaveDataV20;
+export type SaveData = SaveDataV21;
 
 export interface LoadedSave {
   game: GameState;
@@ -187,15 +188,19 @@ const migrateV19 = (data: Record<string, unknown>): Record<string, unknown> => {
   return { ...data, saveVersion: 20, game: { ...game, shipments, freightVehicle: 'auto' } };
 };
 
+/** v20 → v21: nothing to convert (no animal is penned yet); only the version moves. */
+const migrateV20 = (data: Record<string, unknown>): Record<string, unknown> => ({ ...data, saveVersion: 21 });
+
 /**
  * Migrations from version N to N + 1. Add an entry here whenever SAVE_VERSION is bumped:
- * `migrations[20] = (v20) => v21`.
+ * `migrations[21] = (v21) => v22`.
  */
 const migrations: Record<number, (data: Record<string, unknown>) => Record<string, unknown>> = {
   16: migrateV16,
   17: migrateV17,
   18: migrateV18,
   19: migrateV19,
+  20: migrateV20,
 };
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {
@@ -364,6 +369,7 @@ const parseJob = (v: unknown): TaskJob | null => {
   }
   if (v.type === 'medicate' && isId(v.animalId)) return { type: 'medicate', animalId: v.animalId };
   if (v.type === 'carcass' && isId(v.carcassId)) return { type: 'carcass', carcassId: v.carcassId };
+  if (v.type === 'herd' && isId(v.animalId) && isId(v.penId)) return { type: 'herd', animalId: v.animalId, penId: v.penId };
   // Loaders saved before slots (v19) get none and are queued again by repairHaulTasks.
   if (v.type === 'shipment' && isId(v.shipmentId)) return { type: 'shipment', shipmentId: v.shipmentId, slot: isId(v.slot) ? v.slot : -1 };
   return null;
@@ -405,6 +411,9 @@ const parseAnimal = (v: unknown): Animal | null => {
   if (!path) return null;
   const health = parseHealth(v.health);
   if (health === null) return null;
+  const p = v.penned;
+  if (p !== undefined && (!isRecord(p) || !isId(p.penId) || !isFiniteNumber(p.since))) return null;
+  const penned = isRecord(p) && isId(p.penId) && isFiniteNumber(p.since) ? { penId: p.penId, since: p.since } : undefined;
   return {
     id,
     kind,
@@ -419,6 +428,7 @@ const parseAnimal = (v: unknown): Animal | null => {
     productMinutes: Math.max(0, productMinutes),
     fed,
     ...(health ? { health } : {}),
+    ...(penned ? { penned } : {}),
   };
 };
 
@@ -465,7 +475,7 @@ const parseOffer = (v: unknown): Offer | null => {
 };
 
 const SHIPMENT_PHASES: readonly ShipmentPhase[] = ['scheduled', 'enroute', 'waiting', 'loading', 'leaving'];
-const SHIPMENT_KINDS: readonly ShipmentKind[] = ['walkin', 'sale', 'purchase'];
+const SHIPMENT_KINDS: readonly ShipmentKind[] = ['walkin', 'sale', 'purchase', 'livestock'];
 const isShipmentKind = (v: unknown): v is ShipmentKind => SHIPMENT_KINDS.some((k) => k === v);
 const SHIPMENT_OUTCOMES: readonly ShipmentOutcome[] = ['sold', 'delivered', 'expired', 'dismissed'];
 const isShipmentPhase = (v: unknown): v is ShipmentPhase => SHIPMENT_PHASES.some((p) => p === v);
@@ -518,8 +528,8 @@ const parseShipment = (v: unknown): Shipment | null => {
   if (!isFiniteNumber(payment) || payment < 0) return null;
   const goods = parseList(v.goods, parseLine);
   const work = parseShipmentWork(v.work);
-  // Sales carry their lot; a purchase carries its delivery instead.
-  if (!goods || (goods.length === 0) !== (kind === 'purchase') || work === null) return null;
+  // Sales carry their lot; a purchase carries its delivery and a livestock truck its animals instead.
+  if (!goods || (goods.length === 0) !== (kind === 'purchase' || kind === 'livestock') || work === null) return null;
   // A loading shipment always has its work, and its goods already left the inventory.
   if ((phase === 'loading') !== (work !== undefined)) return null;
   const staged = v.staged === true;
@@ -529,6 +539,10 @@ const parseShipment = (v: unknown): Shipment | null => {
   else if (phase !== 'scheduled') return null;
   if (work) shipment.work = work;
   if (staged && phase !== 'leaving') shipment.staged = true;
+  if (kind === 'livestock') {
+    if (!Array.isArray(v.animals) || !v.animals.every(isId)) return null;
+    shipment.animals = v.animals.filter(isId);
+  }
   if (kind === 'purchase') {
     const delivery = parseDelivery(v.delivery);
     if (!delivery || !isFiniteNumber(v.goodsCost) || v.goodsCost < 0) return null;
@@ -693,8 +707,9 @@ const parseGame = (v: unknown): GameState | null => {
     ...allOffers.map((o) => o.id),
     ...held.map((h) => h.id),
   );
-  // A vehicle whose dock is gone is dropped (the dock cannot be demolished, so this only guards bad data).
-  const docks = new Set(structures.filter((s) => s.type === 'dock').map((s) => s.id));
+  // A vehicle whose dock (or loading pen) is gone is dropped (neither can go while a vehicle is coming,
+  // so this only guards bad data).
+  const docks = new Set(structures.filter((s) => s.type === 'dock' || s.type === 'loadingPen').map((s) => s.id));
   const shipments = allShipments.filter((s) => docks.has(s.dockId));
 
   // Every animal has a shelter, construction tasks and sites match (a site always has its crew),

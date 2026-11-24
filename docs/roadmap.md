@@ -147,7 +147,7 @@ Backend, login GitHub, save na nuvem, perfis e amigos. Decidido com o usuário: 
 projeto, de forma web (requisição ao GitHub e atualização pela web). O que havia sido feito localmente
 (bônus de contribuições, painel Perfil, save em arquivo e cliente Supabase) foi removido do código.
 
-### Etapa 9: doca e frete (em andamento: 9a ✅, 9b ✅, 9c ✅, 9d ✅)
+### Etapa 9: doca e frete ✅ (9a, 9b, 9c, 9d e 9e)
 A caixa de venda vira uma doca com vagas; vender e comprar passam por veículos, frete e trabalho da equipe
 (carregamento como obra). Desenho completo, decisões do usuário e sub-etapas 9a a 9e em
 `docs/superpowers/specs/2026-11-23-dock-design.md` (aprovado pelo usuário em 2026-11-23).
@@ -190,6 +190,15 @@ sempre o que o jogador fixar na Concessionária, que agora contrata picape, cami
 caminhão (1.500 kg, frete por kg mais barato) só vem com vaga de caminhão. Save v20. Decidido por mim: vagas
 a duas casas uma da outra (a picape tem 5,2 m), animais comprados continuam vindo no boiadeiro em vaga de
 carro, e carregadores de um mesmo veículo dividem o tile da vaga.
+
+9e ✅: venda de animais vivos pelo curral de embarque (construção nova, 700, 3×2, com área de contenção para
+10 cabeças e vaga de caminhão na rua em frente). No card do animal, "Separar para venda" faz a equipe (Tratar
+animais) levar ele ao curral, onde espera sem produzir; no card do curral, "Chamar comprador" paga o frete do
+boiadeiro (fixo + por cabeça, até 8) e o caminhão vem ao curral; a equipe embarca (Carga) e o comprador paga o
+valor de cada animal na hora. Depois de 6 h no curral o animal perde 3% por hora (até 60%), e à noite o curral
+fica aberto aos predadores. A venda instantânea de animais saiu. Save v21. Decidido por mim: o boiadeiro para
+na vaga do próprio curral (não precisa da vaga de caminhão da doca), a condução é uma tarefa de Tratar animais
+e o embarque usa a Carga, e um animal na lista do caminhão não pode mais ser tirado da venda.
 
 ### Vias e mapa maior (pedido do usuário) ✅
 

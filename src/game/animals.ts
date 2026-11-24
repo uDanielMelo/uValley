@@ -212,17 +212,6 @@ export const addAnimal = (state: GameState, kind: AnimalId, options: AddAnimalOp
   return ok({ ...state, animals: [...state.animals, animal], nextId: id + 1 });
 };
 
-/** Sells one animal; the price depends on its breed, stars and age. */
-export const sellAnimal = (state: GameState, animalId: number): ActionResult => {
-  const animal = state.animals.find((a) => a.id === animalId);
-  if (!animal) return fail('no-animal');
-  return ok({
-    ...state,
-    money: state.money + animalSalePrice(state.gameMinutes, animal),
-    animals: state.animals.filter((a) => a.id !== animalId),
-  });
-};
-
 /** Animals that died of old age leave the farm (and their shelter). */
 export const removeDeadAnimals = (state: GameState): { state: GameState; died: Animal[] } => {
   const died = state.animals.filter((a) => minutesToLive(state.gameMinutes, a) <= 0);
@@ -340,6 +329,11 @@ export const stepAnimals = (state: GameState, minutes: number): GameState => {
     const home = shelter ? shelterDoor(shelter) : { x: a.x, y: a.y };
 
     const product = animalProduct(a);
+    // Penned for sale: it waits in the pen, not producing, and only walks in.
+    if (a.penned) {
+      const walked = a.path.length > 0 ? followPath({ x: a.x, y: a.y, path: a.path }, def.moveSpeed * minutes) : null;
+      return walked ? { ...a, ...walked } : a;
+    }
     if (product && a.fed && shelter) {
       const needed = def.productionHours * 60;
       const rate =

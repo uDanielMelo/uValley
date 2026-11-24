@@ -6,6 +6,7 @@ import { checkUpgrade, upgradeTotal } from '../game/construction';
 import { upgradeMinutes } from '../game/structures';
 import { offerChance, referencePrice } from '../game/listings';
 import { giveUpRefund, heldFee, purchaseFreight } from '../game/purchases';
+import { penPrice } from '../game/pen';
 import { ALL_GOODS, countIn, goodKey, type Good } from '../game/market';
 import { checkSale, freightCost, hasGoods, knownGoods, loadingProgress } from '../game/shipments';
 import { formatClock, toClock } from '../game/time';
@@ -111,13 +112,17 @@ const STATUS: Record<Shipment['phase'], string> = {
   leaving: 'Saindo',
 };
 
-function ShipmentCard({ id }: { id: number }) {
+export function ShipmentCard({ id }: { id: number }) {
   const shipment = useGameStore((s) => s.game.shipments.find((x) => x.id === id));
   const enough = useGameStore((s) => {
     const found = s.game.shipments.find((x) => x.id === id);
     return found ? found.kind !== 'walkin' || hasGoods(s.game, found.goods) : false;
   });
   const loaders = useGameStore((s) => s.game.workers.filter((w) => w.priorities.includes('haul')).length);
+  const livestockValue = useGameStore((s) => {
+    const ids = s.game.shipments.find((x) => x.id === id)?.animals ?? [];
+    return s.game.animals.filter((a) => ids.includes(a.id)).reduce((sum, a) => sum + penPrice(s.game.gameMinutes, a), 0);
+  });
   const start = useGameStore((s) => s.startLoading);
   const cancel = useGameStore((s) => s.cancelLoading);
   const dismiss = useGameStore((s) => s.dismissShipment);
@@ -125,8 +130,9 @@ function ShipmentCard({ id }: { id: number }) {
   const percent = Math.floor((loadingProgress(shipment) ?? 0) * 100);
   const sale = shipment.kind === 'sale';
   const purchase = shipment.kind === 'purchase';
+  const livestock = shipment.kind === 'livestock';
   const shop = shipment.order ? TOWN_SHOPS[shipment.order.shop] : null;
-  const who = purchase ? '📦 Entrega da cidade' : sale ? `🚚 Frete${shop ? ` · ${shop.icon} ${shop.label}` : ' · comprador'}` : '🚗 Cliente';
+  const who = livestock ? '🚛 Boiadeiro · curral de embarque' : purchase ? '📦 Entrega da cidade' : sale ? `🚚 Frete${shop ? ` · ${shop.icon} ${shop.label}` : ' · comprador'}` : '🚗 Cliente';
   const when =
     shipment.phase === 'scheduled'
       ? `sai a partir das ${clock(shipment.setOffAt)}`
@@ -139,7 +145,9 @@ function ShipmentCard({ id }: { id: number }) {
         <span>{who}</span>
         <span className="text-wood/70">{purchase && shipment.phase === 'loading' ? '📦 Descarregando' : STATUS[shipment.phase]}</span>
       </p>
-      {purchase && shipment.delivery ? (
+      {livestock ? (
+        <p className="text-sm font-black">{shipment.animals?.length ?? 0} animal(is) do curral</p>
+      ) : purchase && shipment.delivery ? (
         <p className="text-sm font-black">{deliveryText(shipment.delivery)}</p>
       ) : (
         <div className="flex items-center justify-between gap-2 text-sm font-black">
@@ -151,10 +159,12 @@ function ShipmentCard({ id }: { id: number }) {
         </div>
       )}
       <p className="flex items-center justify-between text-xs font-bold">
-        <span className="text-wood/70">{purchase ? 'Mercadoria paga' : sale ? 'Recebe ao sair carregado' : 'Paga ao sair carregado'}</span>
-        <Coins value={formatCoins(purchase ? (shipment.goodsCost ?? 0) : shipment.payment)} />
+        <span className="text-wood/70">
+          {livestock ? 'Recebe ao sair carregado (cerca de)' : purchase ? 'Mercadoria paga' : sale ? 'Recebe ao sair carregado' : 'Paga ao sair carregado'}
+        </span>
+        <Coins value={formatCoins(purchase ? (shipment.goodsCost ?? 0) : livestock ? livestockValue : shipment.payment)} />
       </p>
-      {(sale || purchase) && (
+      {(sale || purchase || livestock) && (
         <p className="flex items-center justify-between text-xs font-bold text-wood/70">
           <span>Frete pago ({VEHICLES[shipment.vehicle ?? 1].label.toLowerCase()})</span>
           <Coins value={formatCoins(shipment.freight ?? 0)} />
@@ -184,7 +194,7 @@ function ShipmentCard({ id }: { id: number }) {
       {shipment.phase === 'waiting' && (
         <div className="flex items-center gap-2">
           <Button variant="leaf" className="flex-1 text-sm" disabled={!enough} onClick={() => start(id)}>
-            {purchase ? 'Mandar descarregar' : 'Mandar carregar'}
+            {purchase ? 'Mandar descarregar' : livestock ? 'Mandar embarcar' : 'Mandar carregar'}
           </Button>
           {shipment.kind === 'walkin' && (
             <Button variant="ghost" className="text-xs" onClick={() => dismiss(id)}>
@@ -205,13 +215,13 @@ function ShipmentCard({ id }: { id: number }) {
           Cancelar compra (a mercadoria é devolvida, o frete não)
         </button>
       )}
-      {sale && shipment.phase !== 'enroute' && (
+      {(sale || livestock) && shipment.phase !== 'enroute' && (
         <button
           type="button"
           onClick={() => dismiss(id)}
           className="self-end text-[11px] font-extrabold text-red-800/80 hover:underline"
         >
-          Cancelar venda (a mercadoria volta, o frete não)
+          {livestock ? 'Cancelar venda (os animais ficam no curral, o frete não volta)' : 'Cancelar venda (a mercadoria volta, o frete não)'}
         </button>
       )}
     </div>

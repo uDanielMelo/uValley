@@ -475,7 +475,8 @@ export const checkDemolish = (state: GameState, tile: number): StructureInstance
   if (!found) return 'no-structure';
   if (STRUCTURES[found.type].cost === undefined) return 'not-demolishable';
   if (found.work) return 'under-construction';
-  if (state.animals.some((a) => a.shelterId === found.id)) return 'shelter-in-use';
+  if (state.animals.some((a) => a.shelterId === found.id || a.penned?.penId === found.id)) return 'shelter-in-use';
+  if (state.shipments.some((s) => s.dockId === found.id && s.phase !== 'leaving')) return 'reserved';
   // Animals on their way (or held in town) keep a seat here.
   const kept = [...state.shipments.map((s) => s.delivery), ...state.held.map((h) => h.delivery)];
   if (kept.some((d) => d?.animals.some((a) => a.shelterId === found.id))) return 'reserved';

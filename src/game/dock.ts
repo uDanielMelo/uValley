@@ -2,7 +2,7 @@
  * The dock's geometry: the bays on the street in front of it, where vehicles park (more with each
  * level, then a truck bay), and the spots beside each vehicle where the crew loads it.
  */
-import { DOCK, DOCK_LEVELS, type BayDef, type BaySize, type DockLevel } from '../data/docks';
+import { DOCK, DOCK_LEVELS, PEN, type BayDef, type BaySize, type DockLevel } from '../data/docks';
 import { inBounds, tileIndex } from './grid';
 import { frontPoint, isActive } from './structures';
 import type { GameState, GridPoint, StructureInstance, Tile } from './types';
@@ -21,8 +21,11 @@ export const nextDockLevel = (s: Pick<StructureInstance, 'level'>): DockLevel | 
   return level < 3 ? ((level + 1) as DockLevel) : null;
 };
 
-/** The bays a dock has at its level. */
-export const dockBays = (s: Pick<StructureInstance, 'level'>): readonly BayDef[] => DOCK_LEVELS[dockLevel(s)].bays;
+export const isPen = (s: Pick<StructureInstance, 'type'>): boolean => s.type === 'loadingPen';
+
+/** The bays a dock has at its level (a loading pen: its truck bay). */
+export const dockBays = (s: Pick<StructureInstance, 'type' | 'level'>): readonly BayDef[] =>
+  isPen(s) ? PEN.bays : DOCK_LEVELS[dockLevel(s)].bays;
 
 /** Where a vehicle parks at a bay: on the street in front of the dock, `along` tiles to its right. */
 export const bayPoint = (dock: Placed & Pick<StructureInstance, 'level'>, bay = 0): GridPoint =>

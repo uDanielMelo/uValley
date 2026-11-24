@@ -120,7 +120,7 @@ export type ShipmentPhase = 'scheduled' | 'enroute' | 'waiting' | 'loading' | 'l
  * paid the freight and the goods were set aside when it was closed) or hired freight bringing what
  * the farm bought ('purchase': paid when ordered, unloaded by the crew).
  */
-export type ShipmentKind = 'walkin' | 'sale' | 'purchase';
+export type ShipmentKind = 'walkin' | 'sale' | 'purchase' | 'livestock';
 
 /** Bought as a baby or as a young adult. */
 export type AnimalAge = 'baby' | 'adult';
@@ -198,6 +198,8 @@ export interface Shipment {
   /** Purchases: what it brings and what the goods cost. */
   delivery?: Delivery;
   goodsCost?: number;
+  /** Livestock: the animals it takes from the loading pen (`dockId` is the pen). */
+  animals?: number[];
   /** Present while loading. */
   work?: ShipmentWork;
   /** Leaving: when it set off back, and when it is out of sight (then it is removed). */
@@ -243,6 +245,8 @@ export type TaskJob =
   | { type: 'medicate'; animalId: number }
   /** Taking a carcass away ('tend'); the task tile is under the carcass. */
   | { type: 'carcass'; carcassId: number }
+  /** Leading an animal marked for sale to a loading pen ('tend'); the task tile is where it was. */
+  | { type: 'herd'; animalId: number; penId: number }
   /** Loading a vehicle at the dock ('haul'); the task tile is the bay's tile, `slot` the loader's spot. */
   | { type: 'shipment'; shipmentId: number; slot: number };
 
@@ -333,6 +337,8 @@ export interface Animal {
   fed: boolean;
   /** Absent while healthy. */
   health?: AnimalHealth;
+  /** Marked for sale and led to a loading pen (it waits there, not producing, until a truck takes it). */
+  penned?: { penId: number; since: number };
 }
 
 /** A sickness (or wound). Its stage (incubating, with symptoms) is derived from `since`. */
@@ -464,6 +470,10 @@ export type ActionError =
   | 'invalid-price'
   | 'no-order'
   | 'dock-no-road'
+  | 'no-pen'
+  | 'pen-full'
+  | 'not-penned'
+  | 'on-truck'
   | 'no-truck-bay'
   | 'too-many-heads'
   | 'empty-cart'

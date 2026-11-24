@@ -8,6 +8,7 @@ import { Bench, FlowerBed, Fountain, LampPost, PlantedTree, Scarecrow } from './
 import { House } from './models/House';
 import { Corral, Pigsty, Sheepfold, Stable } from './models/Shelters';
 import { Dock } from './models/Dock';
+import { LoadingPen } from './models/LoadingPen';
 
 export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   house: House,
@@ -18,6 +19,7 @@ export const STRUCTURE_MODELS: Record<StructureId, ComponentType> = {
   sheepfold: Sheepfold,
   corral: Corral,
   stable: Stable,
+  loadingPen: LoadingPen,
   silo: Silo,
   warehouse: Warehouse,
   barn: Barn,

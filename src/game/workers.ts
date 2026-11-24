@@ -187,6 +187,11 @@ const tileCenter = (tile: number): GridPoint => {
  */
 export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoint => {
   const job = task.job;
+  if (job?.type === 'herd') {
+    // Go to the animal wherever it grazes now (it is led from there).
+    const animal = state.animals.find((a) => a.id === job.animalId);
+    return animal ? { x: animal.x, y: animal.y } : tileCenter(task.tile);
+  }
   if (job?.type === 'shipment') {
     const shipment = state.shipments.find((s) => s.id === job.shipmentId);
     const dock = shipment && state.structures.find((s) => s.id === shipment.dockId);
@@ -264,7 +269,7 @@ export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' |
   if (task.kind === 'seed') return { kind: task.kind, cropId: task.cropId };
   if (task.kind === 'tend') {
     const job = task.job;
-    if (job?.type === 'medicate') {
+    if (job?.type === 'medicate' || job?.type === 'herd') {
       return { kind: task.kind, cropId: null, animalId: state.animals.find((a) => a.id === job.animalId)?.kind ?? null };
     }
     if (job?.type === 'carcass') {

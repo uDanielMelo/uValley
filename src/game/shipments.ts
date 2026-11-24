@@ -24,6 +24,7 @@ import { MAX_TASKS } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { animalProduct } from './animals';
 import { receiveDelivery } from './delivery';
+import { sellPenned } from './penValue';
 import { bayPoint, bayTile, bayUsable, dockBays, dockWorks, docksOf } from './dock';
 import { addTo, basePrice, countIn, unitWeight, type Good } from './market';
 import { hash01 } from './random';
@@ -69,8 +70,12 @@ export const supplyWeight = (d: Pick<Delivery, 'seeds' | 'medicine' | 'fertilize
 export const unloadMinutes = (d: Delivery): number =>
   Math.round(DOCK.loadMinutes.base + DOCK.loadMinutes.perKg * supplyWeight(d) + LIVESTOCK.unloadMinutesPerHead * d.animals.length);
 
-/** Work minutes for a shipment: loading its lot, or unloading its delivery. */
-const workMinutes = (s: Shipment): number => (s.delivery ? unloadMinutes(s.delivery) : loadMinutes(s.goods));
+/** Work minutes for a shipment: loading its lot or its animals, or unloading its delivery. */
+const workMinutes = (s: Shipment): number => {
+  if (s.delivery) return unloadMinutes(s.delivery);
+  if (s.animals) return Math.round(DOCK.loadMinutes.base + LIVESTOCK.unloadMinutesPerHead * s.animals.length);
+  return loadMinutes(s.goods);
+};
 
 /** The inventory holds every line of the lot. */
 export const hasGoods = (state: Pick<GameState, 'inventory'>, lines: readonly ShipmentLine[]): boolean =>
@@ -291,14 +296,14 @@ export const checkSale = (state: GameState, lines: readonly ShipmentLine[]): Act
 
 /** What every hired freight trip shares; the rest is filled in by `scheduleFreight`. */
 type FreightTrip = Pick<Shipment, 'kind' | 'goods' | 'payment' | 'freight' | 'vehicle'> &
-  Partial<Pick<Shipment, 'order' | 'delivery' | 'goodsCost' | 'staged'>>;
+  Partial<Pick<Shipment, 'order' | 'delivery' | 'goodsCost' | 'staged' | 'animals'>>;
 
 /**
  * Hires a freight trip to the first working dock: it sets off from the first hour freight drives
  * and must be done within FREIGHT_RULES.windowMinutes of it (or by `due`).
  */
-export const scheduleFreight = (state: GameState, trip: FreightTrip, due = Infinity): GameState => {
-  const dockId = workingDock(state) ?? docksOf(state)[0]?.id ?? -1;
+export const scheduleFreight = (state: GameState, trip: FreightTrip, due = Infinity, to?: number): GameState => {
+  const dockId = to ?? workingDock(state) ?? docksOf(state)[0]?.id ?? -1;
   const start = freightStart(state.gameMinutes);
   const shipment: Shipment = {
     id: state.nextId,
@@ -531,6 +536,11 @@ export const addShipmentWork = (state: GameState, shipmentId: number, minutes: n
   if (shipment.delivery) {
     const received = receiveDelivery(state, shipment.delivery, shipment.id);
     return depart(received.state, shipment, 'delivered', state.gameMinutes, []);
+  }
+  if (shipment.animals) {
+    // The buyer pays what the animals still in the pen are worth now.
+    const sold = sellPenned(state, shipment.animals);
+    return depart(sold.state, { ...shipment, payment: sold.paid, animals: shipment.animals.slice(0, sold.heads) }, 'sold', state.gameMinutes);
   }
   return depart({ ...state, money: state.money + shipment.payment }, shipment, 'sold', state.gameMinutes);
 };

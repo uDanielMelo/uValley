@@ -168,3 +168,21 @@ export const HELD = {
   /** Giving up a held delivery gives this share of what it cost back. */
   giveUpRefund: 0.5,
 } as const;
+
+// ---------- selling live animals: the loading pen ----------
+
+/**
+ * The loading pen (curral de embarque): animals marked for sale are led there by the crew and wait
+ * in its holding area until a buyer's livestock truck comes to its bay. They lose value the longer
+ * they wait.
+ */
+export const PEN = {
+  /** Heads the holding area takes. */
+  capacity: 10,
+  /** The truck bay on the street in front of the pen (offsets from its middle, see BayDef). */
+  bays: [{ size: 'truck', along: 0, roads: [-1, 0, 1] }] satisfies readonly BayDef[],
+  /** Work minutes (at speed 1) to lead one animal to the pen. */
+  herdMinutes: 15,
+  /** Waiting in the pen: free for `graceHours`, then the price drops `perHour` an hour, down to `floor`. */
+  stress: { graceHours: 6, perHour: 0.03, floor: 0.6 },
+} as const;

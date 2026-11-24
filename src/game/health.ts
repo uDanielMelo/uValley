@@ -19,6 +19,7 @@ import {
   type PredatorId,
 } from '../data/health';
 import { MANURE_SICKNESS } from '../data/fertilizer';
+import { PEN } from '../data/docks';
 import { MAX_TASKS } from '../data/workers';
 import { GRID_SIZE } from '../data/world';
 import { isAwake, isInside, lifeStage } from './animals';
@@ -418,5 +419,6 @@ const addCareTask = (state: GameState, tile: number, job: NonNullable<Task['job'
 export const careMinutes = (job: Task['job']): number | null => {
   if (job?.type === 'medicate') return MEDICATE_MINUTES;
   if (job?.type === 'carcass') return CARCASS_MINUTES;
+  if (job?.type === 'herd') return PEN.herdMinutes;
   return null;
 };

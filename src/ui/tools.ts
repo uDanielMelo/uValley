@@ -70,6 +70,11 @@ const jobWords = (game: GameState, task: Task): [string, string] => {
     return [`Medicar ${name}`, `Medicando ${name}`];
   }
   if (job?.type === 'carcass') return ['Recolher carcaça', 'Recolhendo carcaça'];
+  if (job?.type === 'herd') {
+    const animal = game.animals.find((a) => a.id === job.animalId);
+    const name = animal ? ANIMALS[animal.kind].label.toLowerCase() : 'animal';
+    return [`Levar ${name} ao curral`, `Levando ${name} ao curral`];
+  }
   if (job?.type === 'shipment') return ['Carregar veículo na doca', 'Carregando veículo na doca'];
   const target = job ? game.structures.find((s) => s.id === job.structureId) : undefined;
   if (!target) return [TASK_LABELS[task.kind], TASK_VERBS[task.kind]];

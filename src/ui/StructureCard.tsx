@@ -24,6 +24,7 @@ import { useGameStore, type GameStore } from '../store/gameStore';
 import { formatCoins, formatWorkTime } from './format';
 import { Button, Card, Coins } from './primitives';
 import { DockSection } from './DockPanel';
+import { PenSection } from './PenSection';
 import { StorageSummary } from './StorageSummary';
 
 const find = (s: GameStore): StructureInstance | undefined =>
@@ -190,6 +191,7 @@ function ShelterSection({ type }: { type: StructureId }) {
 function ExtraSection({ type }: { type: StructureId }) {
   const beds = useGameStore((s) => `${staffCount(s.game)}/${bedCount(s.game)}`);
   const showPanel = useGameStore((s) => s.showPanel);
+  const id = useGameStore((s) => s.selectedStructure);
   if (type === 'bunkhouse') {
     return (
       <div className="flex items-center justify-between text-xs font-bold">
@@ -203,6 +205,7 @@ function ExtraSection({ type }: { type: StructureId }) {
     );
   }
   if (type === 'dock') return <DockSection />;
+  if (type === 'loadingPen') return id === null ? null : <PenSection penId={id} />;
   const storage = STRUCTURES[type].storage;
   if (storage || type === 'house') {
     return (

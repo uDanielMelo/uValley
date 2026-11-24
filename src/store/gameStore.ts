@@ -12,7 +12,7 @@ import { SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures
 import { SEASONS, SEASON_DAYS } from '../data/climate';
 import { DISEASES, MEDICINES, PREDATORS, type MedicineId, type PredatorId } from '../data/health';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
-import { animalSalePrice, sellAnimal } from '../game/animals';
+import { callBuyer, markForSale, unmarkForSale } from '../game/pen';
 import { buyPlot } from '../game/economy';
 import { plotOfTile, tileCoords, tileIndex, tilesInRect } from '../game/grid';
 import {
@@ -180,7 +180,12 @@ export interface GameStore {
   /** Opens the team hub on a worker's card (null closes the card). */
   selectWorker: (workerId: number | null) => void;
   clearTasks: () => void;
-  sellAnimal: (animalId: number) => void;
+  /** Marks an animal for sale: the crew leads it to the loading pen. */
+  markForSale: (animalId: number) => void;
+  /** Takes an animal off sale (it goes back to its shelter). */
+  unmarkForSale: (animalId: number) => void;
+  /** Calls a buyer's livestock truck to a loading pen. */
+  callBuyer: (penId: number) => void;
   /** Animal selected with the hand (its card is open). */
   selectedAnimal: number | null;
   selectAnimal: (id: number | null) => void;
@@ -277,6 +282,10 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'invalid-price': 'Preço inválido.',
   'no-order': 'Este pedido não está mais aberto.',
   'dock-no-road': 'A doca está sem acesso por estrada: o frete não chega.',
+  'no-pen': 'Construa um curral de embarque (menu Construir, Animais) ligado à estrada para vender animais.',
+  'pen-full': 'O curral de embarque está cheio. Chame o comprador ou construa outro curral.',
+  'not-penned': 'Não há animal esperando no curral.',
+  'on-truck': 'Este animal já está na lista do caminhão boiadeiro.',
   'no-truck-bay': 'O caminhão precisa de uma vaga de caminhão: melhore a doca (nível 3).',
   'too-many-heads': `O caminhão boiadeiro leva até ${LIVESTOCK.maxHeads} animais por viagem.`,
   'empty-cart': 'O carrinho está vazio.',
@@ -370,6 +379,12 @@ export const deliveryText = (d: Delivery): string => {
 /** Toast for a vehicle that parked, was loaded or left without its load. */
 const dockText = (event: DockEvent): { text: string; kind: Toast['kind'] } => {
   const s = event.shipment;
+  if (s.kind === 'livestock') {
+    const heads = s.animals?.length ?? 0;
+    if (event.kind === 'arrived') return { text: `🚛 O boiadeiro chegou ao curral: a equipe está embarcando ${heads} animal(is).`, kind: 'info' };
+    if (event.kind === 'sold') return { text: `🚛 Boiadeiro carregado: ${heads} animal(is) vendido(s), +${s.payment} moedas.`, kind: 'info' };
+    return { text: '🚛 O boiadeiro não foi carregado a tempo e foi embora; os animais continuam no curral.', kind: 'error' };
+  }
   if (s.kind === 'purchase') {
     const what = s.delivery ? deliveryText(s.delivery) : 'a compra';
     if (event.kind === 'arrived') {
@@ -793,12 +808,14 @@ export const useGameStore = create<GameStore>()(
       },
       selectWorker: (selectedWorker) => set(selectedWorker === null ? { selectedWorker } : { selectedWorker, panel: 'workers' }),
       clearTasks: () => set((s) => ({ game: clearTasks(s.game) })),
-      sellAnimal: (animalId) => {
-        const game = get().game;
-        const animal = game.animals.find((a) => a.id === animalId);
-        const price = animal ? animalSalePrice(game.gameMinutes, animal) : 0;
-        if (!commit(sellAnimal(game, animalId), `Animal vendido: +${price} moedas.`)) return;
-        if (get().selectedAnimal === animalId) set({ selectedAnimal: null });
+      markForSale: (animalId) => {
+        commit(markForSale(get().game, animalId), '🐄 À venda: a equipe com Tratar animais vai levar ao curral de embarque.');
+      },
+      unmarkForSale: (animalId) => {
+        commit(unmarkForSale(get().game, animalId), 'Tirado da venda: volta para o abrigo.');
+      },
+      callBuyer: (penId) => {
+        commit(callBuyer(get().game, penId), '🚛 Comprador chamado: o caminhão boiadeiro vem ao curral e a equipe embarca.');
       },
       sightings: [],
       showSighting: (predator, x, y) => {

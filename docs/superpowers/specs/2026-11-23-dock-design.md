@@ -1,6 +1,6 @@
 # Doca e frete: design
 
-Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **9a a 9d implementadas** (branches `fase-4a-etapa-9a` a `fase-4d-etapa-9d`); falta a 9e. As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
+Data: 2026-11-23. Status: **aprovado** pelo usuário ("Plano 9a pode executar"). **Etapa 9 completa**: 9a a 9e implementadas (branches `fase-4a-etapa-9a` a `fase-4e-etapa-9e`). As dúvidas abaixo foram resolvidas com as minhas propostas (ver "Respostas adotadas").
 
 Este documento é a memória do que foi conversado e decidido. Tudo que está em "Decidido pelo usuário" veio da conversa; o que está em "Minhas escolhas" são propostas minhas, provisórias, para o usuário confirmar ou ajustar.
 
@@ -175,8 +175,15 @@ Diferenças da 9a para o modelo proposto: `Shipment` tem `setOffAt` (para desenh
 - `GameState.vehicleLevel` virou o maior veículo de frete contratado; `freightVehicle` ('auto' ou fixo) escolhe o veículo; `pickVehicle` por peso, caminhão só com vaga de caminhão.
 - Os animais comprados seguem no boiadeiro em vaga de carro (a exigência de caminhão para gado fica com a venda de gado, 9e).
 
+## Como ficou a 9e
+
+- Estrutura `loadingPen` (curral de embarque) com área de contenção (`PEN.capacity`) e vaga de caminhão própria (`PEN.bays`); o boiadeiro para lá, não na doca, então a venda de gado não depende do nível da doca (ajuste da resposta 3).
+- `Animal.penned { penId, since }`; a condução é tarefa `tend` com `job.type = 'herd'`; o embarque é a viagem `kind: 'livestock'` com `animals` e `dockId` = curral, carregada pela Carga.
+- Estresse: o preço cai `PEN.stress.perHour` por hora depois de `graceHours`, até `floor`; sem morte por espera, mas o curral é aberto aos predadores à noite.
+- A venda instantânea de animais (`sellAnimal`) saiu.
+
 ## Como retomar numa nova sessão
 
 1. Ler este documento e `docs/roadmap.md` (seção "Etapa 9").
-2. Implementar a 9e (embarque de gado) quando o usuário pedir.
+2. A etapa 9 está completa; ajustes de balanceamento ficam em `src/data/docks.ts`.
 3. Cada sub-etapa termina atualizando `CLAUDE.md` e `docs/roadmap.md`, com testes e `npm run build`.

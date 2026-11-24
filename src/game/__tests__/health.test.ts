@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { GAME_MINUTES_PER_REAL_HOUR } from '../../data/animals';
 import { DISEASES, DISEASE_RISK, PREDATOR_RISK } from '../../data/health';
-import { addAnimal, animalSalePrice, sellAnimal } from '../animals';
+import { addAnimal, animalSalePrice } from '../animals';
 import { addMedicine, setTimeOfDay, sickenAnimal } from '../dev';
 import {
   deathAt,
@@ -196,7 +196,7 @@ describe('medicine', () => {
     const empty = { ...s, inventory: { ...s.inventory, medicine: {} } };
     expect(medicateAnimal(empty, a.id)).toEqual({ ok: false, error: 'no-medicine' });
 
-    const sold = queueAnimalCare(unwrap(sellAnimal(s, a.id)));
+    const sold = queueAnimalCare({ ...s, animals: s.animals.filter((x) => x.id !== a.id) });
     expect(sold.tasks.some((t) => t.job?.type === 'medicate')).toBe(false);
   });
 });

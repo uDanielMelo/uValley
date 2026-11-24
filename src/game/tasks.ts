@@ -3,6 +3,7 @@ import { applyTool, plant } from './actions';
 import { medicateAnimal, removeCarcass } from './health';
 import { layRoad, removeRoad } from './roads';
 import { collectShelter } from './shelters';
+import { penAnimal } from './penValue';
 import { fail, ok, type ActionResult, type GameState, type Task } from './types';
 
 /** What a task needs to be applied. */
@@ -30,6 +31,7 @@ export const applyTask = (state: GameState, task: TaskOrder): ActionResult => {
   }
   if (job.type === 'medicate') return medicateAnimal(state, job.animalId);
   if (job.type === 'carcass') return removeCarcass(state, job.carcassId);
+  if (job.type === 'herd') return penAnimal(state, job.animalId, job.penId);
   if (job.type === 'road') return job.remove ? removeRoad(state, task.tile) : layRoad(state, task.tile);
   return state.structures.some((s) => s.id === job.structureId && s.work) ? ok(state) : fail('no-structure');
 };
