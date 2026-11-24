@@ -17,7 +17,7 @@ import type { Animal, GameState, Offer, StructureInstance, StructureWorkKind } f
 import type { ShelterLevel, StructureId } from '../data/structures';
 import { hasRoadAccess, refundFor } from './structures';
 import { stepWorkers } from './workers';
-import { endRentals, type MachineEvent } from './machines';
+import { endRentals, repairAtWorkshops, stepMachines, type MachineEvent } from './machines';
 
 export interface TickResult {
   state: GameState;
@@ -116,7 +116,8 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   const tiles = to > from ? growTiles(state.tiles, from, to) : state.tiles;
   const worked = stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes);
   const rentals = endRentals(worked);
-  const aged = removeDeadAnimals(stepAnimals(rentals.state, dtMinutes));
+  const upkeep = stepMachines(rentals.state, dtMinutes);
+  const aged = removeDeadAnimals(stepAnimals(upkeep.state, dtMinutes));
   const animalsDied = aged.died;
   const studied = stepResearch(aged.state, dtMinutes);
   const health = stepHealth(studied.state, state.gameMinutes);
@@ -130,6 +131,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   let tempsLeft = 0;
   const weatherReports: WeatherReport[] = [];
   let spoiled: Spoiled | null = null;
+  const nightMachineEvents: MachineEvent[] = [];
   const firstHour = Math.floor(state.gameMinutes / 60) + 1;
   const lastHour = Math.floor(gameMinutes / 60);
   for (let h = firstHour; h <= lastHour; h++) {
@@ -154,6 +156,9 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       // Animals held in town are kept at the farm's cost.
       const fed = payFeed(chargeHeld(next));
       next = refreshCandidates(fed.state);
+      const repaired = repairAtWorkshops(next);
+      next = repaired.state;
+      nightMachineEvents.push(...repaired.events);
       hungryAnimals = fed.hungry;
       // A new day: its weather hits the farm and stored goods spoil a little.
       const day = Math.floor(h / 24) + 1;
@@ -172,7 +177,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
     feedOrdered,
     researched: studied.finished,
     dockEvents: dockEvents(state.shipments, next.shipments),
-    machineEvents: rentals.events,
+    machineEvents: [...rentals.events, ...upkeep.events, ...nightMachineEvents],
     workersLeft,
     hungryAnimals,
     tempsLeft,

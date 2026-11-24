@@ -1,10 +1,10 @@
 /** Farm machinery: buying, selling, renting and returning machines. */
 import { CROPS } from '../data/crops';
-import { CONDITION, MACHINES, RENTAL, RESALE, type MachineId, type RentalDays } from '../data/machines';
+import { CONDITION, MACHINES, RENTAL, REPAIR, RESALE, type MachineId, type RentalDays } from '../data/machines';
 import { MAX_WORKERS, WORK_END_HOUR } from '../data/workers';
 import { MINUTES_PER_DAY } from '../data/world';
 import { homeSpot } from './home';
-import { boardingPoint, freeSlot, parkingDef } from './parking';
+import { boardingPoint, freeSlot, hasWorkshop, parkingDef } from './parking';
 import { makeWorker, removeWorkers, rollProfile } from './staff';
 import { isActive } from './structures';
 import { fail, ok, type ActionResult, type GameState, type GridPoint, type Machine, type Task, type Worker } from './types';
@@ -246,4 +246,92 @@ export const releaseOrphanMachines = (state: GameState): GameState => {
   const workersChanged = workers.some((w, i) => w !== state.workers[i]);
   if (!machinesChanged && !workersChanged) return state;
   return { ...state, ...(machinesChanged ? { machines } : {}), ...(workersChanged ? { workers } : {}) };
+};
+
+// ---------- wear, diesel and repair ----------
+
+/** Whether the machine has a rider on it (it is out of its bay). */
+const isDriven = (state: Pick<GameState, 'workers'>, m: Machine): boolean =>
+  m.driverId !== undefined && state.workers.some((w) => w.id === m.driverId && w.riding === true);
+
+/**
+ * Owned machines with a rider wear down and burn diesel (charged every 60 driven minutes while there
+ * is money; without it `no-fuel` shows once and `mustPark` sends the driver home). Machines whose
+ * mechanic is done come back at full condition.
+ */
+export const stepMachines = (state: GameState, minutes: number): { state: GameState; events: MachineEvent[] } => {
+  const events: MachineEvent[] = [];
+  let money = state.money;
+  let changed = false;
+  const machines = state.machines.map((m): Machine => {
+    let next = m;
+    if (!m.rental && m.repairUntil !== undefined && m.repairUntil <= state.gameMinutes) {
+      const { repairUntil: _repairUntil, ...rest } = m;
+      next = { ...rest, condition: CONDITION.max };
+      events.push({ kind: 'repaired', type: m.type });
+    }
+    if (!next.rental && isDriven(state, next) && minutes > 0) {
+      const def = MACHINES[next.type];
+      const condition = Math.max(0, next.condition - (def.wearPerHour * minutes) / 60);
+      if (next.condition > 0 && condition <= 0) events.push({ kind: 'broke', type: next.type });
+      const owed = (next.unpaidMinutes ?? 0) >= 60;
+      let unpaid = (next.unpaidMinutes ?? 0) + minutes;
+      while (unpaid >= 60) {
+        if (money < def.costPerHour) {
+          if (!owed) events.push({ kind: 'no-fuel', type: next.type });
+          unpaid = 60;
+          break;
+        }
+        money -= def.costPerHour;
+        unpaid -= 60;
+      }
+      next = { ...next, condition, unpaidMinutes: unpaid };
+    }
+    if (next !== m) changed = true;
+    return next;
+  });
+  if (!changed) return { state, events };
+  return { state: { ...state, money, machines }, events };
+};
+
+/** At midnight, owned machines parked in a shed with a workshop get `workshopPerNight` points, as far as the money goes. */
+export const repairAtWorkshops = (state: GameState): { state: GameState; events: MachineEvent[] } => {
+  const events: MachineEvent[] = [];
+  let money = state.money;
+  const machines = state.machines.map((m): Machine => {
+    if (m.rental || m.condition >= CONDITION.max || isDriven(state, m)) return m;
+    if (m.repairUntil !== undefined && m.repairUntil > state.gameMinutes) return m;
+    const park = state.structures.find((s) => s.id === m.parkId);
+    if (!park || !hasWorkshop(park)) return m;
+    const points = Math.min(REPAIR.workshopPerNight, CONDITION.max - m.condition, Math.floor(money / REPAIR.costPerPoint));
+    if (points <= 0) return m;
+    money -= Math.ceil(points * REPAIR.costPerPoint);
+    const condition = m.condition + points;
+    if (condition >= CONDITION.max) events.push({ kind: 'repaired', type: m.type });
+    return { ...m, condition };
+  });
+  if (machines.every((m, i) => m === state.machines[i])) return { state, events };
+  return { state: { ...state, money, machines }, events };
+};
+
+export const mechanicCost = (m: Machine): number =>
+  Math.ceil(CONDITION.max - m.condition) * REPAIR.costPerPoint * REPAIR.mechanicMultiplier;
+
+/** Pays a mechanic who brings the machine back at 100 by six the next morning. */
+export const callMechanic = (state: GameState, machineId: number): ActionResult => {
+  const machine = state.machines.find((m) => m.id === machineId);
+  if (!machine || machine.rental) return fail('no-machine');
+  if (machine.driverId !== undefined || (machine.repairUntil !== undefined && machine.repairUntil > state.gameMinutes)) {
+    return fail('machine-busy');
+  }
+  if (machine.condition >= CONDITION.max) return ok(state);
+  const cost = mechanicCost(machine);
+  if (state.money < cost) return fail('not-enough-money');
+  const day = Math.floor(state.gameMinutes / MINUTES_PER_DAY);
+  const repairUntil = (day + 1) * MINUTES_PER_DAY + REPAIR.mechanicReadyHour * 60;
+  return ok({
+    ...state,
+    money: state.money - cost,
+    machines: state.machines.map((m) => (m.id === machineId ? { ...m, repairUntil } : m)),
+  });
 };
