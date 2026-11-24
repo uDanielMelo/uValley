@@ -200,8 +200,11 @@ describe('mounted operator', () => {
     const id = firstWorker(base).id;
     const s = mount(base, id, firstMachine(base).id, { x: 26.5, y: 45.5 });
     const gone = unwrap(dismissWorker(s, id));
-    expect(firstMachine(gone).driverId).toBe(id);
-    expect(firstMachine(releaseOrphanMachines(gone)).driverId).toBeUndefined();
+    // Leaving frees the machine at once (it goes back to its slot).
+    expect(firstMachine(gone).driverId).toBeUndefined();
+    // A stale driver left by any other path is cleared by the worker step.
+    const stale = { ...gone, machines: gone.machines.map((m) => ({ ...m, driverId: id })) };
+    expect(firstMachine(releaseOrphanMachines(stale)).driverId).toBeUndefined();
   });
 
   it('cleans a rider whose machine is gone or driven by someone else', () => {

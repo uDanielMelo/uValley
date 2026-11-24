@@ -105,7 +105,7 @@ export function Tractor({ wheelRefs = [], driven = false }: MachineModelProps) {
   );
 }
 
-/** Combine harvester ≈ 7.5 × 3.5 × 3.8 m: header with reel in front, cab, grain tank, folded unloading auger. */
+/** Combine harvester ≈ 7 × 3.3 × 3.8 m (header narrowed to fit a 3.5 m bay): header with reel in front, cab, grain tank, folded unloading auger. */
 export function Harvester({ wheelRefs = [], reelRef, driven = false }: MachineModelProps) {
   return (
     <Meters>
@@ -125,13 +125,13 @@ export function Harvester({ wheelRefs = [], reelRef, driven = false }: MachineMo
       {/* Feeder to the header */}
       <Block position={[0, 1.2, 2.0]} size={[1.3, 0.8, 1.6]} color={C.harvesterBody} rotation={[0.25, 0, 0]} />
       {/* Header: wide platform with dividers and the reel */}
-      <Block position={[0, 0.45, 3.1]} size={[4.6, 0.35, 1.3]} color={C.harvesterTrim} />
-      <Block position={[0, 0.85, 2.55]} size={[4.6, 0.8, 0.12]} color={C.harvesterTrim} />
-      <Block position={[2.3, 0.7, 3.1]} size={[0.1, 0.6, 1.3]} color={C.harvesterBody} />
-      <Block position={[-2.3, 0.7, 3.1]} size={[0.1, 0.6, 1.3]} color={C.harvesterBody} />
+      <Block position={[0, 0.45, 3.1]} size={[3.3, 0.35, 1.3]} color={C.harvesterTrim} />
+      <Block position={[0, 0.85, 2.55]} size={[3.3, 0.8, 0.12]} color={C.harvesterTrim} />
+      <Block position={[1.65, 0.7, 3.1]} size={[0.1, 0.6, 1.3]} color={C.harvesterBody} />
+      <Block position={[-1.65, 0.7, 3.1]} size={[0.1, 0.6, 1.3]} color={C.harvesterBody} />
       <group ref={reelRef} position={[0, 1.25, 3.2]}>
         <mesh rotation={[0, 0, Math.PI / 2]}>
-          <cylinderGeometry args={[0.08, 0.08, 4.4, 6]} />
+          <cylinderGeometry args={[0.08, 0.08, 3.2, 6]} />
           <meshStandardMaterial color={C.steel} flatShading />
         </mesh>
         {[0, 1, 2, 3, 4].map((i) => {
@@ -140,7 +140,7 @@ export function Harvester({ wheelRefs = [], reelRef, driven = false }: MachineMo
             <Block
               key={i}
               position={[0, Math.sin(a) * 0.45, Math.cos(a) * 0.45]}
-              size={[4.3, 0.06, 0.06]}
+              size={[3.1, 0.06, 0.06]}
               color={C.reel}
               shadow={false}
             />

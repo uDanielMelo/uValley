@@ -251,7 +251,15 @@ export const removeWorkers = (state: GameState, leaving: ReadonlySet<number>): G
   if (leaving.size === 0) return state;
   let tasks = state.tasks;
   for (const id of leaving) tasks = unassign(tasks, id);
-  return { ...state, tasks, workers: state.workers.filter((w) => !leaving.has(w.id)) };
+  // A machine whose driver leaves goes straight back to its slot.
+  const machines = state.machines.some((m) => m.driverId !== undefined && leaving.has(m.driverId))
+    ? state.machines.map((m) => {
+        if (m.driverId === undefined || !leaving.has(m.driverId)) return m;
+        const { driverId: _gone, ...rest } = m;
+        return rest;
+      })
+    : state.machines;
+  return { ...state, tasks, machines, workers: state.workers.filter((w) => !leaving.has(w.id)) };
 };
 
 /** Hires a candidate from the board as staff: needs a free bed and the hiring cost. */

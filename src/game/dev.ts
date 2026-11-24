@@ -21,7 +21,7 @@ import { advanceGame } from './simulation';
 import { startOfNextDay } from './time';
 import type { GameState } from './types';
 import { homeSpot } from './home';
-import { makeWorker, rollProfile } from './staff';
+import { hourlyWageFor, makeWorker, rollProfile } from './staff';
 import { completeAllWork } from './construction';
 import { applyTask } from './tasks';
 import { spawnWalkIn } from './shipments';
@@ -299,6 +299,11 @@ export const hireOperator = (state: GameState): GameState => {
   if (state.workers.length >= MAX_WORKERS) return state;
   const profile = rollProfile(state.nextId * 17 + 3, new Set(state.workers.map((w) => w.name)));
   const skills = profile.skills.includes('machinery') ? profile.skills : [...profile.skills, 'machinery' as const];
-  const worker = makeWorker(state.nextId, 'staff', { ...profile, stars: 2, skills }, homeSpot(state, state.workers.length));
+  const worker = makeWorker(
+    state.nextId,
+    'staff',
+    { ...profile, stars: 2, skills, hourlyWage: hourlyWageFor(2, profile.specialty, skills) },
+    homeSpot(state, state.workers.length),
+  );
   return { ...state, workers: [...state.workers, worker], nextId: state.nextId + 1 };
 };

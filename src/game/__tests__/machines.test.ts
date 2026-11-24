@@ -106,3 +106,41 @@ describe('machine dev tools', () => {
     expect(worn.machines[1]?.condition).toBe(100);
   });
 });
+
+describe('machine review fixes', () => {
+  it('frees the machine when its driver leaves, so a rental still ends', async () => {
+    const { addMachine } = await import('../dev');
+    const { dismissWorker } = await import('../staff');
+    const { endRentals, sellMachine } = await import('../machines');
+    const { stepWorkers } = await import('../workers');
+    const s0 = addMachine(addMachine(createInitialState(), 'tractor'), 'harvester', true);
+    const driver = s0.workers[0];
+    const [owned, rented] = s0.machines;
+    if (!driver || !owned || !rented) throw new Error('setup');
+    const riding: GameState = {
+      ...s0,
+      money: 10_000,
+      workers: s0.workers.map((w) => (w.id === driver.id ? { ...w, machineId: rented.id, riding: true as const } : w)),
+      machines: s0.machines.map((m) => (m.id === rented.id ? { ...m, driverId: driver.id } : m)),
+    };
+    const dismissed = dismissWorker(riding, driver.id);
+    if (!dismissed.ok) throw new Error(dismissed.error);
+    expect(dismissed.state.machines.find((m) => m.id === rented.id)?.driverId).toBeUndefined();
+    const late = { ...dismissed.state, gameMinutes: (rented.rental?.until ?? 0) + 1 };
+    expect(endRentals(late).state.machines.some((m) => m.id === rented.id)).toBe(false);
+    // A stale driver with no workers left is still cleared by the worker step.
+    const empty: GameState = { ...riding, workers: [], machines: riding.machines.map((m) => (m.id === owned.id ? { ...m, driverId: 4242 } : m)) };
+    const stepped = stepWorkers(empty, 1);
+    expect(stepped.machines.find((m) => m.id === owned.id)?.driverId).toBeUndefined();
+    expect(sellMachine(stepped, owned.id).ok).toBe(true);
+  });
+
+  it('will not sell a machine the mechanic has', async () => {
+    const { addMachine } = await import('../dev');
+    const { sellMachine } = await import('../machines');
+    const s = addMachine(createInitialState(), 'tractor');
+    const away = { ...s, machines: s.machines.map((m) => ({ ...m, repairUntil: s.gameMinutes + 60 })) };
+    const id = away.machines[0]?.id ?? -1;
+    expect(sellMachine(away, id)).toEqual({ ok: false, error: 'machine-busy' });
+  });
+});

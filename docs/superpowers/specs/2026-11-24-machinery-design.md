@@ -134,13 +134,13 @@ interface Machine {
 - **Card do galpão ou do estacionamento** (`StructureCard`, seção `MachineSection`): uma linha por vaga, com a máquina, a barra de estado, "própria" ou "alugada até dia X 20h", quem está dirigindo, e "Vender" / "Devolver" / "Chamar mecânico". No galpão nível 1 aparece a reforma para oficina, como nos abrigos.
 - **Ficha do trabalhador:** a habilidade Maquinário aparece como as outras; o operador do aluguel mostra "Veio com o aluguel até dia X".
 - **Painel Construir:** categoria Máquinas com o galpão e o estacionamento.
-- O hover numa máquina mostra o tipo, o estado e quem está dirigindo.
+- ~~O hover numa máquina mostra o tipo, o estado e quem está dirigindo.~~ Ficou de fora: o card do galpão já mostra o tipo, o estado e o motorista de cada vaga *(decisão minha, na revisão final)*.
 
 ### Cena
 
 - `scene/models/Machines.tsx`, em metros dentro de `<Meters>`:
   - Trator ≈ 4,2 × 2,2 × 2,8 m: capô, cabine com vidros, rodas traseiras grandes (Ø 1,6 m) e dianteiras pequenas (Ø 0,9 m), escapamento, arado de 3 discos atrás. Laranja com detalhes grafite.
-  - Colheitadeira ≈ 7,5 × 3,5 × 3,8 m: corpo alto, cabine na frente, plataforma de corte larga com molinete, tubo de descarga dobrado, rodas grandes na frente. Vermelho-terra e creme *(decisão minha: cores genéricas, sem imitar um fabricante)*.
+  - Colheitadeira ≈ 7,5 × 3,3 × 3,8 m (plataforma de 3,3 m para caber na vaga de 3,5 m): corpo alto, cabine na frente, plataforma de corte larga com molinete, tubo de descarga dobrado, rodas grandes na frente. Vermelho-terra e creme *(decisão minha: cores genéricas, sem imitar um fabricante)*.
   - Galpão 10,5 × 7 m: estrutura metálica aberta na frente, telhado em arco baixo, piso de concreto com as 3 vagas pintadas. O nível 2 acrescenta bancada, parede de ferramentas, compressor, macaco e uma placa "Oficina" num anexo lateral (`ShedUpgrades`).
   - Estacionamento 7 × 7 m: piso de cascalho, guias e 2 vagas marcadas.
 - `scene/Machines.tsx`: desenha cada máquina parada na vaga ou montada na posição do operador, virada para onde anda (giro suavizado). Rodas giram pela distância percorrida; o molinete gira trabalhando. Pós-processamento e sombra como as outras peças. Poucas máquinas, então malhas normais sem `InstancedMesh` *(decisão minha)*.

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { MACHINE_IDS, MACHINES, RENTAL, type MachineId, type RentalDays } from '../data/machines';
 import { TASK_MINUTES } from '../data/workers';
-import { rentalCost } from '../game/machines';
+import { rentalCost, rentalEnd } from '../game/machines';
+import { MINUTES_PER_DAY } from '../data/world';
 import { freeSlot } from '../game/parking';
 import { useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
@@ -20,6 +21,8 @@ function MachineOffer({ type }: { type: MachineId }) {
   const [days, setDays] = useState<RentalDays>(1);
   const [withOperator, setWithOperator] = useState(false);
   const total = rentalCost(type, days, withOperator);
+  // The day changes every 1440 minutes, so the end only moves when the day (or the shift) does.
+  const ends = useGameStore((s) => rentalEnd(s.game.gameMinutes, days));
   return (
     <li className="flex flex-col gap-2 rounded-xl bg-parchment-dark/60 p-3 text-sm font-black">
       <div className="flex items-center justify-between gap-2">
@@ -48,7 +51,7 @@ function MachineOffer({ type }: { type: MachineId }) {
         Com operador (+{RENTAL.operatorPerDay}/dia)
       </label>
       <Button className="text-xs" disabled={!canRent || money < total} onClick={() => rent(type, days, withOperator)}>
-        Alugar por {days} dia{days === 1 ? '' : 's'} <Coins value={formatCoins(total)} />
+        Alugar até dia {Math.floor(ends / MINUTES_PER_DAY) + 1}, 20h <Coins value={formatCoins(total)} />
       </Button>
       {!canRent && (
         <span className="text-xs font-bold text-amber-700">Para alugar, tenha um estacionamento ou galpão com estrada e vaga livre.</span>

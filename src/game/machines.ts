@@ -42,6 +42,7 @@ export const sellMachine = (state: GameState, machineId: number): ActionResult =
   const machine = state.machines.find((m) => m.id === machineId);
   if (!machine || machine.rental) return fail('no-machine');
   if (machine.driverId !== undefined) return fail('machine-busy');
+  if (machine.repairUntil !== undefined && machine.repairUntil > state.gameMinutes) return fail('machine-busy');
   return ok({ ...state, money: state.money + resalePrice(machine), machines: state.machines.filter((m) => m.id !== machineId) });
 };
 
@@ -302,7 +303,8 @@ export const repairAtWorkshops = (state: GameState): { state: GameState; events:
     if (m.rental || m.condition >= CONDITION.max || isDriven(state, m)) return m;
     if (m.repairUntil !== undefined && m.repairUntil > state.gameMinutes) return m;
     const park = state.structures.find((s) => s.id === m.parkId);
-    if (!park || !hasWorkshop(park)) return m;
+    // The workshop only works when the shed does (built and reached by road).
+    if (!park || !hasWorkshop(park) || !isActive(state, park)) return m;
     const points = Math.min(REPAIR.workshopPerNight, CONDITION.max - m.condition, Math.floor(money / REPAIR.costPerPoint));
     if (points <= 0) return m;
     money -= Math.ceil(points * REPAIR.costPerPoint);

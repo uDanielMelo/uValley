@@ -404,8 +404,9 @@ const near = (a: GridPoint, b: GridPoint): boolean => Math.hypot(a.x - b.x, a.y 
  * they drive it back to its bay and get off.
  */
 export const stepWorkers = (input: GameState, minutes: number): GameState => {
-  if (minutes <= 0 || input.workers.length === 0) return input;
+  if (minutes <= 0) return input;
   const state = releaseOrphanMachines(input);
+  if (state.workers.length === 0) return state;
   const workTime = isWorkTime(state.gameMinutes);
   const labor = laborMultipliers(state);
   let world = state;
