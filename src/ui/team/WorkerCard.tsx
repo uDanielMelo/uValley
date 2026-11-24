@@ -1,3 +1,4 @@
+import { MINUTES_PER_DAY } from '../../data/world';
 import { CROPS, CROP_IDS, MASTERY_LEVELS } from '../../data/crops';
 import { DEFAULT_PRIORITIES, SEVERANCE_HOURS } from '../../data/workers';
 import { masteryLevel, severanceFor } from '../../game/staff';
@@ -120,6 +121,11 @@ export function WorkerCard({ id }: { id: number }) {
   const specialty = useGameStore((s) => find(s, id)?.specialty ?? null);
   const wage = useGameStore((s) => find(s, id)?.hourlyWage ?? 0);
   const temp = useGameStore((s) => find(s, id)?.kind === 'temp');
+  /** End of the rental this operator came with (null: not a rental operator). */
+  const rentalUntil = useGameStore((s) => {
+    const rentalId = find(s, id)?.rentalId;
+    return rentalId === undefined ? null : (s.game.machines.find((m) => m.id === rentalId)?.rental?.until ?? null);
+  });
   const severance = useGameStore((s) => {
     const w = find(s, id);
     return w ? severanceFor(w) : 0;
@@ -136,7 +142,7 @@ export function WorkerCard({ id }: { id: number }) {
         <dt className="text-wood/70">Idade</dt>
         <dd>{ageLabel(age)}</dd>
         <dt className="text-wood/70">Salário</dt>
-        <dd>{temp ? 'Pago na contratação' : <><Coins value={formatCoins(wage)} className="text-xs" /> /h</>}</dd>
+        <dd>{rentalUntil !== null ? 'Incluído no aluguel' : temp ? 'Pago na contratação' : <><Coins value={formatCoins(wage)} className="text-xs" /> /h</>}</dd>
         <dt className="text-wood/70">Ritmo no plantio</dt>
         <dd className="tabular-nums">{stats.speed}</dd>
         <dt className="text-wood/70">Efetividade no plantio</dt>
@@ -144,6 +150,11 @@ export function WorkerCard({ id }: { id: number }) {
         <dt className="text-wood/70">Ritmo em obras</dt>
         <dd className="tabular-nums">{buildSpeed(profile)}</dd>
       </dl>
+      {rentalUntil !== null && (
+        <p className="text-xs font-bold text-wood/70">
+          🚜 Veio com o aluguel até o dia {Math.floor(rentalUntil / MINUTES_PER_DAY) + 1}, {Math.floor((rentalUntil % MINUTES_PER_DAY) / 60)}h.
+        </p>
+      )}
       <SkillChips skills={skills} specialty={specialty} />
       <Mastery id={id} />
       <Priorities id={id} />

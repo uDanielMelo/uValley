@@ -3,6 +3,7 @@ import { VEHICLES, VEHICLE_LEVELS, type VehicleLevel } from '../data/market';
 import { nextVehicle } from '../game/market';
 import { hasBay } from '../game/shipments';
 import { useGameStore } from '../store/gameStore';
+import { MachineShop } from './MachineShop';
 import { formatCoins } from './format';
 import { Button, Coins, Panel } from './primitives';
 
@@ -47,13 +48,12 @@ function VehicleRow({ level }: { level: VehicleLevel }) {
   );
 }
 
-/** Dealership: freight contracts, and which vehicle the freight comes with. */
-export function GaragePanel() {
-  const close = useGameStore((s) => s.closePanel);
+/** Freight contracts, and which vehicle the freight comes with. */
+function FreightTab() {
   const auto = useGameStore((s) => s.game.freightVehicle === 'auto');
   const choose = useGameStore((s) => s.setFreightVehicle);
   return (
-    <Panel title="🚘 Concessionária" onClose={close}>
+    <>
       <p className="mb-3 text-xs font-bold text-wood/80">
         Contrate veículos de frete maiores: levam mais por viagem e cobram menos por kg. O frete das vendas e das compras
         vem com o veículo escolhido.
@@ -71,6 +71,30 @@ export function GaragePanel() {
           <VehicleRow key={l} level={l} />
         ))}
       </ul>
+    </>
+  );
+}
+
+const TABS = [
+  { id: 'freight', label: '🚚 Frete' },
+  { id: 'machines', label: '🚜 Máquinas' },
+] as const;
+
+/** Dealership: freight contracts, and farm machines to buy or rent. */
+export function GaragePanel() {
+  const close = useGameStore((s) => s.closePanel);
+  const tab = useGameStore((s) => s.garageTab);
+  const setTab = useGameStore((s) => s.setGarageTab);
+  return (
+    <Panel title="🚘 Concessionária" onClose={close}>
+      <div className="mb-3 flex gap-1.5">
+        {TABS.map((t) => (
+          <Button key={t.id} variant={tab === t.id ? 'wood' : 'ghost'} className="flex-1 text-xs" onClick={() => setTab(t.id)}>
+            {t.label}
+          </Button>
+        ))}
+      </div>
+      {tab === 'freight' ? <FreightTab /> : <MachineShop />}
     </Panel>
   );
 }

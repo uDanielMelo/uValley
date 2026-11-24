@@ -9,7 +9,7 @@ import {
   type AnimalId,
 } from '../data/animals';
 import { CROPS, CROP_IDS, type CropId } from '../data/crops';
-import { SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures';
+import { SHED_LEVELS, SHELTER_LEVELS, STRUCTURES, type StructureId } from '../data/structures';
 import { SEASONS, SEASON_DAYS } from '../data/climate';
 import { DISEASES, MEDICINES, PREDATORS, type MedicineId, type PredatorId } from '../data/health';
 import { GAME_MINUTES_PER_REAL_SECOND, type GameSpeed } from '../data/world';
@@ -30,6 +30,8 @@ import { demolishClick, orderRoad, orderStructure, orderUpgrade, roadClick, type
 import { medicateTaskFor, medicineFor, type PredatorAttack } from '../game/health';
 import { emptyCart, giveUpHeld, giveUpRefund, orderPurchase, reorderHeld, setFeedOrder, type Cart } from '../game/purchases';
 import { DOCK_LEVELS, LIVESTOCK } from '../data/docks';
+import { MACHINES, type MachineId, type RentalDays } from '../data/machines';
+import { buyMachine, callMechanic, rentMachine, returnRental, sellMachine, type MachineEvent } from '../game/machines';
 import type { Delivery } from '../game/types';
 import { setFreightVehicle, upgradeVehicle, type Good } from '../game/market';
 import type { VehicleLevel } from '../data/market';
@@ -224,6 +226,14 @@ export interface GameStore {
   shopTab: ShopTab;
   setShopTab: (tab: ShopTab) => void;
   upgradeVehicle: () => void;
+  /** Dealership tab: freight contracts or machines. */
+  garageTab: 'freight' | 'machines';
+  setGarageTab: (tab: 'freight' | 'machines') => void;
+  buyMachine: (type: MachineId) => void;
+  sellMachine: (machineId: number) => void;
+  rentMachine: (type: MachineId, days: RentalDays, withOperator: boolean) => void;
+  returnRental: (machineId: number) => void;
+  callMechanic: (machineId: number) => void;
   /** Which vehicle the freight comes with ('auto': the smallest that fits each load). */
   setFreightVehicle: (choice: 'auto' | VehicleLevel) => void;
   startResearch: (cropId: CropId) => void;
@@ -309,16 +319,16 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'too-many-heads': `O caminhão boiadeiro leva até ${LIVESTOCK.maxHeads} animais por viagem.`,
   'empty-cart': 'O carrinho está vazio.',
   'no-held': 'Esta entrega não está mais retida na cidade.',
-  reserved: 'Há animais a caminho com vaga reservada neste abrigo.',
+  reserved: 'Está em uso: há animais a caminho com vaga reservada ou máquinas guardadas aqui.',
   fence: 'Tem uma cerca aqui.',
   'no-fence': 'Não há cerca aqui.',
   'already-fence': 'Já tem cerca aqui.',
   'not-gate': 'Isso não é uma porteira.',
   'no-room-for-fence': 'Nenhum tile livre para cerca nessa linha.',
-  'no-shed': 'Construa um galpão ou estacionamento para guardar máquinas.',
-  'no-parking': 'Não há vaga livre para a máquina.',
-  'no-machine': 'Essa máquina não existe.',
-  'machine-busy': 'A máquina está em uso.',
+  'no-shed': 'Construa um galpão de máquinas com estrada e vaga livre.',
+  'no-parking': 'Precisa de um estacionamento ou galpão com estrada e vaga livre.',
+  'no-machine': 'Máquina não encontrada.',
+  'machine-busy': 'A máquina está em uso. Espere ela voltar para a vaga.',
   'machine-broken': 'A máquina está quebrada.',
 };
 
@@ -509,6 +519,16 @@ export const saveLoadError = (raw: string | null): string =>
     ? 'Este save é de uma versão antiga, do mapa menor, e não pode mais ser carregado.'
     : 'Este arquivo não é um save do uValley.';
 
+const MACHINE_EVENT_TEXT: Record<MachineEvent['kind'], (name: string) => string> = {
+  arrived: (n) => `🚜 ${n} chegou à vaga.`,
+  'rental-ended': (n) => `Aluguel terminou: ${n.toLowerCase()} foi devolvido(a).`,
+  broke: (n) => `${n} quebrou e voltou para a vaga. Conserte na oficina ou chame o mecânico.`,
+  repaired: (n) => `🔧 ${n} consertado(a).`,
+  'no-fuel': (n) => `Sem dinheiro para o diesel: ${n.toLowerCase()} voltou para a vaga.`,
+};
+
+const machineText = (event: MachineEvent): string => MACHINE_EVENT_TEXT[event.kind](MACHINES[event.type].label);
+
 let toastCounter = 0;
 let sightingCounter = 0;
 
@@ -587,6 +607,7 @@ export const useGameStore = create<GameStore>()(
             'info',
           );
         }
+        for (const event of tick.machineEvents) get().showMessage(machineText(event), event.kind === 'broke' || event.kind === 'no-fuel' ? 'error' : 'info');
         for (const event of tick.dockEvents) {
           const { text, kind } = dockText(event);
           get().showMessage(text, kind);
@@ -761,6 +782,8 @@ export const useGameStore = create<GameStore>()(
         const levelName =
           target.type === 'dock' && (toLevel === 2 || toLevel === 3)
             ? DOCK_LEVELS[toLevel].label.toLowerCase()
+            : target.type === 'machineShed' && toLevel === 2
+            ? SHED_LEVELS[2].label.toLowerCase()
             : `${label(target.type).toLowerCase()} ${SHELTER_LEVELS[toLevel].label.toLowerCase()}`;
         commit(result, `Reforma na fila: ${levelName} (${paid} moedas). A equipe com Obras vai fazer.`);
       },
@@ -936,6 +959,30 @@ export const useGameStore = create<GameStore>()(
       },
       setFreightVehicle: (choice) => {
         commit(setFreightVehicle(get().game, choice));
+      },
+      garageTab: 'freight',
+      setGarageTab: (garageTab) => set({ garageTab }),
+      buyMachine: (type) => {
+        const def = MACHINES[type];
+        commit(buyMachine(get().game, type), `${def.icon} ${def.label} chegou e está na vaga do galpão.`);
+      },
+      sellMachine: (id) => {
+        const m = get().game.machines.find((x) => x.id === id);
+        commit(sellMachine(get().game, id), m ? `${MACHINES[m.type].label} vendido(a).` : undefined);
+      },
+      rentMachine: (type, days, withOperator) => {
+        const def = MACHINES[type];
+        commit(
+          rentMachine(get().game, type, days, withOperator),
+          `${def.icon} ${def.label} alugado(a) por ${days} dia${days === 1 ? '' : 's'}${withOperator ? ', com operador' : ''}.`,
+        );
+      },
+      returnRental: (id) => {
+        const m = get().game.machines.find((x) => x.id === id);
+        commit(returnRental(get().game, id), m ? `${MACHINES[m.type].label} devolvido(a).` : undefined);
+      },
+      callMechanic: (id) => {
+        commit(callMechanic(get().game, id), '🔧 O mecânico levou a máquina: volta consertada amanhã às 6h.');
       },
       upgradeVehicle: () => {
         const game = get().game;

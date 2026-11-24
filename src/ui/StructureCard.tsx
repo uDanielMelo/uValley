@@ -25,6 +25,7 @@ import { formatCoins, formatWorkTime } from './format';
 import { Button, Card, Coins } from './primitives';
 import { DockSection } from './DockPanel';
 import { PenSection } from './PenSection';
+import { MachineSection } from './MachineSection';
 import { StorageSummary } from './StorageSummary';
 
 const find = (s: GameStore): StructureInstance | undefined =>
@@ -218,6 +219,7 @@ function ExtraSection({ type }: { type: StructureId }) {
   }
   if (type === 'dock') return <DockSection />;
   if (type === 'loadingPen') return id === null ? null : <PenSection penId={id} />;
+  if (STRUCTURES[type].parking) return id === null ? null : <MachineSection structureId={id} />;
   const storage = STRUCTURES[type].storage;
   if (storage) {
     return (
