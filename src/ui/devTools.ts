@@ -29,6 +29,7 @@ import {
   callCustomer,
   forceOffer,
   addFeed,
+  layFenceLine,
 } from '../game/dev';
 import type { GameState } from '../game/types';
 import { useGameStore } from '../store/gameStore';
@@ -74,6 +75,7 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.customer()         um cliente sai agora para a doca (se a vaga estiver livre)
   dev.offer()            um comprador faz oferta agora no primeiro anúncio sem oferta
   dev.feed(100)          +100 kg de ração
+  dev.fence(x0,y0,x1,y1) cerca pronta (reta ou a 45°)
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -151,6 +153,7 @@ const devApi = {
   manure: () => apply(fillManure, 'Abrigos cheios de esterco'),
   offer: () => apply(forceOffer, 'Oferta forçada no primeiro anúncio'),
   feed: (kg = 100) => apply((g) => addFeed(g, kg), `+${kg} kg de ração`),
+  fence: (x0 = 20, y0 = 40, x1 = 26, y1 = 40) => apply((g) => layFenceLine(g, x0, y0, x1, y1), `Cerca de (${x0}, ${y0}) até (${x1}, ${y1})`),
   customer: () => {
     const before = useGameStore.getState().game.shipments.length;
     apply(callCustomer);

@@ -1,3 +1,4 @@
+import { fenceError } from '../game/fences';
 import { useMemo } from 'react';
 import { STRUCTURES } from '../data/structures';
 import { tileCoords } from '../game/grid';
@@ -64,6 +65,7 @@ export function BuildGhost() {
       const removable = STRUCTURES[found.type].cost !== undefined;
       return { ghost: null, area: { ...fp, color: removable ? PALETTE.hoverInvalid : PALETTE.plotBlocked }, ring: [] };
     }
+    if (mode === 'fence' || mode === 'gate') return single(fenceError(game, hovered, mode === 'gate') === null ? PALETTE.hoverValid : PALETTE.hoverInvalid);
     const at = anchorFor(mode, x, y, rotation);
     const fp = footprintOf(mode, at.x, at.y, rotation);
     const placement = previewPlacement(game, mode, at.x, at.y, rotation);

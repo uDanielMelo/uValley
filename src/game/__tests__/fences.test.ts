@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { tileCoords, tileIndex, withTile } from '../grid';
 import { LEASH_RADIUS } from '../../data/animals';
 import { stepAnimals } from '../animals';
-import { setTimeOfDay, spawnAnimals } from '../dev';
+import { layFenceLine, setTimeOfDay, spawnAnimals } from '../dev';
 import { nearestInArea, pastureArea } from '../fences';
 import { shelterDoor } from '../shelters';
 import { placeStructure } from '../structures';
@@ -326,5 +326,17 @@ describe('animals and fences', () => {
     const end = cow?.path.at(-1);
     expect(end).toEqual(nearestInArea(pastureArea(s.tiles, corral), outside));
     expect(end).not.toEqual(shelterDoor(corral));
+  });
+});
+
+// ---------- Task 5: dev ----------
+
+describe('dev fence', () => {
+  it('lays a finished line for free', () => {
+    const s0 = createInitialState();
+    const s = layFenceLine(s0, 20, 40, 23, 43);
+    expect([0, 1, 2, 3].every((k) => s.tiles[tileIndex(20 + k, 40 + k)]?.fence)).toBe(true);
+    expect(s.money).toBe(s0.money);
+    expect(s.tasks).toEqual(s0.tasks);
   });
 });

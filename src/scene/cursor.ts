@@ -6,7 +6,7 @@ import { useGameStore } from '../store/gameStore';
  */
 const cursor = { hovering: false, dragging: false };
 
-const handMode = (): boolean => {
+export const handMode = (): boolean => {
   const { tool, buildMode } = useGameStore.getState();
   return tool === null && buildMode === null;
 };

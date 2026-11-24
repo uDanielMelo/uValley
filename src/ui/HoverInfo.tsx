@@ -13,7 +13,7 @@ import { previewPlacement, workProgress } from '../game/construction';
 import { plotOfTile, tileCoords } from '../game/grid';
 import { anchorFor, buildCost, isCutOff, needsRoadAccess, structureAt } from '../game/structures';
 import type { Tile } from '../game/types';
-import { ERROR_MESSAGES, useGameStore } from '../store/gameStore';
+import { ERROR_MESSAGES, isStructureMode, useGameStore } from '../store/gameStore';
 import { formatCoins } from './format';
 import { taskLabel } from './tools';
 import { Card, Coins } from './primitives';
@@ -285,7 +285,7 @@ export function HoverInfo() {
   );
   const buildMode = useGameStore((s) => s.buildMode);
   if (hoveredAnimal !== null) return hoveredAnimal === selectedAnimal ? null : <AnimalInfo id={hoveredAnimal} />;
-  if (hovered !== null && buildMode && buildMode !== 'road' && buildMode !== 'demolish') {
+  if (hovered !== null && isStructureMode(buildMode)) {
     return <BuildDetails type={buildMode} tileIndex={hovered} />;
   }
   if (hovered === null || !tile || onSelected) return null;

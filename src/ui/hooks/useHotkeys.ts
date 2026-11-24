@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { CROP_IDS } from '../../data/crops';
-import { useGameStore } from '../../store/gameStore';
+import { isStructureMode, useGameStore } from '../../store/gameStore';
 import { TOOLS } from '../tools';
 
 /**
@@ -51,7 +51,7 @@ export function useHotkeys(): void {
           if (!inTown) store.openPanel('build');
           break;
         case 'r':
-          if (store.buildMode && store.buildMode !== 'demolish' && store.buildMode !== 'road') store.rotateBuild();
+          if (isStructureMode(store.buildMode)) store.rotateBuild();
           break;
         case 'q':
         case 'e': {
@@ -63,7 +63,8 @@ export function useHotkeys(): void {
           break;
         }
         case 'escape':
-          if (store.area) store.cancelArea();
+          if (store.fenceDrag) store.cancelFence();
+          else if (store.area) store.cancelArea();
           else if (store.pendingPlot !== null) store.requestPlot(null);
           else if (store.buildMode) store.setBuildMode(null);
           else if (store.activitiesOpen) store.setActivitiesOpen(false);

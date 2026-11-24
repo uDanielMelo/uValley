@@ -1,3 +1,4 @@
+import { handMode, setHoverCursor } from './cursor';
 import type { ThreeEvent } from '@react-three/fiber';
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { BoxGeometry, Color, Matrix4, type InstancedMesh, type MeshStandardMaterial } from 'three';
@@ -97,12 +98,15 @@ export function TileLayer() {
   // filling every tile between the last one and the cursor so the road never has gaps.
   const painting = useRef(false);
   const lastPainted = useRef<number | null>(null);
+  const overGate = useRef(false);
   const roadMode = () => useGameStore.getState().buildMode === 'road';
 
   // Tool mode drags an area: press starts it, moving extends it, releasing anywhere queues it.
   useEffect(() => {
     const onRelease = (e: PointerEvent) => {
-      if (e.button === 0) useGameStore.getState().finishArea();
+      if (e.button !== 0) return;
+      useGameStore.getState().finishArea();
+      useGameStore.getState().finishFence();
     };
     window.addEventListener('pointerup', onRelease);
     return () => window.removeEventListener('pointerup', onRelease);
@@ -115,6 +119,13 @@ export function TileLayer() {
     const changed = store.hoveredTile !== e.instanceId;
     store.setHoveredTile(e.instanceId);
     if (store.area) store.extendArea(e.instanceId);
+    if (store.fenceDrag) store.extendFence(e.instanceId);
+    // With the hand, a gate is clickable (opens or closes).
+    const onGate = handMode() && store.game.tiles[e.instanceId]?.fence?.gate === true;
+    if (onGate !== overGate.current) {
+      overGate.current = onGate;
+      setHoverCursor(onGate);
+    }
     if (painting.current && changed && (e.buttons & 1) === 1 && roadMode()) {
       const from = lastPainted.current ?? e.instanceId;
       for (const tile of tileLine(from, e.instanceId).slice(1)) store.paintRoadAt(tile);
@@ -125,6 +136,11 @@ export function TileLayer() {
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0 || e.instanceId === undefined) return;
     const store = useGameStore.getState();
+    if (store.buildMode === 'fence') {
+      e.stopPropagation();
+      store.beginFence(e.instanceId);
+      return;
+    }
     if (roadMode()) {
       e.stopPropagation();
       painting.current = true;

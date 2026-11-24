@@ -115,7 +115,11 @@ export function BuildBanner() {
       ? '🧨 Demolir: clique numa construção ou estrada (numa obra na fila, cancela)'
       : mode === 'road'
         ? '🛤️ Estrada: clique e arraste para traçar'
-        : `${STRUCTURES[mode].icon} Nova obra: ${STRUCTURES[mode].label.toLowerCase()} · clique para posicionar · R gira`;
+        : mode === 'fence'
+          ? '🪵 Cerca: clique e arraste (reta ou a 45°); clique numa cerca na fila para cancelar'
+          : mode === 'gate'
+            ? '🚪 Porteira: clique numa cerca ou na grama; com a Mão, clique na porteira para abrir ou fechar'
+            : `${STRUCTURES[mode].icon} Nova obra: ${STRUCTURES[mode].label.toLowerCase()} · clique para posicionar · R gira`;
   return (
     <Card className="flex items-center gap-3 px-4 py-2 text-sm font-extrabold">
       <span>{text}</span>

@@ -1,3 +1,4 @@
+import { fencePlan, orderFenceLine, orderGate, toggleGate } from '../game/fences';
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import {
@@ -59,8 +60,20 @@ export type ShopTab = 'seeds' | 'animals' | 'medicine' | 'land';
 /** Which world the scene shows. */
 export type View = 'farm' | 'city';
 
-/** Build mode: placing a structure type, painting roads, or demolishing (structures and roads). */
-export type BuildMode = StructureId | 'road' | 'demolish' | null;
+/** Build mode: placing a structure type, painting roads, dragging fences, placing gates, or demolishing. */
+export type BuildMode = StructureId | 'road' | 'fence' | 'gate' | 'demolish' | null;
+
+/** Build modes that are not a structure (no footprint, no rotation). */
+export const LINE_MODES: ReadonlyArray<BuildMode> = ['road', 'fence', 'gate', 'demolish'];
+
+/** True when the build mode places a structure. */
+export const isStructureMode = (mode: BuildMode): mode is StructureId => mode !== null && !LINE_MODES.includes(mode);
+
+/** Fence line being dragged: from the tile where the press started to the one under the cursor. */
+export interface FenceDrag {
+  from: number;
+  to: number;
+}
 
 /** Area being dragged with a tool: from the tile where the press started to the one under the cursor. */
 export interface AreaDrag {
@@ -107,6 +120,7 @@ export interface GameStore {
   buildMode: BuildMode;
   buildRotation: Rotation;
   area: AreaDrag | null;
+  fenceDrag: FenceDrag | null;
   /** Worker whose card is open in the team hub. */
   selectedWorker: number | null;
 
@@ -119,6 +133,11 @@ export interface GameStore {
   cancelArea: () => void;
   /** Road painting while dragging: queues road work silently (errors are not shown on every tile). */
   paintRoadAt: (tile: number) => void;
+  /** Fence mode: press on a tile, drag (snapped to 45°), release to queue the line. */
+  beginFence: (tile: number) => void;
+  extendFence: (tile: number) => void;
+  finishFence: () => void;
+  cancelFence: () => void;
   /** Picks an order tool; null (or the active one again) goes back to the hand. */
   setTool: (tool: ToolId | null) => void;
   selectStructure: (id: number | null) => void;
@@ -525,6 +544,7 @@ export const useGameStore = create<GameStore>()(
       buildMode: null,
       buildRotation: 0,
       area: null,
+      fenceDrag: null,
       selectedWorker: null,
 
       advance: (realSeconds) => {
@@ -611,7 +631,12 @@ export const useGameStore = create<GameStore>()(
           get().showMessage(demolishText(result.change), 'info');
           return;
         }
-        if (buildMode) {
+        if (buildMode === 'gate') {
+          commit(orderGate(game, tile), 'Porteira na fila: a equipe com Obras nas atividades vai construir.');
+          return;
+        }
+        if (buildMode === 'fence') return; // fences are dragged (beginFence / finishFence)
+        if (isStructureMode(buildMode)) {
           const { x, y } = tileCoords(tile);
           const at = anchorFor(buildMode, x, y, buildRotation);
           commit(
@@ -626,6 +651,15 @@ export const useGameStore = create<GameStore>()(
         }
         // Tool orders are given through areas (beginArea / finishArea). With the hand, a click
         // selects the structure on the tile (sites too), and open ground clears the selection.
+        if (get().tool === null && target.fence?.gate) {
+          const result = toggleGate(game, tile);
+          if (!result.ok) get().showMessage(ERROR_MESSAGES[result.error], 'error');
+          else {
+            set({ game: result.state });
+            get().showMessage(result.state.tiles[tile]?.fence?.open ? 'Porteira aberta.' : 'Porteira fechada.', 'info');
+          }
+          return;
+        }
         if (get().tool === null) {
           set({ selectedStructure: target.structure ? (structureAt(game, tile)?.id ?? null) : null, selectedAnimal: null });
         }
@@ -637,6 +671,31 @@ export const useGameStore = create<GameStore>()(
         if (area && area.current !== tile) set({ area: { ...area, current: tile } });
       },
       cancelArea: () => set({ area: null }),
+      beginFence: (tile) => set({ fenceDrag: { from: tile, to: tile } }),
+      extendFence: (tile) => {
+        const { fenceDrag } = get();
+        if (fenceDrag && fenceDrag.to !== tile) set({ fenceDrag: { ...fenceDrag, to: tile } });
+      },
+      cancelFence: () => set({ fenceDrag: null }),
+      finishFence: () => {
+        const { fenceDrag, game } = get();
+        if (!fenceDrag) return;
+        set({ fenceDrag: null });
+        const { from, to } = fenceDrag;
+        const before = game.tasks.length;
+        const plan = fencePlan(game, from, to);
+        const result = orderFenceLine(game, from, to);
+        if (!result.ok) {
+          get().showMessage(ERROR_MESSAGES[result.error], 'error');
+          return;
+        }
+        set({ game: result.state });
+        if (result.state.tasks.length < before) get().showMessage('Cerca cancelada.', 'info');
+        else {
+          const skipped = plan.blocked.length > 0 ? ` (${plan.blocked.length} ocupado(s) pulado(s))` : '';
+          get().showMessage(`Cerca na fila: ${plan.valid.length} tile(s), ${plan.cost} moedas${skipped}.`, 'info');
+        }
+      },
       finishArea: () => {
         const { area, game, tool, selectedCrop } = get();
         if (!area) return;

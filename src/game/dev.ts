@@ -14,7 +14,8 @@ import { raidShelter, type PredatorAttack } from './health';
 import { addStock, manureCap, shelterDef, sheltersFor } from './shelters';
 import { findFreeSpot, placeStructure } from './structures';
 import { growthMinutesNeeded } from './crops';
-import { PLOT_COUNT } from './grid';
+import { PLOT_COUNT, inBounds, tileIndex } from './grid';
+import { fenceLine, layFence } from './fences';
 import { addCount } from './inventory';
 import { advanceGame } from './simulation';
 import { startOfNextDay } from './time';
@@ -248,4 +249,13 @@ export const forceRaid = (state: GameState): { state: GameState; attack: Predato
   const shelter = state.structures.find((s) => s.id === shelterId);
   if (!shelter) return { state, attack: null };
   return raidShelter(state, shelter, (Math.floor(state.gameMinutes) % 97) / 97);
+};
+
+/** Lays a finished fence line from (x0, y0) towards (x1, y1), snapped to 45°, for free (skips taken tiles). */
+export const layFenceLine = (state: GameState, x0: number, y0: number, x1: number, y1: number): GameState => {
+  if (!inBounds(x0, y0) || !inBounds(x1, y1)) return state;
+  return fenceLine(tileIndex(x0, y0), tileIndex(x1, y1)).tiles.reduce((s, tile) => {
+    const laid = layFence(s, tile, false);
+    return laid.ok ? laid.state : s;
+  }, state);
 };
