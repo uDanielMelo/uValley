@@ -185,7 +185,7 @@ export const demolishMinutesFor = (type: StructureId): number => Math.round(buil
 const ringTileFree = (tiles: readonly Tile[], c: GridPoint): boolean => {
   if (!inBounds(c.x, c.y)) return false;
   const tile = tiles[tileIndex(c.x, c.y)];
-  if (!tile || tile.state === 'locked' || tile.structure || tile.cover) return false;
+  if (!tile || tile.state === 'locked' || tile.structure || tile.cover || tile.fence) return false;
   return tile.road === true || tile.state === 'grass';
 };
 
@@ -246,6 +246,7 @@ export const checkPlacement = (
   if (tiles.some((t) => !t.tile || t.tile.state === 'locked')) return 'locked';
   if (tiles.some((t) => t.tile?.structure || t.tile?.cover)) return 'structure';
   if (tiles.some((t) => t.tile?.road)) return 'road';
+  if (tiles.some((t) => t.tile?.fence)) return 'fence';
   if (tiles.some((t) => t.tile?.state !== 'grass')) return 'not-grass';
   if (state.tasks.some((task) => tiles.some((t) => t.index === task.tile))) return 'tile-busy';
   const ring = ringPlan(future, type, x, y, rotation);
@@ -269,7 +270,7 @@ export const findFreeSpot = (
     if (!inBounds(x, y)) return false;
     const index = tileIndex(x, y);
     const tile = state.tiles[index];
-    return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.road && !busy.has(index);
+    return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.road && !tile.fence && !busy.has(index);
   };
   const ringFree = (x: number, y: number, rotation: Rotation): boolean =>
     ringCells(type, x, y, rotation).every((c) => {

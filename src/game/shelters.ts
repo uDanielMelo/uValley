@@ -135,7 +135,7 @@ export const shelterFor = (state: GameState, kind: AnimalId): StructureInstance 
 export const isPasture = (tiles: readonly Tile[], x: number, y: number): boolean => {
   if (!inBounds(x, y)) return false;
   const tile = tiles[tileIndex(x, y)];
-  return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.road;
+  return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.road && !tile.fence;
 };
 
 /** Pasture units a plot holds: PLOT_PASTURE_UNITS when all its tiles are free grass. */

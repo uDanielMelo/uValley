@@ -3,11 +3,11 @@ import { GRID_SIZE } from '../data/world';
 import { inBounds, tileIndex } from './grid';
 import type { GridPoint, Tile } from './types';
 
-/** Workers walk on owned land that has no structure. */
+/** Workers walk on owned land that has no structure or fence (they pass through gates, open or not). */
 export const isWalkable = (tiles: readonly Tile[], x: number, y: number): boolean => {
   if (!inBounds(x, y)) return false;
   const tile = tiles[tileIndex(x, y)];
-  return !!tile && tile.state !== 'locked' && !tile.structure;
+  return !!tile && tile.state !== 'locked' && !tile.structure && (!tile.fence || tile.fence.gate === true);
 };
 
 /** Cost of crossing one road tile (open ground costs 1): roads are walked faster, so routes prefer them. */
@@ -20,14 +20,24 @@ const isRoadAt = (tiles: readonly Tile[], x: number, y: number): boolean =>
 
 const SAMPLE_STEP = 0.2;
 
-/** True when the straight segment a → b only crosses tiles accepted by `passable`. */
+/**
+ * True when the straight segment a → b only crosses tiles accepted by `passable`. Passing from one
+ * tile to a diagonal neighbour also needs both tiles beside that corner (no corner cutting).
+ */
 export const segmentClear = (a: GridPoint, b: GridPoint, passable: (x: number, y: number) => boolean): boolean => {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) / SAMPLE_STEP));
+  let px = Math.floor(a.x);
+  let py = Math.floor(a.y);
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    if (!passable(Math.floor(a.x + dx * t), Math.floor(a.y + dy * t))) return false;
+    const x = Math.floor(a.x + dx * t);
+    const y = Math.floor(a.y + dy * t);
+    if (!passable(x, y)) return false;
+    if (x !== px && y !== py && (!passable(x, py) || !passable(px, y))) return false;
+    px = x;
+    py = y;
   }
   return true;
 };

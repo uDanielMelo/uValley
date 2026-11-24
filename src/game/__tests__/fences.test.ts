@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { tileIndex, withTile } from '../grid';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { createInitialState } from '../state';
-import type { ActionResult, GameState, Task } from '../types';
+import type { ActionResult, GameState, GridPoint, Task, TileFence } from '../types';
+import { checkRoadOrder } from '../construction';
+import { isPasture } from '../shelters';
+import { checkPlacement } from '../structures';
+import { findPath, isWalkable, segmentClear } from '../path';
 import { DEMOLISH_REFUND } from '../../data/structures';
 import { till } from '../actions';
 import { cancelAllOrders, demolishClick, repairSiteTasks } from '../construction';
@@ -176,5 +180,53 @@ describe('fence orders', () => {
     ]);
     expect(plan.cost).toBe(3 * pieceCost('straight'));
     expect(plan.error).toBeNull();
+  });
+});
+
+// ---------- Task 3: fences block things ----------
+
+/** Lays finished fence (or gate) tiles at once. */
+const withFences = (s: GameState, cells: ReadonlyArray<readonly [number, number]>, fence: TileFence = {}): GameState => ({
+  ...s,
+  tiles: cells.reduce((acc, [x, y]) => withTile(acc, tileIndex(x, y), { state: 'grass', fence }), s.tiles),
+});
+
+describe('fences block', () => {
+  it('tools, roads and buildings refuse a fence tile', () => {
+    const s = withFences({ ...createInitialState(), money: 5000 }, [[22, 40]]);
+    expect(till(s, FREE)).toEqual({ ok: false, error: 'fence' });
+    expect(checkRoadOrder(s, FREE)).toBe('fence');
+    expect(checkPlacement(s, 'silo', 22, 40, 0)).toBe('fence');
+  });
+
+  it('a fence tile is not pasture', () => {
+    const s = withFences(createInitialState(), [[22, 40]]);
+    expect(isPasture(s.tiles, 22, 40)).toBe(false);
+  });
+
+  it('people walk around a fence and through a gate', () => {
+    const wall = Array.from({ length: 21 }, (_, k) => [30, 30 + k] as const);
+    const s = withFences(createInitialState(), wall);
+    const crosses = (path: GridPoint[], from: GridPoint) =>
+      [from, ...path].some((p, i, all) => {
+        const next = all[i + 1];
+        return !!next && Math.floor(p.x) < 30 !== Math.floor(next.x) < 30 && Math.min(p.y, next.y) >= 30 && Math.max(p.y, next.y) < 51;
+      });
+    const from = { x: 28.5, y: 40.5 };
+    const to = { x: 32.5, y: 40.5 };
+    const around = findPath(s.tiles, from, to);
+    expect(around.every((p) => !(Math.floor(p.x) === 30 && p.y >= 30 && p.y < 51))).toBe(true);
+    expect(crosses(around, from)).toBe(false);
+    const gated = withFences(s, [[30, 40]], { gate: true });
+    const through = findPath(gated.tiles, from, to);
+    expect(through).toEqual([to]);
+  });
+
+  it('no corner cutting across a diagonal fence', () => {
+    const s = withFences(createInitialState(), [
+      [30, 40],
+      [31, 41],
+    ]);
+    expect(segmentClear({ x: 30.6, y: 41.4 }, { x: 31.4, y: 40.6 }, (x, y) => isWalkable(s.tiles, x, y))).toBe(false);
   });
 });

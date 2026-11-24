@@ -16,6 +16,7 @@ const usableTile = (state: GameState, index: number): TileCheck => {
   if (tile.state === 'locked') return { error: fail('locked') };
   if (tile.structure) return { error: fail('structure') };
   if (tile.road) return { error: fail('road') };
+  if (tile.fence) return { error: fail('fence') };
   return { tile };
 };
 
