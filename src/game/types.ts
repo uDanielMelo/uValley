@@ -27,6 +27,14 @@ export interface Tile {
   fertilized?: true;
   /** Under a greenhouse (stamped from the structures, like `structure`). */
   cover?: true;
+  /** Player-built fence on free grass; a gate lets animals through only while open (people always pass). */
+  fence?: TileFence;
+}
+
+export interface TileFence {
+  gate?: true;
+  /** Only for gates. */
+  open?: true;
 }
 
 /** Quarter turns applied to a placed structure. */
@@ -239,6 +247,8 @@ export type TaskJob =
   | { type: 'structure'; structureId: number }
   /** Opening (or removing) the road on the task tile; `siteId` when it is part of a site's road ring. */
   | { type: 'road'; remove: boolean; siteId?: number }
+  /** Building (or removing) a fence or gate on the task tile; `cost` is what was paid (0 for a removal). */
+  | { type: 'fence'; remove: boolean; gate?: true; cost: number }
   /** Collecting a shelter's products ('tend'); the task tile is the footprint tile by the door. */
   | { type: 'shelter'; structureId: number }
   /** Medicating a sick animal ('tend'); the task tile is where the animal was when it was queued. */
@@ -478,7 +488,12 @@ export type ActionError =
   | 'too-many-heads'
   | 'empty-cart'
   | 'no-held'
-  | 'reserved';
+  | 'reserved'
+  | 'fence'
+  | 'no-fence'
+  | 'already-fence'
+  | 'not-gate'
+  | 'no-room-for-fence';
 
 export type ActionResult = { ok: true; state: GameState } | { ok: false; error: ActionError };
 

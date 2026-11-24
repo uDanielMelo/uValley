@@ -481,10 +481,11 @@ export const repairSiteTasks = (state: GameState): GameState => {
     const job = t.job;
     // Animal care (medicate, carcass) is checked by queueAnimalCare as the game runs.
     if (t.kind === 'tend') {
-      if (!job || job.type === 'structure' || job.type === 'road') return true;
+      if (!job || job.type === 'structure' || job.type === 'road' || job.type === 'fence') return true;
       return job.type === 'shelter' && !shelters.has(job.structureId);
     }
     if (t.kind !== 'build') return false;
+    if (job?.type === 'fence') return false;
     return !job || (job.type !== 'structure' && job.type !== 'road') || (job.type === 'structure' && !sites.has(job.structureId));
   });
   for (const s of next.structures) if (s.work) next = addSiteTasks(next, s);

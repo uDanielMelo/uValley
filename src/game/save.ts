@@ -60,7 +60,7 @@ import { rehomeAnimals } from './shelters';
 import { repairHaulTasks } from './shipments';
 import { stampStructures } from './structures';
 
-export const SAVE_VERSION = 22;
+export const SAVE_VERSION = 23;
 /**
  * Saves older than this were made on the 32x32 map, before buildings needed roads; they cannot be
  * placed on the new map, so loading one starts a new game.
@@ -91,7 +91,7 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * (`job.siteId`). Earlier versions (v1–v15, on the 32x32 map) are not loaded.
  */
 export interface SaveDataV22 {
-  saveVersion: 22;
+  saveVersion: 23;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
@@ -251,6 +251,8 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
   19: migrateV19,
   20: migrateV20,
   21: migrateV21,
+  // v23 adds player-built fences (Tile.fence, 'fence' jobs): nothing to convert.
+  22: (data) => ({ ...data, saveVersion: 23 }),
 };
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {
@@ -330,6 +332,15 @@ const parseTile = (v: unknown): Tile | null => {
   }
   if (v.fertilized === true && (v.state === 'tilled' || v.state === 'planted' || v.state === 'watered')) {
     tile.fertilized = true;
+  }
+  if (v.fence !== undefined) {
+    const fence = v.fence;
+    if (!isRecord(fence) || v.state !== 'grass' || tile.road || tile.structure) return null;
+    tile.fence = {};
+    if (fence.gate === true) {
+      tile.fence.gate = true;
+      if (fence.open === true) tile.fence.open = true;
+    }
   }
   return tile;
 };
@@ -416,6 +427,9 @@ const parseJob = (v: unknown): TaskJob | null => {
   if (v.type === 'shelter' && isId(v.structureId)) return { type: 'shelter', structureId: v.structureId };
   if (v.type === 'road' && typeof v.remove === 'boolean') {
     return isId(v.siteId) ? { type: 'road', remove: v.remove, siteId: v.siteId } : { type: 'road', remove: v.remove };
+  }
+  if (v.type === 'fence' && typeof v.remove === 'boolean' && isFiniteNumber(v.cost) && v.cost >= 0) {
+    return v.gate === true ? { type: 'fence', remove: v.remove, gate: true, cost: v.cost } : { type: 'fence', remove: v.remove, cost: v.cost };
   }
   if (v.type === 'medicate' && isId(v.animalId)) return { type: 'medicate', animalId: v.animalId };
   if (v.type === 'carcass' && isId(v.carcassId)) return { type: 'carcass', carcassId: v.carcassId };

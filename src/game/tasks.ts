@@ -33,6 +33,7 @@ export const applyTask = (state: GameState, task: TaskOrder): ActionResult => {
   if (job.type === 'carcass') return removeCarcass(state, job.carcassId);
   if (job.type === 'herd') return penAnimal(state, job.animalId, job.penId);
   if (job.type === 'road') return job.remove ? removeRoad(state, task.tile) : layRoad(state, task.tile);
+  if (job.type === 'fence') return fail('no-fence');
   return state.structures.some((s) => s.id === job.structureId && s.work) ? ok(state) : fail('no-structure');
 };
 

@@ -76,6 +76,10 @@ const jobWords = (game: GameState, task: Task): [string, string] => {
     return [`Levar ${name} ao curral`, `Levando ${name} ao curral`];
   }
   if (job?.type === 'shipment') return ['Carregar veículo na doca', 'Carregando veículo na doca'];
+  if (job?.type === 'fence') {
+    const what = job.gate ? 'porteira' : 'cerca';
+    return job.remove ? [`Tirar ${what}`, `Tirando ${what}`] : [`Construir ${what}`, `Construindo ${what}`];
+  }
   const target = job ? game.structures.find((s) => s.id === job.structureId) : undefined;
   if (!target) return [TASK_LABELS[task.kind], TASK_VERBS[task.kind]];
   const name = STRUCTURES[target.type].label.toLowerCase();

@@ -291,6 +291,11 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'empty-cart': 'O carrinho está vazio.',
   'no-held': 'Esta entrega não está mais retida na cidade.',
   reserved: 'Há animais a caminho com vaga reservada neste abrigo.',
+  fence: 'Tem uma cerca aqui.',
+  'no-fence': 'Não há cerca aqui.',
+  'already-fence': 'Já tem cerca aqui.',
+  'not-gate': 'Isso não é uma porteira.',
+  'no-room-for-fence': 'Nenhum tile livre para cerca nessa linha.',
 };
 
 const label = (type: StructureId): string => STRUCTURES[type].label;
