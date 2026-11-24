@@ -69,7 +69,7 @@ export function Hud() {
       <div className="flex justify-center">
         <Toast />
       </div>
-      <div className="flex flex-1 items-start justify-end p-3">
+      <div className="flex min-h-0 flex-1 items-start justify-end p-3">
         {panel === 'shop' && <ShopPanel />}
         {panel === 'inventory' && <InventoryPanel />}
         {panel === 'workers' && <WorkersPanel />}

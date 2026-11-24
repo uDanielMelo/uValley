@@ -44,7 +44,7 @@ interface PanelProps {
 
 export function Panel({ title, onClose, children, width = 'w-[22rem]' }: PanelProps) {
   return (
-    <Card className={`flex max-h-[70vh] flex-col ${width}`}>
+    <Card className={`flex max-h-full min-h-0 flex-col ${width}`}>
       <header className="flex items-center justify-between border-b-2 border-wood/20 px-4 py-2">
         <h2 className="text-lg font-black">{title}</h2>
         <button
