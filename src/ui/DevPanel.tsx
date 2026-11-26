@@ -186,6 +186,9 @@ export function DevPanel() {
             <DevButton onClick={() => dev.wear(100)}>💥 Quebrar</DevButton>
             <DevButton onClick={dev.repair}>🛠️ Consertar</DevButton>
             <DevButton onClick={dev.expire}>⌛ Fim dos aluguéis</DevButton>
+            <DevButton onClick={dev.drive} title="Dirige a primeira máquina livre com W A S D (Esc sai)">
+              🕹️ Dirigir
+            </DevButton>
             <DevButton onClick={dev.machines}>🏪 Abrir revenda</DevButton>
           </Section>
 

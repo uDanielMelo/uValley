@@ -32,6 +32,7 @@ import { emptyCart, giveUpHeld, giveUpRefund, orderPurchase, reorderHeld, setFee
 import { DOCK_LEVELS, LIVESTOCK } from '../data/docks';
 import { MACHINES, type MachineId, type RentalDays } from '../data/machines';
 import { buyMachine, callMechanic, rentMachine, returnRental, sellMachine, type MachineEvent } from '../game/machines';
+import { canJoyride } from '../game/joyride';
 import type { Delivery } from '../game/types';
 import { setFreightVehicle, upgradeVehicle, type Good } from '../game/market';
 import type { VehicleLevel } from '../data/market';
@@ -219,6 +220,10 @@ export interface GameStore {
   /** Farm or town. Not saved: the game always opens on the farm. */
   view: View;
   goToCity: () => void;
+  /** Machine the player is driving with WASD, just for fun (not saved). */
+  joyride: number | null;
+  startJoyride: (machineId: number) => void;
+  stopJoyride: (message?: string) => void;
   goToFarm: () => void;
   /** Opens what a town shop offers. */
   openCityShop: (id: CityShopId) => void;
@@ -920,9 +925,26 @@ export const useGameStore = create<GameStore>()(
         const fresh = get().sightings.filter((s) => now - s.at < 30);
         set({ sightings: [...fresh, { id: ++sightingCounter, predator, x, y, at: now }] });
       },
+      joyride: null,
+      startJoyride: (machineId) => {
+        const { game, view } = get();
+        if (view !== 'farm') return;
+        const check = canJoyride(game, machineId);
+        if (!check.ok) {
+          get().showMessage(ERROR_MESSAGES[check.error], 'error');
+          return;
+        }
+        set({ joyride: machineId, selectedStructure: null, selectedAnimal: null, panel: null, tool: null, buildMode: null, activitiesOpen: false });
+      },
+      stopJoyride: (message) => {
+        if (get().joyride === null) return;
+        set({ joyride: null });
+        if (message) get().showMessage(message, 'info');
+      },
       view: 'farm',
       goToCity: () => {
         set({
+          joyride: null,
           view: 'city',
           tool: null,
           buildMode: null,

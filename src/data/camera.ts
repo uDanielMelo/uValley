@@ -25,6 +25,9 @@ export const CAMERA = {
   focusDistance: 6,
   /** Tilt of the top view used while building (a floor plan). */
   blueprintElevationDeg: 80,
+  /** Driving a machine (WASD): the zoom it comes in to, and how fast it swings behind the machine (per second). */
+  driveDistance: 11,
+  driveChaseRate: 1.2,
   /** Zoom when arriving in town. */
   townDistance: 22,
   zoomSensitivity: 0.0015,

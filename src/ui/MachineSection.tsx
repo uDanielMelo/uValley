@@ -42,6 +42,7 @@ function SlotRow({ parkId, slot }: { parkId: number; slot: number }) {
   const sell = useGameStore((s) => s.sellMachine);
   const giveBack = useGameStore((s) => s.returnRental);
   const mechanic = useGameStore((s) => s.callMechanic);
+  const joyride = useGameStore((s) => s.startJoyride);
   if (id === null || type === null) {
     return <li className="rounded-lg bg-parchment-dark/40 px-2 py-1 text-xs font-bold text-wood/50">Vaga {slot + 1}: livre</li>;
   }
@@ -69,6 +70,15 @@ function SlotRow({ parkId, slot }: { parkId: number; slot: number }) {
       {busy && <span className="text-wood/70">🚜 Com {driver}</span>}
       {repairUntil !== null && <span className="text-wood/70">🔧 No mecânico até {dayAndHour(repairUntil)}</span>}
       <div className="flex flex-wrap justify-end gap-1.5">
+        <Button
+          variant="ghost"
+          className="text-xs"
+          title="Dirigir com W A S D, só por diversão"
+          disabled={busy || condition === 0 || repairUntil !== null}
+          onClick={() => joyride(id)}
+        >
+          🕹️ Dirigir
+        </Button>
         {rentedUntil === null ? (
           <>
             {condition < 100 && repairUntil === null && (

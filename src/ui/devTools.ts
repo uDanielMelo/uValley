@@ -90,6 +90,7 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.expire()         todos os aluguéis acabam agora
   dev.field('hoe'|'hand') campo de teste 8×4 perto da casa: arar a grama ou colher trigo maduro
   dev.machines()       abre a Revenda de máquinas
+  dev.drive()          dirige a primeira máquina livre com W A S D (Esc sai)
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -183,6 +184,12 @@ const devApi = {
         queued ? `🛠️ Campo de teste: ${work === 'hoe' ? 'arar' : 'colher trigo'}` : '🛠️ Sem 8×4 de grama livre na fazenda',
         queued ? 'info' : 'error',
       );
+  },
+  drive: () => {
+    const store = useGameStore.getState();
+    const free = store.game.machines.find((m) => m.driverId === undefined && m.condition > 0);
+    if (free) store.startJoyride(free.id);
+    else store.showMessage('🛠️ Nenhuma máquina livre: use dev.machine()', 'error');
   },
   machines: () => {
     const store = useGameStore.getState();

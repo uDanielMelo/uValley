@@ -7,6 +7,7 @@ import { START_STRUCTURES, STRUCTURES } from '../data/structures';
 import { GRID_SIZE } from '../data/world';
 import { useGameStore } from '../store/gameStore';
 import { refreshCursor, setDragCursor } from './cursor';
+import { drive } from './drive';
 
 const BUTTON_LEFT = 0;
 const BUTTON_MIDDLE = 1;
@@ -69,6 +70,8 @@ export function CameraRig() {
   const panRef = useRef<((dx: number, dy: number, viewHeight: number) => void) | null>(null);
   /** Elevation to restore when leaving the blueprint (top) view of the build mode. */
   const beforeBlueprint = useRef<number | null>(null);
+  /** Whether a drive was being followed last frame (to zoom in once when it starts). */
+  const driving = useRef(false);
   /** Id of the last camera focus request already followed. */
   const focused = useRef(useGameStore.getState().cameraFocus?.id ?? 0);
 
@@ -208,6 +211,18 @@ export function CameraRig() {
       g.elevation = beforeBlueprint.current;
       beforeBlueprint.current = null;
     }
+
+    // Driving a machine: follow it, and swing behind it while it goes forward.
+    const ride = drive.ride;
+    if (ride) {
+      if (!driving.current) g.distance = Math.min(g.distance, CAMERA.driveDistance);
+      g.target.set(ride.x - GRID_SIZE / 2, 0, ride.y - GRID_SIZE / 2);
+      if (ride.speed > 1) {
+        const behind = ride.heading + Math.PI - g.azimuth;
+        g.azimuth += Math.atan2(Math.sin(behind), Math.cos(behind)) * Math.min(1, dt * CAMERA.driveChaseRate);
+      }
+    }
+    driving.current = ride !== null;
 
     // Sent to a spot (dev tools): center it and come closer.
     const focus = useGameStore.getState().cameraFocus;

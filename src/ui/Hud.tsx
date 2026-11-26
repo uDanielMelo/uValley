@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { AnimalCard } from './AnimalCard';
 import { BuildBanner, BuildPanel } from './BuildPanel';
+import { DriveBanner } from './DriveBanner';
 import { DevPanel } from './DevPanel';
 import { DockPanel } from './DockPanel';
 import { GaragePanel } from './GaragePanel';
@@ -88,6 +89,7 @@ export function Hud() {
         </div>
         <div className="flex flex-col items-center gap-2">
           <BuildBanner />
+          <DriveBanner />
           <Dock />
         </div>
         <div className="flex w-72 justify-end">

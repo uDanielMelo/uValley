@@ -6,6 +6,7 @@ import { TILE_METERS } from '../data/scale';
 import { MACHINE_IDS, type MachineId } from '../data/machines';
 import { machinePose } from '../game/machines';
 import { useGameStore, type GameStore } from '../store/gameStore';
+import { drive } from './drive';
 import { Harvester, Tractor } from './models/Machines';
 
 const HALF = GRID_SIZE / 2;
@@ -33,6 +34,28 @@ function MachineFigure({ id, type }: { id: number; type: MachineId }) {
     const machine = game.machines.find((m) => m.id === id);
     const group = root.current;
     if (!machine || !group) return;
+    const dt = Math.min(delta, 0.1);
+
+    // Driven by the player (WASD): the ride's pose as is, wheels rolling by its speed (backwards in reverse).
+    const ride = drive.ride?.machineId === id ? drive.ride : null;
+    if (ride) {
+      const a = anim.current;
+      a.x = ride.x - HALF;
+      a.z = ride.y - HALF;
+      a.heading = ride.heading;
+      group.visible = true;
+      group.position.set(a.x, 0, a.z);
+      group.rotation.y = a.heading;
+      const meters = ride.speed * dt;
+      WHEEL_RADII[type].forEach((r, i) => {
+        const wheel = wheels[i]?.current;
+        if (wheel) wheel.rotation.x += meters / r;
+      });
+      if (reel.current && Math.abs(ride.speed) > 0.1) reel.current.rotation.x += dt * REEL_SPEED;
+      if (!driven) setDriven(true);
+      return;
+    }
+
     const pose = machinePose(game, machine);
     group.visible = pose !== null;
     if (!pose) return;
@@ -44,7 +67,6 @@ function MachineFigure({ id, type }: { id: number; type: MachineId }) {
       a.z = z;
       a.heading = pose.heading === null ? 0 : (pose.heading * Math.PI) / 2;
     }
-    const dt = Math.min(delta, 0.1);
     const dx = x - a.x;
     const dz = z - a.z;
     const moved = Math.hypot(dx, dz);

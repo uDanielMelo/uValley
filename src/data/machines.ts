@@ -70,3 +70,17 @@ export const CONDITION = { max: 100, slowBelow: 30, slowFactor: 0.7 } as const;
 
 /** Resale price = price × (base + perCondition × condition / max). */
 export const RESALE = { base: 0.3, perCondition: 0.4 } as const;
+
+/**
+ * Driving a machine yourself with WASD, just for fun (no effect on the farm). Speeds in m/s,
+ * acceleration in m/s², steering in degrees per second at full lock and speed.
+ */
+export const JOYRIDE: Record<MachineId, { maxSpeed: number; reverseSpeed: number; accel: number; steerDeg: number }> = {
+  tractor: { maxSpeed: 9, reverseSpeed: 3, accel: 3.5, steerDeg: 75 },
+  harvester: { maxSpeed: 6, reverseSpeed: 2, accel: 2, steerDeg: 50 },
+};
+/** Braking (m/s²) when pressing against the motion, and rolling drag (m/s²) with no pedal. */
+export const JOYRIDE_BRAKE = 9;
+export const JOYRIDE_DRAG = 2.5;
+/** Below this share of the top speed the steering weakens (a stopped machine does not turn). */
+export const JOYRIDE_STEER_RAMP = 0.3;

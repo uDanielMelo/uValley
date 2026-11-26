@@ -63,7 +63,8 @@ export function useHotkeys(): void {
           break;
         }
         case 'escape':
-          if (store.fenceDrag) store.cancelFence();
+          if (store.joyride !== null) store.stopJoyride();
+          else if (store.fenceDrag) store.cancelFence();
           else if (store.area) store.cancelArea();
           else if (store.pendingPlot !== null) store.requestPlot(null);
           else if (store.buildMode) store.setBuildMode(null);
