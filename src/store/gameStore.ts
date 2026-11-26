@@ -51,7 +51,7 @@ import { dismissWorker, hireCandidate, hireTemp, setPriorities } from '../game/s
 import type { ActionError, ActionResult, Animal, GameState, Rotation, TaskKind, ToolId } from '../game/types';
 import { applyArea, areaMode, clearTasks, toggleTask } from '../game/workers';
 
-export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | 'market' | 'garage' | 'dock' | null;
+export type PanelId = 'shop' | 'inventory' | 'workers' | 'build' | 'market' | 'garage' | 'machines' | 'dock' | null;
 
 /** Dock panel tabs: the bay, selling by listing, the town's orders. */
 export type DockTab = 'bay' | 'sell' | 'orders';
@@ -227,8 +227,6 @@ export interface GameStore {
   setShopTab: (tab: ShopTab) => void;
   upgradeVehicle: () => void;
   /** Dealership tab: freight contracts or machines. */
-  garageTab: 'freight' | 'machines';
-  setGarageTab: (tab: 'freight' | 'machines') => void;
   buyMachine: (type: MachineId) => void;
   sellMachine: (machineId: number) => void;
   rentMachine: (type: MachineId, days: RentalDays, withOperator: boolean) => void;
@@ -960,8 +958,6 @@ export const useGameStore = create<GameStore>()(
       setFreightVehicle: (choice) => {
         commit(setFreightVehicle(get().game, choice));
       },
-      garageTab: 'freight',
-      setGarageTab: (garageTab) => set({ garageTab }),
       buyMachine: (type) => {
         const def = MACHINES[type];
         commit(buyMachine(get().game, type), `${def.icon} ${def.label} chegou e está na vaga do galpão.`);

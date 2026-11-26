@@ -1,11 +1,11 @@
 /** The town scene: its shops, where they stand and what each one opens. */
 
-export const CITY_SHOP_IDS = ['market', 'agro', 'vet', 'registry', 'animals', 'jobs', 'dealer'] as const;
+export const CITY_SHOP_IDS = ['market', 'agro', 'vet', 'registry', 'animals', 'jobs', 'dealer', 'machines'] as const;
 export type CityShopId = (typeof CITY_SHOP_IDS)[number];
 
 /** What clicking a shop opens. */
 export type CityShopAction =
-  | { panel: 'market' | 'garage' | 'workers' }
+  | { panel: 'market' | 'garage' | 'machines' | 'workers' }
   | { panel: 'shop'; tab: 'seeds' | 'animals' | 'medicine' | 'land' };
 
 export interface CityShopDef {
@@ -108,7 +108,7 @@ export const CITY_SHOPS: Record<CityShopId, CityShopDef> = {
   dealer: {
     id: 'dealer',
     label: 'Concessionária',
-    hint: 'Contratar e escolher o frete',
+    hint: 'Contratar e escolher o veículo do frete',
     size: { width: 12, depth: 9, height: 4.5 },
     position: [21, 12],
     facing: 'north',
@@ -117,5 +117,18 @@ export const CITY_SHOPS: Record<CityShopId, CityShopDef> = {
     trim: '#3d454b',
     accent: '#2e6da4',
     action: { panel: 'garage' },
+  },
+  machines: {
+    id: 'machines',
+    label: 'Revenda de máquinas',
+    hint: 'Comprar e alugar trator e colheitadeira',
+    size: { width: 13, depth: 9, height: 5.5 },
+    position: [38, 12],
+    facing: 'north',
+    roof: 'gable',
+    wall: '#e8d9a8',
+    trim: '#4a4f3a',
+    accent: '#d9822b',
+    action: { panel: 'machines' },
   },
 };

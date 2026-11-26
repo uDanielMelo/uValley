@@ -33,6 +33,9 @@ import {
   addMachine,
   hireOperator,
   wearMachines,
+  repairMachines,
+  expireRentals,
+  machineField,
 } from '../game/dev';
 import type { MachineId } from '../data/machines';
 import type { GameState } from '../game/types';
@@ -83,6 +86,10 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.machine('tractor'|'harvester', alugada?) máquina na vaga (cria galpão)
   dev.wear(n)          tira n de estado das máquinas próprias
   dev.operator()       contrata um operador de máquinas grátis
+  dev.repair()         máquinas próprias com estado cheio (e de volta do mecânico)
+  dev.expire()         todos os aluguéis acabam agora
+  dev.field('hoe'|'hand') campo de teste 8×4 perto da casa: arar a grama ou colher trigo maduro
+  dev.machines()       abre a Revenda de máquinas
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -164,6 +171,23 @@ const devApi = {
     apply((g) => addMachine(g, type, rented), `${type === 'tractor' ? 'Trator' : 'Colheitadeira'}${rented ? ' alugado(a)' : ''} na vaga`),
   wear: (points = 30) => apply((g) => wearMachines(g, points), `Máquinas −${points} de estado`),
   operator: () => apply(hireOperator, 'Operador de máquinas contratado'),
+  repair: () => apply(repairMachines, 'Máquinas consertadas'),
+  expire: () => apply(expireRentals, 'Aluguéis encerrados'),
+  field: (work: 'hoe' | 'hand' = 'hoe') => {
+    const before = useGameStore.getState().game.tasks.length;
+    apply((g) => machineField(g, work));
+    const queued = useGameStore.getState().game.tasks.length > before;
+    useGameStore
+      .getState()
+      .showMessage(
+        queued ? `🛠️ Campo de teste: ${work === 'hoe' ? 'arar' : 'colher trigo'}` : '🛠️ Sem 8×4 de grama livre na fazenda',
+        queued ? 'info' : 'error',
+      );
+  },
+  machines: () => {
+    const store = useGameStore.getState();
+    store.showPanel('machines');
+  },
   fence: (x0 = 20, y0 = 40, x1 = 26, y1 = 40) => apply((g) => layFenceLine(g, x0, y0, x1, y1), `Cerca de (${x0}, ${y0}) até (${x1}, ${y1})`),
   customer: () => {
     const before = useGameStore.getState().game.shipments.length;

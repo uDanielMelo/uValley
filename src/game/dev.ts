@@ -3,11 +3,11 @@
  * they never fail: invalid input is clamped or ignored.
  */
 import { ANIMAL_PRODUCT_IDS, GAME_MINUTES_PER_REAL_HOUR, type AnimalId } from '../data/animals';
-import { CROP_IDS } from '../data/crops';
+import { CROPS, CROP_IDS } from '../data/crops';
 import type { WeatherId } from '../data/climate';
 import { DISEASES, MEDICINE_IDS, type DiseaseId } from '../data/health';
 import { HOME_POSITION, MAX_WORKERS } from '../data/workers';
-import { MINUTES_PER_DAY } from '../data/world';
+import { GRID_SIZE, MINUTES_PER_DAY } from '../data/world';
 import { addAnimal, animalProduct } from './animals';
 import { applyDayWeather, dayOf, weatherOf } from './climate';
 import { raidShelter, type PredatorAttack } from './health';
@@ -24,6 +24,7 @@ import { homeSpot } from './home';
 import { hourlyWageFor, makeWorker, rollProfile } from './staff';
 import { completeAllWork } from './construction';
 import { applyTask } from './tasks';
+import { applyArea } from './workers';
 import { spawnWalkIn } from './shipments';
 import { OFFERS } from '../data/docks';
 import { CONDITION, type MachineId } from '../data/machines';
@@ -306,4 +307,77 @@ export const hireOperator = (state: GameState): GameState => {
     homeSpot(state, state.workers.length),
   );
   return { ...state, workers: [...state.workers, worker], nextId: state.nextId + 1 };
+};
+
+/** Every owned machine back to full condition, and back from the town mechanic. */
+export const repairMachines = (state: GameState): GameState => ({
+  ...state,
+  machines: state.machines.map((m) => {
+    if (m.rental) return m;
+    const { repairUntil: _done, ...rest } = m;
+    return { ...rest, condition: CONDITION.max };
+  }),
+});
+
+/** Every rental ends now (each one goes back once its driver parks it). */
+export const expireRentals = (state: GameState): GameState => ({
+  ...state,
+  machines: state.machines.map((m) => (m.rental ? { ...m, rental: { ...m.rental, until: state.gameMinutes } } : m)),
+});
+
+const FIELD = { width: 8, height: 4 } as const;
+
+/** Free farm grass: no structure, road, fence, greenhouse cover or queued task. */
+const freeGrass = (state: GameState, busy: ReadonlySet<number>, x: number, y: number): boolean => {
+  if (!inBounds(x, y)) return false;
+  const i = tileIndex(x, y);
+  const t = state.tiles[i];
+  return !!t && t.state === 'grass' && !t.structure && !t.road && !t.fence && !t.cover && !busy.has(i);
+};
+
+/** The tiles of the `FIELD` block with its corner at (x, y), or null when one of them is not free grass. */
+const fieldAt = (state: GameState, busy: ReadonlySet<number>, x: number, y: number): number[] | null => {
+  const tiles: number[] = [];
+  for (let dy = 0; dy < FIELD.height; dy++) {
+    for (let dx = 0; dx < FIELD.width; dx++) {
+      if (!freeGrass(state, busy, x + dx, y + dy)) return null;
+      tiles.push(tileIndex(x + dx, y + dy));
+    }
+  }
+  return tiles;
+};
+
+/** The free `FIELD`-sized block of grass closest to the house, as tile indices. */
+const freeField = (state: GameState): number[] | null => {
+  const busy = new Set(state.tasks.map((t) => t.tile));
+  let best: { tiles: number[]; dist: number } | null = null;
+  for (let y = 0; y + FIELD.height <= GRID_SIZE; y++) {
+    for (let x = 0; x + FIELD.width <= GRID_SIZE; x++) {
+      const dist = Math.hypot(x - HOME_POSITION.x, y - HOME_POSITION.y);
+      if (best && dist >= best.dist) continue;
+      const tiles = fieldAt(state, busy, x, y);
+      if (tiles) best = { tiles, dist };
+    }
+  }
+  return best?.tiles ?? null;
+};
+
+/**
+ * A machine test field on the free grass closest to the house: 'hoe' queues plowing on grass
+ * (for the tractor), 'hand' plants ripe wheat and queues the harvest (for the harvester).
+ */
+export const machineField = (state: GameState, work: 'hoe' | 'hand'): GameState => {
+  const field = freeField(state);
+  if (!field) return state;
+  let s = state;
+  if (work === 'hand') {
+    const ripe = new Set(field);
+    s = {
+      ...s,
+      tiles: s.tiles.map((t, i) =>
+        ripe.has(i) ? { ...t, state: 'planted', crop: { cropId: 'wheat', growthMinutes: CROPS.wheat.growthHours * 60 } } : t,
+      ),
+    };
+  }
+  return applyArea(s, work, field, 'wheat', 'queue').state;
 };

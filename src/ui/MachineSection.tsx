@@ -105,7 +105,6 @@ export function MachineSection({ structureId }: { structureId: number }) {
   const money = useGameStore((s) => s.game.money);
   const upgrade = useGameStore((s) => s.upgradeShelter);
   const showPanel = useGameStore((s) => s.showPanel);
-  const setGarageTab = useGameStore((s) => s.setGarageTab);
   const cost = upgradeCost('machineShed', 2);
   return (
     <div className="flex flex-col gap-1.5">
@@ -127,10 +126,7 @@ export function MachineSection({ structureId }: { structureId: number }) {
       <Button
         variant="ghost"
         className="text-xs"
-        onClick={() => {
-          setGarageTab('machines');
-          showPanel('garage');
-        }}
+        onClick={() => showPanel('machines')}
       >
         Comprar ou alugar máquinas
       </Button>

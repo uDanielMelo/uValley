@@ -105,6 +105,33 @@ describe('machine dev tools', () => {
     expect(worn.machines[0]?.condition).toBe(70);
     expect(worn.machines[1]?.condition).toBe(100);
   });
+
+  it('repairs owned machines and ends rentals now', async () => {
+    const { addMachine, wearMachines, repairMachines, expireRentals } = await import('../dev');
+    const s = wearMachines(addMachine(addMachine(createInitialState(), 'tractor'), 'harvester', true), 100);
+    const broken: GameState = { ...s, machines: s.machines.map((m) => (m.rental ? m : { ...m, repairUntil: s.gameMinutes + 600 })) };
+    const fixed = repairMachines(broken);
+    expect(fixed.machines[0]?.condition).toBe(100);
+    expect(fixed.machines[0]?.repairUntil).toBeUndefined();
+    const ended = expireRentals(fixed);
+    expect(ended.machines[1]?.rental?.until).toBe(s.gameMinutes);
+  });
+
+  it('lays out a test field: plowing on grass, or ripe wheat to harvest', async () => {
+    const { machineField } = await import('../dev');
+    const start = createInitialState();
+    const plow = machineField(start, 'hoe');
+    const hoes = plow.tasks.filter((t) => t.kind === 'hoe');
+    expect(hoes).toHaveLength(32);
+    expect(hoes.every((t) => start.tiles[t.tile]?.state === 'grass')).toBe(true);
+    const harvest = machineField(start, 'hand');
+    const hands = harvest.tasks.filter((t) => t.kind === 'hand');
+    expect(hands).toHaveLength(32);
+    expect(hands.every((t) => harvest.tiles[t.tile]?.crop?.cropId === 'wheat')).toBe(true);
+    // A second field goes beside the first, not over it.
+    const both = machineField(plow, 'hoe');
+    expect(new Set(both.tasks.map((t) => t.tile)).size).toBe(64);
+  });
 });
 
 describe('machine review fixes', () => {

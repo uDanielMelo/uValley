@@ -254,7 +254,7 @@ e `docs/superpowers/plans/2026-11-24-machinery.md`.
 
 Feito: trator (Arar) e colheitadeira (Colher) dirigidos por quem tem a habilidade 🚜 Maquinário; o operador busca a máquina
 na vaga, faz as tarefas da fila 5× mais rápido e anda 2× mais rápido, e devolve no fim do expediente. Galpão de máquinas
-(3 vagas; nível 2 com oficina que conserta à noite) e estacionamento (2 vagas, só alugadas). Concessionária com aba Máquinas:
+(3 vagas; nível 2 com oficina que conserta à noite) e estacionamento (2 vagas, só alugadas). Revenda de máquinas na cidade (loja própria, separada da Concessionária do frete):
 comprar, vender pelo estado, alugar 1/3/7 dias com ou sem operador, devolver. Desgaste e diesel por hora de uso; abaixo de 30%
 fica mais lenta e em 0 quebra; mecânico da cidade pelo dobro, de volta às 6h. Save v24. Decidido por mim: a máquina substitui
 o bônus de boi e cavalo, não entra em estufa nem pomar, aparece direto na vaga e o diesel é cobrado em moedas, sem estoque.

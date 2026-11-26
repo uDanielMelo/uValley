@@ -38,6 +38,7 @@ export function DevPanel() {
   const [count, setCount] = useState(1);
   const scale = useGameStore((s) => s.devTimeScale);
   const animals = useGameStore((s) => s.game.animals.length);
+  const machines = useGameStore((s) => s.game.machines.length);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -162,6 +163,30 @@ export function DevPanel() {
             <DevButton onClick={dev.customer}>🚗 Chamar cliente</DevButton>
             <DevButton onClick={dev.offer}>📨 Forçar oferta</DevButton>
             <DevButton onClick={() => dev.feed(100)}>🥣 +100 kg ração</DevButton>
+          </Section>
+
+          <Section title={`Máquinas (${machines})`}>
+            <DevButton onClick={() => dev.machine('tractor')} title="Trator próprio na vaga (cria o galpão se faltar)">
+              🚜 Trator
+            </DevButton>
+            <DevButton onClick={() => dev.machine('harvester')} title="Colheitadeira própria na vaga">
+              🌾 Colheitadeira
+            </DevButton>
+            <DevButton onClick={() => dev.machine('tractor', true)} title="Trator alugado por 3 dias (cria o galpão se faltar)">
+              🔑 Trator alugado
+            </DevButton>
+            <DevButton onClick={dev.operator}>👷 Operador</DevButton>
+            <DevButton onClick={() => dev.field('hoe')} title="Manda arar 8×4 de grama perto da casa">
+              🟫 Campo para arar
+            </DevButton>
+            <DevButton onClick={() => dev.field('hand')} title="Planta 8×4 de trigo maduro perto da casa e manda colher">
+              🌾 Campo para colher
+            </DevButton>
+            <DevButton onClick={() => dev.wear(30)}>🔧 −30 de estado</DevButton>
+            <DevButton onClick={() => dev.wear(100)}>💥 Quebrar</DevButton>
+            <DevButton onClick={dev.repair}>🛠️ Consertar</DevButton>
+            <DevButton onClick={dev.expire}>⌛ Fim dos aluguéis</DevButton>
+            <DevButton onClick={dev.machines}>🏪 Abrir revenda</DevButton>
           </Section>
 
           <Section title="Clima">

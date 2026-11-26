@@ -7,6 +7,7 @@ import { METER_SCALE } from '../../data/scale';
 import { useGameStore } from '../../store/gameStore';
 import { setHoverCursor } from '../cursor';
 import { Pickup } from '../models/Car';
+import { Harvester, Tractor } from '../models/Machines';
 import { Block, GableRoof, Glass, Meters } from '../models/Buildings';
 import { PALETTE } from '../palette';
 
@@ -167,6 +168,21 @@ function ParkedVehicle() {
   );
 }
 
+/** The dealer's tractor and harvester on show in the lot beside the machine shop, facing the street (the models scale themselves to meters). */
+function MachineDisplay() {
+  const [x, z] = CITY_SHOPS.machines.position;
+  return (
+    <>
+      <group position={[(x + 9) * METER_SCALE, 0, (z - 2.5) * METER_SCALE]} rotation={[0, Math.PI * 0.92, 0]}>
+        <Tractor />
+      </group>
+      <group position={[(x + 12.5) * METER_SCALE, 0, (z + 6.5) * METER_SCALE]} rotation={[0, Math.PI * 1.08, 0]}>
+        <Harvester />
+      </group>
+    </>
+  );
+}
+
 /**
  * The town: one street with clickable shops on both sides (they open the shop panels). Built in
  * meters around the origin, so the camera rig works the same as on the farm.
@@ -201,6 +217,7 @@ export function CityScene() {
         ))}
       </Meters>
       <ParkedVehicle />
+      <MachineDisplay />
     </group>
   );
 }

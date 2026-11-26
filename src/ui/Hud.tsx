@@ -5,6 +5,7 @@ import { BuildBanner, BuildPanel } from './BuildPanel';
 import { DevPanel } from './DevPanel';
 import { DockPanel } from './DockPanel';
 import { GaragePanel } from './GaragePanel';
+import { MachinesPanel } from './MachinesPanel';
 import { MarketPanel } from './MarketPanel';
 import { DEV_ENABLED } from './devTools';
 import { Dock } from './Dock';
@@ -76,6 +77,7 @@ export function Hud() {
         {panel === 'build' && <BuildPanel />}
         {panel === 'market' && <MarketPanel />}
         {panel === 'garage' && <GaragePanel />}
+        {panel === 'machines' && <MachinesPanel />}
         {panel === 'dock' && <DockPanel />}
       </div>
       <div className="flex items-end justify-between gap-3 p-3">
