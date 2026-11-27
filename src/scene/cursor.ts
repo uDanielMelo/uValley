@@ -7,8 +7,8 @@ import { useGameStore } from '../store/gameStore';
 const cursor = { hovering: false, dragging: false };
 
 export const handMode = (): boolean => {
-  const { tool, buildMode } = useGameStore.getState();
-  return tool === null && buildMode === null;
+  const { tool, buildMode, soilTool } = useGameStore.getState();
+  return tool === null && buildMode === null && soilTool === null;
 };
 
 export const refreshCursor = (): void => {
@@ -29,6 +29,6 @@ export const setDragCursor = (on: boolean): void => {
 
 // Switching tools or build mode changes the idle cursor.
 useGameStore.subscribe(
-  (s) => s.tool === null && s.buildMode === null,
+  (s) => s.tool === null && s.buildMode === null && s.soilTool === null,
   () => refreshCursor(),
 );

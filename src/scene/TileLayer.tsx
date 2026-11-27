@@ -100,6 +100,8 @@ export function TileLayer() {
   const lastPainted = useRef<number | null>(null);
   const overGate = useRef(false);
   const roadMode = () => useGameStore.getState().buildMode === 'road';
+  /** Survey tool held down: dragging over plots orders their surveys. */
+  const surveying = useRef(false);
 
   // Tool mode drags an area: press starts it, moving extends it, releasing anywhere queues it.
   useEffect(() => {
@@ -107,6 +109,8 @@ export function TileLayer() {
       if (e.button !== 0) return;
       useGameStore.getState().finishArea();
       useGameStore.getState().finishFence();
+      useGameStore.getState().finishField();
+      surveying.current = false;
     };
     window.addEventListener('pointerup', onRelease);
     return () => window.removeEventListener('pointerup', onRelease);
@@ -120,6 +124,8 @@ export function TileLayer() {
     store.setHoveredTile(e.instanceId);
     if (store.area) store.extendArea(e.instanceId);
     if (store.fenceDrag) store.extendFence(e.instanceId);
+    if (store.fieldDrag) store.extendField(e.instanceId);
+    if (surveying.current && changed && (e.buttons & 1) === 1) store.surveyAt(e.instanceId, 'order');
     // With the hand, a gate is clickable (opens or closes).
     const onGate = handMode() && store.game.tiles[e.instanceId]?.fence?.gate === true;
     if (onGate !== overGate.current) {
@@ -136,6 +142,16 @@ export function TileLayer() {
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0 || e.instanceId === undefined) return;
     const store = useGameStore.getState();
+    // Soil view tools work on any tile, land for sale included (it can be surveyed).
+    if (store.infoView === 'soil' && store.soilTool !== null) {
+      e.stopPropagation();
+      if (store.soilTool === 'field') store.beginField(e.instanceId);
+      else {
+        surveying.current = true;
+        store.surveyAt(e.instanceId, 'toggle');
+      }
+      return;
+    }
     if (store.buildMode === 'fence') {
       e.stopPropagation();
       store.beginFence(e.instanceId);

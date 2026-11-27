@@ -17,6 +17,7 @@ import { InventoryPanel } from './InventoryPanel';
 import { PlotDialog } from './PlotDialog';
 import { Card } from './primitives';
 import { ShopPanel } from './ShopPanel';
+import { SoilPanel } from './SoilPanel';
 import { StructureCard } from './StructureCard';
 import { Toast } from './Toast';
 import { TopBar } from './TopBar';
@@ -28,7 +29,7 @@ const CONTROLS: readonly [string, string][] = [
   ['Botão direito', 'arrastar move a câmera'],
   ['Meio ou Shift + direito', 'girar (ou Z/X)'],
   ['Roda', 'zoom'],
-  ['Atalhos', 'H mão · 1–5 atividades · B construir · V doca · C cidade · T equipe · L loja · I inventário · Espaço pausa'],
+  ['Atalhos', 'H mão · 1–5 atividades · B construir · O solo · V doca · C cidade · T equipe · L loja · I inventário · Espaço pausa'],
 ];
 
 /** Controls help, folded into a small "?" button. */
@@ -65,6 +66,7 @@ export function Hud() {
   useHotkeys();
   useAutosave();
   const panel = useGameStore((s) => s.panel);
+  const soilView = useGameStore((s) => s.infoView === 'soil');
   return (
     <div className="pointer-events-none absolute inset-0 flex flex-col">
       <TopBar />
@@ -80,6 +82,7 @@ export function Hud() {
         {panel === 'garage' && <GaragePanel />}
         {panel === 'machines' && <MachinesPanel />}
         {panel === 'dock' && <DockPanel />}
+        {soilView && <SoilPanel />}
       </div>
       <div className="flex items-end justify-between gap-3 p-3">
         <div className="flex w-72 flex-col justify-end gap-2">

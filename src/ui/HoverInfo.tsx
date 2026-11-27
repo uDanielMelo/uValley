@@ -1,3 +1,5 @@
+import { SOILS, SOIL_RATINGS } from '../data/soil';
+import { cropRating, soilAt } from '../game/soil';
 import { useMemo } from 'react';
 import { ANIMALS, ANIMAL_PRODUCTS, ANIMAL_PRODUCT_IDS, BREEDS, LIFE_STAGES } from '../data/animals';
 import { FERTILIZER } from '../data/fertilizer';
@@ -43,6 +45,31 @@ function CropDetails({ tile }: { tile: Tile }) {
         <div className={`h-full ${mature ? 'bg-coin' : 'bg-leaf'}`} style={{ width: `${progress * 100}%` }} />
       </div>
     </div>
+  );
+}
+
+/** The soil under the tile: known once its plot was analyzed (with the crop's rating on it). */
+function SoilDetails({ tile, tileIndex }: { tile: Tile; tileIndex: number }) {
+  const seed = useGameStore((s) => s.game.soilSeed);
+  const surveyed = useGameStore((s) => s.game.surveyedPlots.includes(plotOfTile(tileIndex)));
+  const layerCrop = useGameStore((s) => (s.infoView === 'soil' && s.soilLayer === 'crop' ? s.soilCrop : null));
+  if (seed === null || tile.structure || tile.road) return null;
+  if (tile.cover) return <p className="text-sm">Estufa: o solo não conta.</p>;
+  const soil = soilAt(seed, tileIndex);
+  if (!surveyed || !soil) return <p className="text-sm text-wood/70">Solo: ? (peça uma análise ao agrônomo)</p>;
+  const cropId = tile.crop?.cropId ?? layerCrop;
+  const rating = cropId && CROPS[cropId].kind !== 'greenhouse' ? cropRating(seed, tile, tileIndex, cropId) : null;
+  return (
+    <p className="text-sm">
+      Solo: <b>{SOILS[soil].label}</b>
+      {cropId && rating && (
+        <>
+          {' · '}
+          {CROPS[cropId].label}: <b>{SOIL_RATINGS[rating].label}</b>
+          {rating === 'bad' ? ' (murcha)' : ` (×${SOIL_RATINGS[rating].yield.toLocaleString('pt-BR')})`}
+        </>
+      )}
+    </p>
   );
 }
 
@@ -315,6 +342,7 @@ export function HoverInfo() {
       )}
       {tile.state === 'locked' && <PlotDetails tileIndex={hovered} />}
       <CropDetails tile={tile} />
+      <SoilDetails tile={tile} tileIndex={hovered} />
       <QueuedTasks tileIndex={hovered} />
     </Card>
   );
