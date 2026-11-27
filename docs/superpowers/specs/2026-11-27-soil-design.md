@@ -29,7 +29,6 @@ Pedido do usuário em 2026-11-26/27, primeira etapa do foco em plantio. O que o 
 
 ## Anti-objetivos
 
-- Começo de jogo travado: com arar mais lento, a fazenda nova não pode ficar dias sem colher nada.
 - Economia inflada: em média, plantar no escuro não pode render mais do que hoje.
 - Análise obrigatória: sem análise o jogo continua jogável, só menos eficiente.
 - Ruído salpicado: o mapa de solo tem que ser legível (manchas grandes), não um tabuleiro aleatório tile a tile.
@@ -87,7 +86,7 @@ Também em `data/soil.ts`: frequência alvo de cada tipo, tamanho das manchas, t
 
 - `soilSeed: number` em `GameState`. Fazenda nova: sorteada na criação (a criação recebe a semente de fora, para os testes serem determinísticos). Save antigo: a migração v24→v25 deriva a semente do próprio save (por exemplo, um hash de `nextId` e `gameMinutes`), sem `Math.random` *(decisão minha)*.
 - `soilGrid(seed): Uint8Array` (cache por semente) e `soilAt(seed, tileIndex): SoilId`. Ruído de valor em duas ou três oitavas, feito com `hash01`, com limiares escolhidos para bater a frequência alvo. Manchas típicas de 4 a 12 tiles de largura. A várzea tende a formar faixas (por exemplo, um ruído esticado num eixo), para lembrar baixada de rio; não precisa casar com o relevo da cena.
-- Garantias do começo de jogo: a área inicial (x 16–47, y 32–63) tem pelo menos 3 tipos, e o campo inicial (ver 4) cai num solo pelo menos neutro para o trigo (se a semente não der, a geração força o tipo nesse retângulo).
+- Garantias do começo de jogo: a área inicial (x 16–47, y 32–63) tem pelo menos 3 tipos.
 - `cropRating(seed, tile, cropId): SoilRating` (estufa: sempre `neutral`) e `soilYield(rating): number`.
 
 ### 3. Colheita e murcha
@@ -100,7 +99,7 @@ Também em `data/soil.ts`: frequência alvo de cada tipo, tamanho das manchas, t
 
 - `TASK_MINUTES.hoe` passa de 12 para **150** (2,5 h) × o fator de aração do solo do tile. Pedregoso na enxada: 5 h; com o trator (×5): 1 h. Sob a estufa o fator é 1.
 - **O progresso fica na tarefa** *(decisão minha, obrigatório pelo anti-objetivo)*: `Task.done?: number` (minutos já trabalhados, a ritmo 1). Hoje `Worker.progress` zera quando o trabalhador larga a tarefa (fim do expediente, máquina voltando, troca de prioridade); para tarefas `hoe`, ao desatribuir, o progresso passa para `task.done`, e quem pega a tarefa continua de onde parou. As outras tarefas curtas continuam como hoje. `save.ts` valida `done` (número ≥ 0, só em `hoe`).
-- **Campo inicial pronto** *(decisão minha, anti-objetivo do começo travado)*: a fazenda nova começa com um retângulo de 4×3 tiles já arado perto da casa (cabem as 12 sementes iniciais de trigo), em solo pelo menos neutro para trigo. Os saves antigos não mudam.
+- **Sem campo inicial pronto** **(usuário)**: a fazenda nova começa toda em grama. A intenção do usuário é que o jogo comece pela criação de animais e só depois chegue ao plantio, então a aração lenta no começo é desejada.
 - Na cena, o tile em aração mostra o progresso: a grama vai rareando e o sulco aparece aos poucos (o progresso vem de `task.done` + o `progress` de quem está trabalhando). O jeito de desenhar fica com o construtor, desde que não crie um mesh por tile.
 - Dica visual *(decisão minha, pode ser cortada)*: terra arada ganha um leve tom da cor do solo (terra roxa mais avermelhada, arenoso mais clara, várzea mais escura). Isso premia quem observa sem substituir a análise, já que só aparece depois de arar.
 
