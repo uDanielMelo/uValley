@@ -5,7 +5,7 @@ import { needsRoadAccess } from '../game/structures';
 import type { Rotation, StructureWorkKind } from '../game/types';
 import { useGameStore, type GameStore } from '../store/gameStore';
 import { ConstructionSite } from './ConstructionSite';
-import { setHoverCursor } from './cursor';
+import { handMode, setHoverCursor } from './cursor';
 import { DockUpgrades } from './models/Dock';
 import { ShelterUpgrades } from './models/ShelterUpgrades';
 import { SelectionOutline } from './SelectionOutline';
@@ -17,10 +17,6 @@ export { STRUCTURE_MODELS, StructureTransform };
 /** Max pointer travel (px) for a click to count as a click and not a camera drag. */
 const CLICK_TOLERANCE = 5;
 
-const handMode = (): boolean => {
-  const { tool, buildMode } = useGameStore.getState();
-  return tool === null && buildMode === null;
-};
 
 /** A finished structure. With the hand, clicking selects it (its card opens); otherwise clicks reach the tile. */
 function PlacedStructure({ id, type, x, y, rotation, level }: PlacedProps & { id: number; level: ShelterLevel }) {

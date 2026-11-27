@@ -6,6 +6,7 @@ import { plotOfTile, tileIndex, withTile } from '../grid';
 import { cropRating, soilYield } from '../soil';
 import { createInitialState } from '../state';
 import type { ActionResult, Field, GameState } from '../types';
+import { applyArea, stepWorkers } from '../workers';
 
 const unwrap = (r: ActionResult): GameState => {
   if (!r.ok) throw new Error(r.error);
@@ -92,5 +93,28 @@ describe('fields', () => {
     expect(last?.tiles).toBe(1);
     expect(last?.units).toBe(after.inventory.produce.wheat ?? 0);
     expect(last?.soil).toBe(tile ? soilYield(cropRating(SEED, tile, A, 'wheat')) : -1);
+  });
+});
+
+describe('field harvest extras', () => {
+  it('an extra unit counts without adding a tile', () => {
+    let fields: Field[] = [{ id: 1, name: 'T', x: 20, y: 40, w: 4, h: 3 }];
+    fields = recordHarvest(fields, A, 2, 2, 3);
+    fields = recordHarvest(fields, A, 1, 0, 3, false);
+    expect(fields[0]?.lastHarvest).toEqual({ day: 3, units: 3, tiles: 1, soil: 2 });
+  });
+
+  it('the worker bonus unit shows in the field harvest', () => {
+    let s = unwrap(addField(createInitialState(), A, B));
+    const crop = { cropId: 'wheat' as const, growthMinutes: growthMinutesNeeded({ cropId: 'wheat', growthMinutes: 0 }) };
+    s = { ...s, tiles: withTile(s.tiles, A, { state: 'planted', crop }) };
+    // A very effective worker standing on the tile: the bonus is certain.
+    const base = s.workers[0];
+    if (!base) throw new Error('no worker');
+    const ace = { ...base, stars: 3 as const, skills: ['farming' as const], specialty: { kind: 'crop' as const, id: 'wheat' as const }, priorities: ['hand' as const], x: 20.5, y: 40.5, path: [], taskId: null, progress: 0 };
+    s = { ...s, workers: [ace], gameMinutes: 8 * 60 };
+    s = applyArea(s, 'hand', [A], 'wheat', 'queue').state;
+    for (let m = 0; m < 60 && s.tasks.length > 0; m++) s = stepWorkers({ ...s, gameMinutes: s.gameMinutes + 1 }, 1);
+    expect(only(s).lastHarvest?.units).toBe(s.inventory.produce.wheat ?? 0);
   });
 });

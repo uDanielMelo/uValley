@@ -6,7 +6,7 @@ import { MINUTES_PER_DAY, START_HOUR, START_PLOTS } from '../data/world';
 import { TILE_COUNT, inBounds, plotIndex, tileIndex, tilesInPlot } from './grid';
 import { homeSpot } from './home';
 import { withAccessRoad } from './roads';
-import { createStartingWorkers, rollCandidates } from './staff';
+import { createStartingWorkers, ensureAgronomist, rollCandidates } from './staff';
 import { ringCells, stampStructures, withRoads } from './structures';
 import type { GameState, StructureInstance, Tile } from './types';
 
@@ -42,7 +42,8 @@ export const createInitialState = (soilSeed: number | null = null): GameState =>
   const workers = createStartingWorkers(nextId, (slot) => homeSpot({ structures, tiles }, slot));
   nextId += workers.length;
   const gameMinutes = START_HOUR * 60;
-  const candidates = rollCandidates(Math.floor(gameMinutes / MINUTES_PER_DAY), nextId, workers.map((w) => w.name));
+  // The first board already has an agronomist, so the soil can be surveyed from day 1.
+  const candidates = ensureAgronomist(rollCandidates(Math.floor(gameMinutes / MINUTES_PER_DAY), nextId, workers.map((w) => w.name)), workers);
   nextId += candidates.length;
   return {
     gameMinutes,

@@ -1,5 +1,6 @@
 import { SOIL_SURVEY, type SoilId } from '../data/soil';
 import { PLOT_SIZE } from '../data/world';
+import { MAX_TASKS } from '../data/workers';
 import { neighbourPlots, plotCoords, tileIndex, tilesInPlot } from './grid';
 import { isWalkable } from './path';
 import { soilAt } from './soil';
@@ -48,8 +49,9 @@ export const orderSurvey = (state: GameState, plot: number): ActionResult => {
   }
   if (state.surveyedPlots.includes(plot)) return fail('already-surveyed');
   if (!canSurvey(state, plot)) return fail('cannot-survey');
+  if (state.tasks.length >= MAX_TASKS) return fail('queue-full');
   const tile = surveySpot(state, plot);
-  if (tile === null) return fail('cannot-survey');
+  if (tile === null) return fail('no-survey-spot');
   if (state.money < SOIL_SURVEY.cost) return fail('not-enough-money');
   return ok({
     ...state,

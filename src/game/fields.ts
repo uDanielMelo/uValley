@@ -92,11 +92,14 @@ export const fieldRanking = (
     .sort((a, b) => b.average - a.average);
 };
 
-/** Adds one harvested tile to its field's harvest of the day (a new day starts over). */
-export const recordHarvest = (fields: Field[], tile: number, units: number, soil: number, day: number): Field[] => {
+/**
+ * Adds one harvested tile to its field's harvest of the day (a new day starts over). With `countTile`
+ * false the units are an extra of a tile already counted (the worker's bonus unit).
+ */
+export const recordHarvest = (fields: Field[], tile: number, units: number, soil: number, day: number, countTile = true): Field[] => {
   const field = fieldAt(fields, tile);
   if (!field) return fields;
   const last = field.lastHarvest?.day === day ? field.lastHarvest : { day, units: 0, tiles: 0, soil: 0 };
-  const lastHarvest = { day, units: last.units + units, tiles: last.tiles + 1, soil: last.soil + soil };
+  const lastHarvest = { day, units: last.units + units, tiles: last.tiles + (countTile ? 1 : 0), soil: last.soil + soil };
   return fields.map((f) => (f.id === field.id ? { ...f, lastHarvest } : f));
 };

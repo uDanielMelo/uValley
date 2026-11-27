@@ -209,12 +209,15 @@ export const rollCandidates = (day: number, firstId: number, usedNames: Iterable
  */
 export const refreshCandidates = (state: GameState): GameState => {
   const day = Math.floor(state.gameMinutes / MINUTES_PER_DAY);
-  const rolled = rollCandidates(day, state.nextId, state.workers.map((w) => w.name));
-  const needed =
-    !state.workers.some((w) => w.kind === 'staff' && w.skills.includes('agronomy')) &&
-    !rolled.some((c) => c.skills.includes('agronomy'));
-  const candidates = needed ? rolled.map((c, i) => (i === 0 ? asAgronomist(c) : c)) : rolled;
+  const candidates = ensureAgronomist(rollCandidates(day, state.nextId, state.workers.map((w) => w.name)), state.workers);
   return { ...state, candidates, nextId: state.nextId + candidates.length };
+};
+
+/** While no staff member is an agronomist, a board without one gets one (the same board otherwise). */
+export const ensureAgronomist = (board: Candidate[], workers: readonly Worker[]): Candidate[] => {
+  const needed =
+    !workers.some((w) => w.kind === 'staff' && w.skills.includes('agronomy')) && !board.some((c) => c.skills.includes('agronomy'));
+  return needed ? board.map((c, i) => (i === 0 ? asAgronomist(c) : c)) : board;
 };
 
 const asAgronomist = (c: Candidate): Candidate => {

@@ -339,6 +339,7 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'already-researched': 'Esta cultura já é conhecida.',
   'already-surveyed': 'Esse lote já foi analisado.',
   'cannot-survey': 'Só dá para analisar lotes da fazenda ou vizinhos à venda.',
+  'no-survey-spot': 'Não há onde o agrônomo trabalhar neste lote: libere um tile dentro ou em volta dele.',
   'field-overlap': 'Esse talhão encosta em outro.',
   'field-not-owned': 'O talhão precisa ficar na terra da fazenda.',
   'field-name-empty': 'Dê um nome ao talhão.',
@@ -925,7 +926,7 @@ export const useGameStore = create<GameStore>()(
       setBuildMode: (buildMode) =>
         set({ buildMode, selectedStructure: null, selectedAnimal: null, activitiesOpen: false, ...(buildMode ? SOIL_VIEW_OFF : {}) }),
       rotateBuild: () => set((s) => ({ buildRotation: ((s.buildRotation + 1) % 4) as Rotation })),
-      setSelectedCrop: (selectedCrop) => set({ selectedCrop, tool: 'seed', buildMode: null, selectedStructure: null }),
+      setSelectedCrop: (selectedCrop) => set({ ...SOIL_VIEW_OFF, selectedCrop, tool: 'seed', buildMode: null, selectedStructure: null }),
       setHoveredTile: (hoveredTile) => {
         if (get().hoveredTile !== hoveredTile) set({ hoveredTile });
       },

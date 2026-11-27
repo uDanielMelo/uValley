@@ -30,6 +30,7 @@ export function useHotkeys(): void {
         case 'h':
           store.setTool(null);
           store.setBuildMode(null);
+          store.closeSoilView();
           break;
         case ' ':
           e.preventDefault();
@@ -70,6 +71,7 @@ export function useHotkeys(): void {
           else if (store.fieldDrag) store.cancelField();
           else if (store.infoView === 'soil' && store.soilTool !== null) store.setSoilTool(null);
           else if (store.infoView === 'soil' && store.selectedField !== null) store.selectField(null);
+          else if (store.infoView === 'soil' && store.panel) store.closePanel();
           else if (store.infoView === 'soil') store.closeSoilView();
           else if (store.fenceDrag) store.cancelFence();
           else if (store.area) store.cancelArea();

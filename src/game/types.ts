@@ -522,6 +522,7 @@ export type ActionError =
   | 'not-sick'
   | 'already-surveyed'
   | 'cannot-survey'
+  | 'no-survey-spot'
   | 'field-overlap'
   | 'field-not-owned'
   | 'field-name-empty'
