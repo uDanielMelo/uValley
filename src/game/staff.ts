@@ -6,6 +6,7 @@ import {
   DEFAULT_PRIORITIES,
   HARVEST_BONUS,
   MACHINERY_WAGE,
+  AGRONOMY_WAGE,
   MAX_AGE,
   MAX_WORKERS,
   MIN_AGE,
@@ -57,7 +58,10 @@ export const ageBand = (age: number): AgeBand => {
 };
 
 export const hourlyWageFor = (stars: Stars, specialty: Specialty | null, skills: readonly SkillId[] = []): number =>
-  STAR_LEVELS[stars].hourlyWage + (specialty ? SPECIALTY_WAGE : 0) + (skills.includes('machinery') ? MACHINERY_WAGE : 0);
+  STAR_LEVELS[stars].hourlyWage +
+  (specialty ? SPECIALTY_WAGE : 0) +
+  (skills.includes('machinery') ? MACHINERY_WAGE : 0) +
+  (skills.includes('agronomy') ? AGRONOMY_WAGE : 0);
 
 /** What a task is about, for skill and specialty matching. */
 export interface TaskContext {
@@ -199,11 +203,28 @@ export const rollCandidates = (day: number, firstId: number, usedNames: Iterable
   return result;
 };
 
-/** Renews the hiring board (at midnight). */
+/**
+ * Renews the hiring board (at midnight). While no staff member is an agronomist, the board always
+ * has one (the first candidate's main skill becomes agronomy), so the soil can be surveyed.
+ */
 export const refreshCandidates = (state: GameState): GameState => {
   const day = Math.floor(state.gameMinutes / MINUTES_PER_DAY);
-  const candidates = rollCandidates(day, state.nextId, state.workers.map((w) => w.name));
+  const rolled = rollCandidates(day, state.nextId, state.workers.map((w) => w.name));
+  const needed =
+    !state.workers.some((w) => w.kind === 'staff' && w.skills.includes('agronomy')) &&
+    !rolled.some((c) => c.skills.includes('agronomy'));
+  const candidates = needed ? rolled.map((c, i) => (i === 0 ? asAgronomist(c) : c)) : rolled;
   return { ...state, candidates, nextId: state.nextId + candidates.length };
+};
+
+const asAgronomist = (c: Candidate): Candidate => {
+  const skills: SkillId[] = ['agronomy', ...c.skills.slice(1).filter((s) => s !== 'agronomy')];
+  // Specialties follow the skills (crops for farming, animals for animal care).
+  const specialty =
+    c.specialty?.kind === 'crop' && !skills.includes('farming') ? null
+    : c.specialty?.kind === 'animal' && !skills.includes('animals') ? null
+    : c.specialty;
+  return { ...c, skills, specialty, hourlyWage: hourlyWageFor(c.stars, specialty, skills) };
 };
 
 // ---------- workers ----------

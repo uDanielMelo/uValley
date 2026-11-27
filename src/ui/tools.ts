@@ -35,6 +35,7 @@ export const TASK_LABELS: Record<TaskKind, string> = {
   tend: 'Tratar animais',
   build: 'Obras',
   haul: 'Carga',
+  survey: 'Analisar solo',
 };
 
 export const TASK_ICONS: Record<TaskKind, string> = {
@@ -46,6 +47,7 @@ export const TASK_ICONS: Record<TaskKind, string> = {
   tend: '🪣',
   build: '🔨',
   haul: '📦',
+  survey: '🔬',
 };
 
 /** Ongoing-action verbs (pt-BR) for worker status. */
@@ -58,6 +60,7 @@ export const TASK_VERBS: Record<TaskKind, string> = {
   tend: 'Cuidando dos animais',
   build: 'Em obra',
   haul: 'Carregando',
+  survey: 'Analisando o solo',
 };
 
 /** What a construction or animal care task is about: [label, ongoing verb] (pt-BR). */
@@ -80,6 +83,7 @@ const jobWords = (game: GameState, task: Task): [string, string] => {
     const what = job.gate ? 'porteira' : 'cerca';
     return job.remove ? [`Tirar ${what}`, `Tirando ${what}`] : [`Construir ${what}`, `Construindo ${what}`];
   }
+  if (job?.type === 'survey') return ['Analisar solo do lote', 'Analisando o solo do lote'];
   const target = job ? game.structures.find((s) => s.id === job.structureId) : undefined;
   if (!target) return [TASK_LABELS[task.kind], TASK_VERBS[task.kind]];
   const name = STRUCTURES[target.type].label.toLowerCase();

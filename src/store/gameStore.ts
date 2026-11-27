@@ -45,6 +45,8 @@ import { seasonOf, weatherLook } from '../game/climate';
 import { advanceGame, type FinishedWork } from '../game/simulation';
 import type { Spoiled } from '../game/storage';
 import { createInitialState, newSoilSeed } from '../game/state';
+import { surveyedTypes } from '../game/survey';
+import { SOILS } from '../data/soil';
 import { cancelLoading, dismissShipment, startLoading, type DockEvent } from '../game/shipments';
 import { bayPoint, docksOf } from '../game/dock';
 import { anchorFor, structureAt } from '../game/structures';
@@ -304,6 +306,8 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'not-researched': 'Pesquise esta cultura antes de comprar as sementes.',
   researching: 'Já há uma pesquisa em andamento.',
   'already-researched': 'Esta cultura já é conhecida.',
+  'already-surveyed': 'Esse lote já foi analisado.',
+  'cannot-survey': 'Só dá para analisar lotes da fazenda ou vizinhos à venda.',
   'no-water-needed': 'Não precisa regar: árvores do pomar e plantas na estufa se viram sozinhas.',
   'not-sick': 'Este animal não está doente.',
   'no-shipment': 'Este veículo não está mais esperando na doca.',
@@ -600,6 +604,11 @@ export const useGameStore = create<GameStore>()(
           get().showMessage(`🔬 Pesquisa concluída: ${crop.icon} ${crop.label} já pode ser plantado(a).`, 'info');
         }
         if (tick.spoiled) get().showMessage(`Estragou no estoque: ${spoiledText(tick.spoiled)}.`, 'error');
+        for (const plot of tick.surveyed) {
+          const types = surveyedTypes(tick.state, plot).map((id) => SOILS[id].label);
+          const list = types.length > 1 ? `${types.slice(0, -1).join(', ')} e ${types.at(-1) ?? ''}` : (types[0] ?? '');
+          get().showMessage(`🔬 Análise do lote pronta: ${list}.`, 'info');
+        }
         for (const [cropId, count] of Object.entries(tick.withered) as [CropId, number][]) {
           const crop = CROPS[cropId];
           get().showMessage(`🥀 ${count} pé${count === 1 ? '' : 's'} de ${crop.label} murch${count === 1 ? 'ou' : 'aram'}: solo péssimo.`, 'error');

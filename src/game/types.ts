@@ -259,7 +259,9 @@ export type TaskJob =
   /** Leading an animal marked for sale to a loading pen ('tend'); the task tile is where it was. */
   | { type: 'herd'; animalId: number; penId: number }
   /** Loading a vehicle at the dock ('haul'); the task tile is the bay's tile, `slot` the loader's spot. */
-  | { type: 'shipment'; shipmentId: number; slot: number };
+  | { type: 'shipment'; shipmentId: number; slot: number }
+  /** Analyzing the soil of a plot ('survey'); the task tile is where the agronomist works. */
+  | { type: 'survey'; plot: number };
 
 /** A queued order on a tile, executed by a worker. */
 export interface Task {
@@ -270,7 +272,7 @@ export interface Task {
   cropId: CropId | null;
   /** Worker currently assigned, if any. */
   workerId: number | null;
-  /** Present on (and only on) 'build', 'tend' and 'haul' tasks. */
+  /** Present on (and only on) 'build', 'tend', 'haul' and 'survey' tasks. */
   job?: TaskJob;
   /** Plowing ('hoe') only: work minutes (at speed 1) already done, kept when the worker lets go. */
   done?: number;
@@ -463,7 +465,7 @@ export interface Machine {
 
 export type ToolId = 'hoe' | 'seed' | 'water' | 'hand' | 'fertilize';
 /** Kinds of queued work: the farm tools, animal care, construction and loading at the dock. */
-export type TaskKind = ToolId | 'tend' | 'build' | 'haul';
+export type TaskKind = ToolId | 'tend' | 'build' | 'haul' | 'survey';
 
 export type ActionError =
   | 'out-of-bounds'
@@ -518,6 +520,8 @@ export type ActionError =
   | 'already-researched'
   | 'no-water-needed'
   | 'not-sick'
+  | 'already-surveyed'
+  | 'cannot-survey'
   | 'no-shipment'
   | 'not-enough-goods'
   | 'no-listing'

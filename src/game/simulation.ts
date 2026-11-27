@@ -53,6 +53,8 @@ export interface TickResult {
   machineEvents: MachineEvent[];
   /** Crops that withered on bad soil, by crop. */
   withered: Partial<Record<CropId, number>>;
+  /** Plots whose soil survey just finished. */
+  surveyed: number[];
 }
 
 export interface FinishedWork {
@@ -112,6 +114,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       dockEvents: [],
       machineEvents: [],
       withered: {},
+      surveyed: [],
     };
   }
   const gameMinutes = state.gameMinutes + dtMinutes;
@@ -195,6 +198,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
     weatherReports,
     spoiled,
     withered: grown.withered,
+    surveyed: next.surveyedPlots.filter((p) => !state.surveyedPlots.includes(p)),
   };
 };
 

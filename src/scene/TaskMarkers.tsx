@@ -22,7 +22,7 @@ const FENCE = new Color(PALETTE.taskFence);
 
 /** Marker color for a task, or null when it has none (structure work shows as a site, chores need none). */
 const colorOf = (task: Task): Color | null => {
-  if (task.kind === 'tend' || task.kind === 'haul') return null;
+  if (task.kind === 'tend' || task.kind === 'haul' || task.kind === 'survey') return null;
   if (task.kind !== 'build') return COLORS[task.kind];
   if (task.job?.type === 'fence') return task.job.remove ? ROAD_REMOVE : FENCE;
   if (task.job?.type !== 'road') return null;
@@ -60,6 +60,8 @@ export function TaskMarkers() {
     const seen = new Set<number>();
     let count = 0;
     for (const task of tasks) {
+      // Surveys stand beside the tile's own queue (see availableTasks).
+      if (task.kind === 'survey') continue;
       if (seen.has(task.tile)) continue;
       seen.add(task.tile);
       const color = colorOf(task);

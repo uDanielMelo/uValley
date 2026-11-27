@@ -33,6 +33,7 @@ import {
   type RingPlan,
 } from './structures';
 import { dropTasks, lastTaskOn, projectTasks } from './tasks';
+import { SOIL_SURVEY } from '../data/soil';
 import {
   fail,
   ok,
@@ -480,7 +481,8 @@ export const cancelAllOrders = (state: GameState): GameState => {
   }
   const roadRefund = next.tasks.filter((t) => t.job?.type === 'road' && !t.job.remove).length * ROAD_COST;
   const fenceRefund = next.tasks.reduce((sum, t) => sum + (t.job?.type === 'fence' ? t.job.cost : 0), 0);
-  return dropTasks({ ...next, money: next.money + roadRefund + fenceRefund }, () => true);
+  const surveyRefund = next.tasks.filter((t) => t.job?.type === 'survey').length * SOIL_SURVEY.cost;
+  return dropTasks({ ...next, money: next.money + roadRefund + fenceRefund + surveyRefund }, () => true);
 };
 
 /**

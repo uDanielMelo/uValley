@@ -5,6 +5,7 @@ import { layRoad, removeRoad } from './roads';
 import { collectShelter } from './shelters';
 import { penAnimal } from './penValue';
 import { layFence, removeFence } from './fences';
+import { completeSurvey } from './survey';
 import { fail, ok, type ActionResult, type GameState, type Task } from './types';
 
 /** What a task needs to be applied. */
@@ -16,11 +17,12 @@ export type TaskOrder = Pick<Task, 'kind' | 'tile' | 'cropId' | 'job'>;
  */
 export const applyTask = (state: GameState, task: TaskOrder): ActionResult => {
   if (task.kind === 'seed') return task.cropId ? plant(state, task.tile, task.cropId) : fail('no-seeds');
+  if (task.kind === 'survey') return task.job?.type === 'survey' ? completeSurvey(state, task.job.plot) : fail('cannot-survey');
   if (task.kind !== 'build' && task.kind !== 'tend' && task.kind !== 'haul') {
     return applyTool(state, task.kind, task.tile, CROP_IDS[0]);
   }
   const job = task.job;
-  if (!job) return fail('no-structure');
+  if (!job || job.type === 'survey') return fail('no-structure');
   // Loading is done bit by bit on the shipment (shipments.ts), like structure work.
   if (job.type === 'shipment') {
     return state.shipments.some((s) => s.id === job.shipmentId && s.phase === 'loading') ? ok(state) : fail('no-shipment');
@@ -45,10 +47,13 @@ export const projectTasks = (state: GameState): GameState =>
     return result.ok ? result.state : s;
   }, state);
 
-/** The last task queued on a tile (the one a new order on that tile would follow). */
+/**
+ * The last task queued on a tile (the one a new order on that tile would follow). Soil surveys stand
+ * beside the tile's queue, so they never count.
+ */
 export const lastTaskOn = (tasks: readonly Task[], tile: number): Task | undefined => {
   let last: Task | undefined;
-  for (const t of tasks) if (t.tile === tile) last = t;
+  for (const t of tasks) if (t.tile === tile && t.kind !== 'survey') last = t;
   return last;
 };
 

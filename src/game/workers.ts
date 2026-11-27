@@ -29,6 +29,7 @@ import { hash01 } from './random';
 import { gainMastery, harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
 import { applyTask, lastTaskOn, projectTasks } from './tasks';
 import { plowFactor } from './soil';
+import { SOIL_SURVEY } from '../data/soil';
 import {
   type ActionError,
   type GameState,
@@ -185,7 +186,10 @@ export const clearTasks = (state: GameState): GameState => repairHaulTasks(cance
 
 /** Queued task kinds that no worker has in their list (they would wait forever). */
 export const unstaffedKinds = (state: GameState): TaskKind[] => {
-  const covered = new Set(state.workers.flatMap((w) => w.priorities));
+  // Surveys need an agronomist who has them in the list.
+  const covered = new Set(
+    state.workers.flatMap((w) => (w.skills.includes('agronomy') ? w.priorities : w.priorities.filter((k) => k !== 'survey'))),
+  );
   return [...new Set(state.tasks.map((t) => t.kind))].filter((k) => !covered.has(k));
 };
 
@@ -243,6 +247,7 @@ export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoi
 /** Work minutes (at speed 1) of a task that is done in one go (structure work and loading accumulate). */
 export const taskMinutes = (task: Task, soilSeed: number | null, tiles: readonly Tile[]): number => {
   if (task.kind === 'haul') return 1;
+  if (task.kind === 'survey') return SOIL_SURVEY.minutes;
   if (task.kind === 'tend') return careMinutes(task.job) ?? COLLECT_MINUTES;
   if (task.kind === 'build') {
     if (task.job?.type === 'fence') return fenceTaskMinutes(task.job);
@@ -283,7 +288,8 @@ const availableTasks = (tasks: readonly Task[]): Task[] => {
   const seen = new Set<number>();
   const result: Task[] = [];
   for (const task of tasks) {
-    if (task.kind === 'haul') {
+    // Loaders and soil surveys never change their tile, so they do not wait for its queue.
+    if (task.kind === 'haul' || task.kind === 'survey') {
       if (task.workerId === null) result.push(task);
       continue;
     }
@@ -306,6 +312,8 @@ const bestTask = (worker: Worker, tasks: readonly Task[], fits?: (task: Task) =>
     const rank = worker.priorities.indexOf(task.kind);
     if (rank < 0 || rank > bestRank) continue;
     if (fits && !fits(task)) continue;
+    // Only agronomists survey the soil.
+    if (task.kind === 'survey' && !worker.skills.includes('agronomy')) continue;
     const c = tileCenter(task.tile);
     const d = Math.hypot(c.x - worker.x, c.y - worker.y);
     if (rank < bestRank || d < bestDistance) {
@@ -330,7 +338,9 @@ export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' |
     }
     return { kind: task.kind, cropId: null, animalId: job?.type === 'shelter' ? mainSpecies(state, job.structureId) : null };
   }
-  if (task.kind === 'hoe' || task.kind === 'build' || task.kind === 'haul') return { kind: task.kind, cropId: null };
+  if (task.kind === 'hoe' || task.kind === 'build' || task.kind === 'haul' || task.kind === 'survey') {
+    return { kind: task.kind, cropId: null };
+  }
   return { kind: task.kind, cropId: state.tiles[task.tile]?.crop?.cropId ?? null };
 };
 

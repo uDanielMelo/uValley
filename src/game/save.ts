@@ -247,7 +247,7 @@ const migrateV21 = (data: Record<string, unknown>): Record<string, unknown> => {
 
 /**
  * v24 → v25: soil. The farm gets a soil seed derived from the save itself (so loading the same save twice
- * gives the same map), no surveys and no fields.
+ * gives the same map), no surveys and no fields, and everyone gets the soil survey activity.
  */
 const migrateV24 = (data: Record<string, unknown>): Record<string, unknown> => {
   const game = data.game;
@@ -255,7 +255,13 @@ const migrateV24 = (data: Record<string, unknown>): Record<string, unknown> => {
   const nextId = isFiniteNumber(game.nextId) ? game.nextId : 1;
   const minutes = isFiniteNumber(game.gameMinutes) ? Math.floor(game.gameMinutes) : 0;
   const soilSeed = 1 + Math.floor(hash01(nextId * 7919 + minutes) * (2 ** 31 - 2));
-  return { ...data, saveVersion: 25, game: { ...game, soilSeed, surveyedPlots: [], fields: [] } };
+  // Everyone gets the new activity at the end of their list (only agronomists ever take it).
+  const workers = Array.isArray(game.workers)
+    ? game.workers.map((w: unknown) =>
+        isRecord(w) && Array.isArray(w.priorities) && !w.priorities.includes('survey') ? { ...w, priorities: [...w.priorities, 'survey'] } : w,
+      )
+    : game.workers;
+  return { ...data, saveVersion: 25, game: { ...game, workers, soilSeed, surveyedPlots: [], fields: [] } };
 };
 
 /**
@@ -366,7 +372,7 @@ const parseTile = (v: unknown): Tile | null => {
   return tile;
 };
 
-const TASK_KINDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'fertilize', 'tend', 'build', 'haul'];
+const TASK_KINDS: readonly TaskKind[] = ['hoe', 'seed', 'water', 'hand', 'fertilize', 'tend', 'build', 'haul', 'survey'];
 const WORKER_KINDS: readonly WorkerKind[] = ['staff', 'temp'];
 const STARS: readonly Stars[] = [1, 2, 3];
 const isStars = (v: unknown): v is Stars => STARS.some((s) => s === v);
@@ -477,6 +483,7 @@ const parseCandidate = (v: unknown): Candidate | null => {
 const parseJob = (v: unknown): TaskJob | null => {
   if (!isRecord(v)) return null;
   if (v.type === 'structure' && isId(v.structureId)) return { type: 'structure', structureId: v.structureId };
+  if (v.type === 'survey' && isId(v.plot) && v.plot < PLOT_COUNT) return { type: 'survey', plot: v.plot };
   if (v.type === 'shelter' && isId(v.structureId)) return { type: 'shelter', structureId: v.structureId };
   if (v.type === 'road' && typeof v.remove === 'boolean') {
     return isId(v.siteId) ? { type: 'road', remove: v.remove, siteId: v.siteId } : { type: 'road', remove: v.remove };
@@ -499,9 +506,10 @@ const parseTask = (v: unknown): Task | null => {
   if (cropId !== null && !isCropId(cropId)) return null;
   if (workerId !== null && !isId(workerId)) return null;
   if (kind === 'hoe' && isFiniteNumber(v.done) && v.done > 0) return { id, kind, tile, cropId, workerId, done: v.done };
-  if (kind !== 'build' && kind !== 'tend' && kind !== 'haul') return { id, kind, tile, cropId, workerId };
+  if (kind !== 'build' && kind !== 'tend' && kind !== 'haul' && kind !== 'survey') return { id, kind, tile, cropId, workerId };
   const job = parseJob(v.job);
-  return job ? { id, kind, tile, cropId: null, workerId, job } : null;
+  if (!job || (kind === 'survey') !== (job.type === 'survey')) return null;
+  return { id, kind, tile, cropId: null, workerId, job };
 };
 
 const parsePath = (v: unknown): GridPoint[] | null => {
