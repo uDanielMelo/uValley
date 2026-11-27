@@ -1,5 +1,6 @@
 import { CROPS, type CropId } from '../data/crops';
-import { CROP_SOIL, SOILS, SOIL_IDS, SOIL_RATINGS, type SoilId, type SoilRating } from '../data/soil';
+import { CROP_SOIL, SOILS, SOIL_IDS, SOIL_RATINGS, WITHER_AT, type SoilId, type SoilRating } from '../data/soil';
+import { growthMinutesNeeded } from './crops';
 import { GRID_SIZE } from '../data/world';
 import { TILE_COUNT } from './grid';
 import { hash01 } from './random';
@@ -116,4 +117,34 @@ export const plowFactor = (seed: number | null, tile: Tile, tileIndex: number): 
 export const pastureFactor = (seed: number | null, tileIndex: number): number => {
   const soil = soilAt(seed, tileIndex);
   return soil ? SOILS[soil].pastureFactor : 1;
+};
+
+/** Whole units from a soil multiplier: the fraction becomes one more unit when `roll` (0–1) is under it. */
+export const soilUnits = (multiplier: number, roll: number): number => {
+  const whole = Math.floor(multiplier);
+  return whole + (roll < multiplier - whole ? 1 : 0);
+};
+
+/**
+ * Crops on bad soil wither when they reach WITHER_AT of their growth: the tile goes back to plain tilled
+ * soil (the fertilizer is lost too). Returns the same array when nothing withers.
+ */
+export const witherCrops = (
+  tiles: Tile[],
+  seed: number | null,
+): { tiles: Tile[]; withered: Partial<Record<CropId, number>> } => {
+  const withered: Partial<Record<CropId, number>> = {};
+  if (seed === null) return { tiles, withered };
+  let next: Tile[] | null = null;
+  for (let i = 0; i < tiles.length; i++) {
+    const tile = tiles[i];
+    const crop = tile?.crop;
+    if (!tile || !crop) continue;
+    if (crop.growthMinutes < growthMinutesNeeded(crop) * WITHER_AT) continue;
+    if (cropRating(seed, tile, i, crop.cropId) !== 'bad') continue;
+    next ??= tiles.slice();
+    next[i] = { state: 'tilled' };
+    withered[crop.cropId] = (withered[crop.cropId] ?? 0) + 1;
+  }
+  return { tiles: next ?? tiles, withered };
 };

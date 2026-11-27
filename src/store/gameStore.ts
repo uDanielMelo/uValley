@@ -600,6 +600,10 @@ export const useGameStore = create<GameStore>()(
           get().showMessage(`🔬 Pesquisa concluída: ${crop.icon} ${crop.label} já pode ser plantado(a).`, 'info');
         }
         if (tick.spoiled) get().showMessage(`Estragou no estoque: ${spoiledText(tick.spoiled)}.`, 'error');
+        for (const [cropId, count] of Object.entries(tick.withered) as [CropId, number][]) {
+          const crop = CROPS[cropId];
+          get().showMessage(`🥀 ${count} pé${count === 1 ? '' : 's'} de ${crop.label} murch${count === 1 ? 'ou' : 'aram'}: solo péssimo.`, 'error');
+        }
         if (tick.newOffers.length > 0) {
           const offer = tick.newOffers[0];
           const listing = offer && state.listings.find((l) => l.id === offer.listingId);
