@@ -20,7 +20,11 @@ const withStartRoads = (tiles: readonly Tile[], structures: readonly StructureIn
   return withAccessRoad(withRoads(tiles, ring));
 };
 
-export const createInitialState = (): GameState => {
+/** A fresh soil seed for a new farm (the only randomness outside the deterministic game logic). */
+export const newSoilSeed = (): number => 1 + Math.floor(Math.random() * (2 ** 31 - 2));
+
+/** A new farm; `soilSeed` null gives uniform soil (tests). */
+export const createInitialState = (soilSeed: number | null = null): GameState => {
   const ground: Tile[] = Array.from({ length: TILE_COUNT }, () => ({ state: 'locked' }));
   const unlockedPlots = START_PLOTS.map(([px, py]) => plotIndex(px, py));
   for (const plot of unlockedPlots) {
@@ -63,6 +67,9 @@ export const createInitialState = (): GameState => {
     machines: [],
     held: [],
     feedOrder: { auto: true, days: FEED.autoDays },
+    soilSeed,
+    surveyedPlots: [],
+    fields: [],
     nextId,
   };
 };

@@ -420,8 +420,26 @@ export interface GameState {
   held: HeldPurchase[];
   /** Automatic feed orders: on or off, and how many days of feed to keep. */
   feedOrder: { auto: boolean; days: number };
+  /** Seed the farm's soil is derived from (game/soil.ts); null = uniform soil (tests). */
+  soilSeed: number | null;
+  /** Plots (plotIndex) whose soil an agronomist has analyzed. */
+  surveyedPlots: number[];
+  /** Named fields drawn by the player (organization only: they block nothing). */
+  fields: Field[];
   /** Next id for tasks, workers, candidates, animals, carcasses, structures and shipments. */
   nextId: number;
+}
+
+/** A named rectangle of farm land, with the harvests of the last day it was harvested. */
+export interface Field {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** `soil` sums the soil multipliers of the tiles harvested that day (average = soil / tiles). */
+  lastHarvest?: { day: number; units: number; tiles: number; soil: number };
 }
 
 /** A tractor or harvester, parked in a shed or parking lot (`parkId`) at a bay (`slot`). */

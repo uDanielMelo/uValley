@@ -44,7 +44,7 @@ import { TOWN_SHOPS, VEHICLES } from '../data/market';
 import { seasonOf, weatherLook } from '../game/climate';
 import { advanceGame, type FinishedWork } from '../game/simulation';
 import type { Spoiled } from '../game/storage';
-import { createInitialState } from '../game/state';
+import { createInitialState, newSoilSeed } from '../game/state';
 import { cancelLoading, dismissShipment, startLoading, type DockEvent } from '../game/shipments';
 import { bayPoint, docksOf } from '../game/dock';
 import { anchorFor, structureAt } from '../game/structures';
@@ -549,7 +549,7 @@ export const useGameStore = create<GameStore>()(
     };
 
     return {
-      game: loaded?.game ?? createInitialState(),
+      game: loaded?.game ?? createInitialState(newSoilSeed()),
       settings: loaded?.settings ?? DEFAULT_SETTINGS,
       tool: null,
       selectedStructure: null,
@@ -1035,7 +1035,7 @@ export const useGameStore = create<GameStore>()(
         const s = storage();
         if (s) clearStorage(s);
         set({
-          game: createInitialState(),
+          game: createInitialState(newSoilSeed()),
           tool: null,
           selectedStructure: null,
           selectedAnimal: null,

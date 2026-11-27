@@ -16,8 +16,10 @@ import { CONDITION, MACHINE_IDS, type MachineId } from '../data/machines';
 import { DEFAULT_PRIORITIES, SKILL_IDS, type SkillId } from '../data/workers';
 import { SPEED_OPTIONS, type GameSpeed } from '../data/world';
 import { PLOT_COUNT, TILE_COUNT, inBounds, isValidTileIndex } from './grid';
+import { hash01 } from './random';
 import { TOWN_SHOP_IDS, VEHICLE_LEVELS, type OrderGood, type TownShopId, type VehicleLevel } from '../data/market';
 import type {
+  Field,
   Animal,
   AnimalHealth,
   Candidate,
@@ -63,7 +65,7 @@ import { rehomeAnimals } from './shelters';
 import { repairHaulTasks } from './shipments';
 import { stampStructures } from './structures';
 
-export const SAVE_VERSION = 24;
+export const SAVE_VERSION = 25;
 /**
  * Saves older than this were made on the 32x32 map, before buildings needed roads; they cannot be
  * placed on the new map, so loading one starts a new game.
@@ -94,7 +96,7 @@ export const DEFAULT_SETTINGS: SaveSettings = { speed: 1, edgePan: false, graphi
  * (`job.siteId`). Earlier versions (v1–v15, on the 32x32 map) are not loaded.
  */
 export interface SaveDataV23 {
-  saveVersion: 24;
+  saveVersion: 25;
   savedAt: number;
   game: GameState;
   settings: SaveSettings;
@@ -244,6 +246,19 @@ const migrateV21 = (data: Record<string, unknown>): Record<string, unknown> => {
 };
 
 /**
+ * v24 → v25: soil. The farm gets a soil seed derived from the save itself (so loading the same save twice
+ * gives the same map), no surveys and no fields.
+ */
+const migrateV24 = (data: Record<string, unknown>): Record<string, unknown> => {
+  const game = data.game;
+  if (!isRecord(game)) return { ...data, saveVersion: 25 };
+  const nextId = isFiniteNumber(game.nextId) ? game.nextId : 1;
+  const minutes = isFiniteNumber(game.gameMinutes) ? Math.floor(game.gameMinutes) : 0;
+  const soilSeed = 1 + Math.floor(hash01(nextId * 7919 + minutes) * (2 ** 31 - 2));
+  return { ...data, saveVersion: 25, game: { ...game, soilSeed, surveyedPlots: [], fields: [] } };
+};
+
+/**
  * Migrations from version N to N + 1. Add an entry here whenever SAVE_VERSION is bumped:
  * `migrations[21] = (v21) => v22`.
  */
@@ -258,6 +273,7 @@ const migrations: Record<number, (data: Record<string, unknown>) => Record<strin
   22: (data) => ({ ...data, saveVersion: 23 }),
   // v24 adds machinery (GameState.machines, the machinery skill, riding workers).
   23: (data) => ({ ...data, machines: [], saveVersion: 24 }),
+  24: migrateV24,
 };
 
 export const serialize = (game: GameState, settings: SaveSettings, now = Date.now()): string => {
@@ -741,6 +757,56 @@ const parseList = <T>(v: unknown, parse: (item: unknown) => T | null): T[] | nul
   return result;
 };
 
+const FIELD_NAME_MAX = 32;
+
+/** Analyzed plots: valid plot indices, each once (bad entries are dropped). */
+const parseSurveyed = (v: unknown): number[] => {
+  if (!Array.isArray(v)) return [];
+  const result: number[] = [];
+  for (const p of v) {
+    if (isFiniteNumber(p) && Number.isInteger(p) && p >= 0 && p < PLOT_COUNT && !result.includes(p)) result.push(p);
+  }
+  return result;
+};
+
+const overlaps = (a: Field, b: Field): boolean =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+const parseField = (v: unknown): Field | null => {
+  if (!isRecord(v)) return null;
+  const { id, name, x, y, w, h } = v;
+  if (!isId(id) || typeof name !== 'string' || !isId(x) || !isId(y) || !isId(w) || !isId(h)) return null;
+  const trimmed = name.trim().slice(0, FIELD_NAME_MAX);
+  if (!trimmed || w < 1 || h < 1 || !inBounds(x, y) || !inBounds(x + w - 1, y + h - 1)) return null;
+  const field: Field = { id, name: trimmed, x, y, w, h };
+  const last = v.lastHarvest;
+  if (
+    isRecord(last) &&
+    isId(last.day) &&
+    isId(last.units) &&
+    isId(last.tiles) &&
+    isFiniteNumber(last.soil) &&
+    last.soil >= 0
+  ) {
+    field.lastHarvest = { day: last.day, units: last.units, tiles: last.tiles, soil: last.soil };
+  }
+  return field;
+};
+
+/** Fields: bad ones and ones overlapping an earlier field are dropped. */
+const parseFields = (v: unknown): Field[] => {
+  if (!Array.isArray(v)) return [];
+  const result: Field[] = [];
+  for (const raw of v) {
+    const field = parseField(raw);
+    if (field && !result.some((f) => f.id === field.id || overlaps(f, field))) result.push(field);
+  }
+  return result;
+};
+
+const parseSoilSeed = (v: unknown): number | null =>
+  isFiniteNumber(v) && Number.isInteger(v) && v >= 1 ? v : null;
+
 const parseGame = (v: unknown): GameState | null => {
   if (!isRecord(v)) return null;
   const { gameMinutes, money, tiles, unlockedPlots, plotsPurchased, inventory, nextId } = v;
@@ -798,6 +864,7 @@ const parseGame = (v: unknown): GameState | null => {
   const freightVehicle = v.freightVehicle === 'auto' || isVehicleLevel(v.freightVehicle) ? v.freightVehicle : null;
   if (freightVehicle === null) return null;
   if (!workers || !candidates || !tasks || !animals || !carcasses || !structures || !isId(nextId)) return null;
+  const fields = parseFields(v.fields);
   const maxId = Math.max(
     0,
     ...workers.map((w) => w.id),
@@ -812,6 +879,7 @@ const parseGame = (v: unknown): GameState | null => {
     ...listings.map((l) => l.id),
     ...allOffers.map((o) => o.id),
     ...held.map((h) => h.id),
+    ...fields.map((f) => f.id),
   );
   // A vehicle whose dock (or loading pen) is gone is dropped (neither can go while a vehicle is coming,
   // so this only guards bad data).
@@ -844,6 +912,9 @@ const parseGame = (v: unknown): GameState | null => {
     machines,
     held,
     feedOrder,
+    soilSeed: parseSoilSeed(v.soilSeed),
+    surveyedPlots: parseSurveyed(v.surveyedPlots),
+    fields,
     nextId: Math.max(nextId, maxId + 1),
   }))));
 };
