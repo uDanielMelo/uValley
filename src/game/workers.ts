@@ -30,6 +30,7 @@ import { gainMastery, harvestBonusChance, unassign, workEffectiveness, workSpeed
 import { applyTask, lastTaskOn, projectTasks } from './tasks';
 import { plowFactor } from './soil';
 import { surveySpot } from './survey';
+import { recordHarvest } from './fields';
 import { SOIL_SURVEY } from '../data/soil';
 import {
   type ActionError,
@@ -359,7 +360,12 @@ const effectivenessBonus = (state: GameState, worker: Worker, task: Task, contex
   if (hash01(task.id * 7 + 3) >= harvestBonusChance(workEffectiveness(worker, context))) return state;
   const { inventory } = state;
   if (task.kind === 'hand' && context.cropId) {
-    return { ...state, inventory: { ...inventory, produce: addCount(inventory.produce, context.cropId, 1) } };
+    const day = Math.floor(state.gameMinutes / MINUTES_PER_DAY);
+    return {
+      ...state,
+      inventory: { ...inventory, produce: addCount(inventory.produce, context.cropId, 1) },
+      fields: recordHarvest(state.fields, task.tile, 1, 0, day, false),
+    };
   }
   const product = context.animalId ? ANIMALS[context.animalId].product : null;
   if (task.kind === 'tend' && task.job?.type === 'shelter' && product) {

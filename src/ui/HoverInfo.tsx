@@ -56,7 +56,7 @@ function SoilDetails({ tile, tileIndex }: { tile: Tile; tileIndex: number }) {
   if (seed === null || tile.structure || tile.road) return null;
   if (tile.cover) return <p className="text-sm">Estufa: o solo não conta.</p>;
   const soil = soilAt(seed, tileIndex);
-  if (!surveyed || !soil) return <p className="text-sm text-wood/70">Solo: ? (peça uma análise ao agrônomo)</p>;
+  if (!surveyed || !soil) return <p className="text-sm text-wood/70">Solo: não analisado (peça uma análise ao agrônomo)</p>;
   const cropId = tile.crop?.cropId ?? layerCrop;
   const rating = cropId && CROPS[cropId].kind !== 'greenhouse' ? cropRating(seed, tile, tileIndex, cropId) : null;
   return (

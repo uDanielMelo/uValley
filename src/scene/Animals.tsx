@@ -19,7 +19,7 @@ import { animalActivity, isInside, lifeStage } from '../game/animals';
 import type { Animal } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { hash01 } from './coords';
-import { setHoverCursor } from './cursor';
+import { handMode, setHoverCursor } from './cursor';
 import { BREED_TINTS, CONDITION_TINTS, OLD_TINT, STAGE_SCALE, animalModel, type Condition } from './models/animalModels';
 import { PALETTE } from './palette';
 
@@ -174,14 +174,14 @@ function AnimalFigure({ id, kind, breed }: { id: number; kind: AnimalId; breed: 
     });
   });
 
-  // Pressing on an animal does not start an area drag on the tile below.
+  // Pressing on an animal does not start an area drag on the tile below (the soil view's tools do work there).
   const stopDown = (e: ThreeEvent<PointerEvent>) => {
-    if (e.button === 0) e.stopPropagation();
+    if (e.button === 0 && useGameStore.getState().soilTool === null) e.stopPropagation();
   };
   // With the hand, a click selects the animal (its card opens).
   const onClick = (e: ThreeEvent<MouseEvent>) => {
-    const { tool, buildMode, selectAnimal } = useGameStore.getState();
-    if (e.button !== 0 || e.delta > CLICK_TOLERANCE || tool !== null || buildMode !== null) return;
+    const { selectAnimal } = useGameStore.getState();
+    if (e.button !== 0 || e.delta > CLICK_TOLERANCE || !handMode()) return;
     e.stopPropagation();
     selectAnimal(id);
   };

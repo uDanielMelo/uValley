@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { SOIL_SURVEY } from '../../data/soil';
-import { AGRONOMY_WAGE, DEFAULT_PRIORITIES, STAR_LEVELS, type SkillId } from '../../data/workers';
+import { AGRONOMY_WAGE, DEFAULT_PRIORITIES, MAX_TASKS, STAR_LEVELS, type SkillId } from '../../data/workers';
 import { cancelAllOrders } from '../construction';
-import { neighbourPlots, plotIndex, tileCoords } from '../grid';
+import { neighbourPlots, plotIndex, tileCoords, tilesInPlot } from '../grid';
 import { buyPlot } from '../economy';
 import { isWalkable } from '../path';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
-import { hourlyWageFor, refreshCandidates } from '../staff';
+import { ensureAgronomist, hourlyWageFor, refreshCandidates, rollCandidates } from '../staff';
 import { canSurvey, completeSurvey, orderSurvey, surveySpot } from '../survey';
 import { hireAgronomist, setSoilSeed, surveyAll } from '../dev';
 import { createInitialState } from '../state';
@@ -204,5 +204,37 @@ describe('review fixes', () => {
     const spot = taskSpot(s, task, { x: 22.5, y: 42.5 });
     expect(Math.floor(spot.x) === x && Math.floor(spot.y) === y).toBe(false);
     expect(isWalkable(s.tiles, Math.floor(spot.x), Math.floor(spot.y))).toBe(true);
+  });
+});
+
+describe('soil minors', () => {
+  it('surveys respect the queue limit', () => {
+    const s0 = createInitialState();
+    const filler: Task[] = Array.from({ length: MAX_TASKS }, (_, k) => ({ id: 5000 + k, kind: 'water', tile: k, cropId: null, workerId: null }));
+    expect(orderSurvey({ ...s0, tasks: filler, nextId: 9000 }, PLOT)).toEqual({ ok: false, error: 'queue-full' });
+  });
+
+  it('a plot with no free spot says so', () => {
+    const s0 = createInitialState();
+    // Every tile in and around the plot is taken by a fence (not walkable).
+    const { x: px, y: py } = tileCoords(tilesInPlot(PLOT)[0] ?? 0);
+    const tiles = s0.tiles.map((t, i) => {
+      const { x, y } = tileCoords(i);
+      return x >= px - 1 && x <= px + 4 && y >= py - 1 && y <= py + 4 ? { ...t, fence: {} } : t;
+    });
+    expect(orderSurvey({ ...s0, tiles }, PLOT)).toEqual({ ok: false, error: 'no-survey-spot' });
+  });
+
+  it('a board without an agronomist gets one while the staff has none', () => {
+    const s = createInitialState();
+    // A day whose rolled board has no agronomist.
+    const day = Array.from({ length: 50 }, (_, d) => d).find(
+      (d) => !rollCandidates(d, 100, []).some((c) => c.skills.includes('agronomy')),
+    );
+    if (day === undefined) throw new Error('every board has an agronomist');
+    const board = rollCandidates(day, 100, []);
+    expect(ensureAgronomist(board, s.workers).some((c) => c.skills.includes('agronomy'))).toBe(true);
+    const staffed = [{ ...(s.workers[0] as Worker), skills: ['agronomy' as const] }];
+    expect(ensureAgronomist(board, staffed)).toBe(board);
   });
 });

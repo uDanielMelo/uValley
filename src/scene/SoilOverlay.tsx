@@ -27,7 +27,7 @@ const OUT = new Color(SOIL_OUT);
 const PASTURE_MIN = 0.5;
 const PASTURE_SPAN = 1;
 
-/** Diagonal hatching with a question mark: plots not analyzed yet. */
+/** Light diagonal hatching: plots not analyzed yet. */
 const hatchTexture = (): CanvasTexture => {
   const size = 128;
   const canvas = document.createElement('canvas');
@@ -35,26 +35,21 @@ const hatchTexture = (): CanvasTexture => {
   canvas.height = size;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    ctx.strokeStyle = 'rgba(230,233,236,0.75)';
-    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(240,242,244,0.55)';
+    ctx.lineWidth = 4;
     for (let k = -size; k < size * 2; k += 22) {
       ctx.beginPath();
       ctx.moveTo(k, 0);
       ctx.lineTo(k + size, size);
       ctx.stroke();
     }
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
-    ctx.font = 'bold 64px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('?', size / 2, size / 2 + 4);
   }
   return new CanvasTexture(canvas);
 };
 
 /**
  * Soil view: every tile painted by the chosen layer (soil type, how a crop does, pasture), plots not
- * analyzed yet hatched with a "?" and plots out of the survey's reach dark.
+ * analyzed yet lightly hatched and plots out of the survey's reach darker.
  */
 export function SoilOverlay() {
   const active = useGameStore((s) => s.infoView === 'soil');
@@ -73,10 +68,11 @@ function Overlay() {
 
   const tileGeometry = useMemo(() => new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), []);
   const plotGeometry = useMemo(() => new PlaneGeometry(PLOT_SIZE, PLOT_SIZE).rotateX(-Math.PI / 2), []);
-  const tileMaterial = useMemo(() => new MeshBasicMaterial({ transparent: true, opacity: 0.72, depthWrite: false, toneMapped: false }), []);
+  // Light enough to keep the farm readable underneath.
+  const tileMaterial = useMemo(() => new MeshBasicMaterial({ transparent: true, opacity: 0.42, depthWrite: false, toneMapped: false }), []);
   const hatch = useMemo(hatchTexture, []);
   const hatchMaterial = useMemo(
-    () => new MeshBasicMaterial({ map: hatch, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }),
+    () => new MeshBasicMaterial({ map: hatch, transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false }),
     [hatch],
   );
   useEffect(
