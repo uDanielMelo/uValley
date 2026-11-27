@@ -243,14 +243,18 @@ export const tempCount = (state: GameState): number =>
   state.workers.filter((w) => w.kind === 'temp' && w.rentalId === undefined).length;
 export const freeBeds = (state: GameState): number => bedCount(state) - staffCount(state);
 
-/** Releases a worker's task back to the queue. */
-export const unassign = (tasks: readonly Task[], workerId: number): Task[] =>
-  tasks.map((t) => (t.workerId === workerId ? { ...t, workerId: null } : t));
+/** Releases a worker's task back to the queue; plowing keeps the work done so far on the task. */
+export const unassign = (tasks: readonly Task[], worker: Pick<Worker, 'id' | 'progress'>): Task[] =>
+  tasks.map((t) => {
+    if (t.workerId !== worker.id) return t;
+    if (t.kind === 'hoe' && worker.progress > 0) return { ...t, workerId: null, done: worker.progress };
+    return { ...t, workerId: null };
+  });
 
 export const removeWorkers = (state: GameState, leaving: ReadonlySet<number>): GameState => {
   if (leaving.size === 0) return state;
   let tasks = state.tasks;
-  for (const id of leaving) tasks = unassign(tasks, id);
+  for (const w of state.workers) if (leaving.has(w.id)) tasks = unassign(tasks, w);
   // A machine whose driver leaves goes straight back to its slot.
   const machines = state.machines.some((m) => m.driverId !== undefined && leaving.has(m.driverId))
     ? state.machines.map((m) => {
@@ -348,7 +352,7 @@ export const setPriorities = (state: GameState, workerId: number, priorities: re
   const dropped = current !== undefined && !clean.includes(current.kind);
   return ok({
     ...state,
-    tasks: dropped ? unassign(state.tasks, workerId) : state.tasks,
+    tasks: dropped ? unassign(state.tasks, worker) : state.tasks,
     workers: state.workers.map((w) =>
       w.id !== workerId ? w : { ...w, priorities: clean, ...(dropped ? { taskId: null, path: [], progress: 0 } : {}) },
     ),

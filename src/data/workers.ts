@@ -152,7 +152,8 @@ export const WALK_SPEED = 1.5;
 
 /** Game minutes of work for each tool task at speed 1 (construction: see data/structures and data/roads). */
 export const TASK_MINUTES: Record<ToolId, number> = {
-  hoe: 12,
+  // Breaking new ground by hand takes hours (× the soil's plow factor, game/soil.ts).
+  hoe: 150,
   seed: 6,
   water: 4,
   hand: 8,

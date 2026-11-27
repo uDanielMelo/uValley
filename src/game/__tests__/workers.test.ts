@@ -92,7 +92,7 @@ describe('workers', () => {
     const worker = s.workers.find((w) => w.taskId !== null);
     expect(worker).toBeDefined();
     expect(worker && workerActivity(s, worker)).toBe('walking');
-    s = run(s, 30);
+    s = run(s, TASK_MINUTES.hoe * 2);
     expect(s.tiles[TILE]?.state).toBe('tilled');
     expect(s.tasks).toEqual([]);
   });
@@ -105,7 +105,7 @@ describe('workers', () => {
     s = tick(s, 0.5);
     // One worker per tile: each planting waits for the tilling on its tile.
     expect(s.workers.filter((w) => w.taskId !== null)).toHaveLength(2);
-    s = run(s, 60);
+    s = run(s, TASK_MINUTES.hoe * 2 + 60);
     expect(s.tiles[TILE]?.state).toBe('planted');
     expect(s.tiles[OTHER]?.state).toBe('planted');
     expect(s.tasks).toEqual([]);

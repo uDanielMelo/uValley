@@ -272,6 +272,8 @@ export interface Task {
   workerId: number | null;
   /** Present on (and only on) 'build', 'tend' and 'haul' tasks. */
   job?: TaskJob;
+  /** Plowing ('hoe') only: work minutes (at speed 1) already done, kept when the worker lets go. */
+  done?: number;
 }
 
 /** Staff live in the bunkhouse and earn an hourly wage; day laborers ('temp') leave at the end of the shift. */

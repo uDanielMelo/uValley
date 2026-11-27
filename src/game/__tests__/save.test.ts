@@ -60,4 +60,10 @@ describe('soil save data (v25)', () => {
     expect(loaded?.surveyedPlots).toEqual([5]);
     expect(loaded?.fields).toEqual([good]);
   });
+
+  it('keeps the plowing done on a hoe task', () => {
+    const s0 = createInitialState();
+    const s: GameState = { ...s0, tasks: [{ id: 900, kind: 'hoe', tile: 29 + 45 * 64, cropId: null, workerId: null, done: 42 }], nextId: 901 };
+    expect(reload(s)?.tasks[0]?.done).toBe(42);
+  });
 });

@@ -498,6 +498,7 @@ const parseTask = (v: unknown): Task | null => {
   if (!isId(id) || !isTaskKind(kind) || !isFiniteNumber(tile) || !isValidTileIndex(tile)) return null;
   if (cropId !== null && !isCropId(cropId)) return null;
   if (workerId !== null && !isId(workerId)) return null;
+  if (kind === 'hoe' && isFiniteNumber(v.done) && v.done > 0) return { id, kind, tile, cropId, workerId, done: v.done };
   if (kind !== 'build' && kind !== 'tend' && kind !== 'haul') return { id, kind, tile, cropId, workerId };
   const job = parseJob(v.job);
   return job ? { id, kind, tile, cropId: null, workerId, job } : null;
