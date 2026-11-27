@@ -4,7 +4,9 @@ import { CROPS, type CropId } from '../../data/crops';
 import { GROWTH_STEP_MINUTES } from '../../data/world';
 import { harvest } from '../actions';
 import { growthMinutesNeeded } from '../crops';
-import { withTile } from '../grid';
+import { tilesInPlot, withTile } from '../grid';
+import { PLOT_PASTURE_UNITS } from '../../data/animals';
+import { pastureCapacity, plotPastureUnits } from '../shelters';
 import { advanceGame } from '../simulation';
 import { createInitialState } from '../state';
 import { GRID_SIZE } from '../../data/world';
@@ -194,5 +196,29 @@ describe('harvest by soil', () => {
     const tick = advanceGame(start, GROWTH_STEP_MINUTES);
     expect(tick.state.tiles[i]?.state).toBe('tilled');
     expect(tick.withered.corn).toBe(1);
+  });
+});
+
+describe('pasture by soil', () => {
+  it('pasture follows the soil', () => {
+    const s = createInitialState(11);
+    const plot = s.unlockedPlots.find((p) => tilesInPlot(p).every((i) => s.tiles[i]?.state === 'grass' && !s.tiles[i]?.road && !s.tiles[i]?.structure));
+    if (plot === undefined) throw new Error('no free plot');
+    const expected = (PLOT_PASTURE_UNITS / 16) * tilesInPlot(plot).reduce((sum, i) => sum + pastureFactor(11, i), 0);
+    expect(plotPastureUnits(s.tiles, plot, 11)).toBeCloseTo(expected, 9);
+    expect(expected).not.toBeCloseTo(PLOT_PASTURE_UNITS, 3);
+  });
+
+  it('null seed keeps today pasture', () => {
+    const s = createInitialState();
+    const plain = s.unlockedPlots.reduce((sum, p) => {
+      const grass = tilesInPlot(p).filter((i) => {
+        const t = s.tiles[i];
+        return t?.state === 'grass' && !t.structure && !t.cover && !t.road;
+      }).length;
+      return sum + (PLOT_PASTURE_UNITS * grass) / 16;
+    }, 0);
+    expect(pastureCapacity(s)).toBe(Math.floor(plain + 1e-9));
+    expect(pastureCapacity(createInitialState(11))).not.toBe(pastureCapacity(s));
   });
 });

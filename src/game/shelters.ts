@@ -2,6 +2,7 @@
  * Animal shelters: who lives where, how much pasture the farm has, and the products waiting in
  * each shelter for the crew to collect ('tend' tasks).
  */
+import { pastureFactor } from './soil';
 import { ANIMALS, PLOT_PASTURE_UNITS, SHELTER_STOCK_PER_HEAD, type AnimalId, type AnimalProductId } from '../data/animals';
 import { MANURE_PIT_BONUS, SHELTER_MANURE_PER_HEAD } from '../data/fertilizer';
 import {
@@ -142,25 +143,28 @@ export const isPasture = (tiles: readonly Tile[], x: number, y: number): boolean
   return grazingLand(tile) && !tile.fence;
 };
 
-/** Pasture units a plot holds: PLOT_PASTURE_UNITS when all its tiles are free grass. */
-export const plotPastureUnits = (tiles: readonly Tile[], plot: number): number => {
+/**
+ * Pasture units a plot holds: each free grass tile gives its share of PLOT_PASTURE_UNITS times the
+ * soil's pasture factor (PLOT_PASTURE_UNITS for a plot of plain grass on uniform soil).
+ */
+export const plotPastureUnits = (tiles: readonly Tile[], plot: number, soilSeed: number | null = null): number => {
   let grass = 0;
   for (const index of tilesInPlot(plot)) {
     // Fences stand on the pasture without taking it away.
-    if (grazingLand(tiles[index])) grass++;
+    if (grazingLand(tiles[index])) grass += pastureFactor(soilSeed, index);
   }
   return (PLOT_PASTURE_UNITS * grass) / (PLOT_SIZE * PLOT_SIZE);
 };
 
 /** Pasture units the whole farm holds (owned plots only), rounded down. */
-export const pastureCapacity = (state: Pick<GameState, 'tiles' | 'unlockedPlots'>): number =>
-  Math.floor(state.unlockedPlots.reduce((sum, plot) => sum + plotPastureUnits(state.tiles, plot), 0) + 1e-9);
+export const pastureCapacity = (state: Pick<GameState, 'tiles' | 'unlockedPlots' | 'soilSeed'>): number =>
+  Math.floor(state.unlockedPlots.reduce((sum, plot) => sum + plotPastureUnits(state.tiles, plot, state.soilSeed), 0) + 1e-9);
 
 export const pastureUsed = (state: Pick<GameState, 'animals'>): number =>
   state.animals.reduce((sum, a) => sum + ANIMALS[a.kind].pastureUnits, 0);
 
 /** Crowding slows production: 1 while the pasture has room, down to 0.25 when badly overstocked. */
-export const crowdingFactor = (state: Pick<GameState, 'tiles' | 'unlockedPlots' | 'animals'>): number => {
+export const crowdingFactor = (state: Pick<GameState, 'tiles' | 'unlockedPlots' | 'animals' | 'soilSeed'>): number => {
   const used = pastureUsed(state);
   if (used === 0) return 1;
   const capacity = pastureCapacity(state);
