@@ -3,6 +3,8 @@ import { PCFShadowMap } from 'three';
 import { Animals } from './Animals';
 import { Carcasses } from './Carcasses';
 import { Blueprint } from './Blueprint';
+import { FieldLabels } from './FieldLabels';
+import { SoilOverlay } from './SoilOverlay';
 import { BuildGhost } from './BuildGhost';
 import { CameraRig } from './CameraRig';
 import { Cars } from './Car';
@@ -51,6 +53,8 @@ export function GameCanvas() {
         <GrassLayer />
         <TileHighlight />
         <Blueprint />
+        <SoilOverlay />
+        <FieldLabels />
         <BuildGhost />
         <TaskMarkers />
         <Fences />

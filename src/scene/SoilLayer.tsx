@@ -4,7 +4,10 @@ import { TILE_COUNT } from '../game/grid';
 import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { hash01, indexToWorld } from './coords';
-import { PALETTE } from './palette';
+import { PALETTE, SOIL_COLORS } from './palette';
+import { usePlowProgress } from './plowing';
+import { soilAt } from '../game/soil';
+import type { SoilId } from '../data/soil';
 
 const noRaycast = () => null;
 const SOIL_TOP = -0.04;
@@ -42,11 +45,17 @@ const COLORS: Partial<Record<Tile['state'], Color>> = {
 };
 
 const FERTILIZED = new Color(PALETTE.fertilizedSoil);
+/** How much of the soil type's color shows in worked ground. */
+const TINT = 0.25;
+const SOIL_TINT = Object.fromEntries(Object.entries(SOIL_COLORS).map(([k, v]) => [k, new Color(v)])) as Record<SoilId, Color>;
+const SCALE = new Matrix4();
 
 /** Furrows on every worked tile (tilled, planted or watered), rebuilt when tiles change. */
 export function SoilLayer() {
   const ref = useRef<InstancedMesh>(null);
   const tiles = useGameStore((s) => s.game.tiles);
+  const seed = useGameStore((s) => s.game.soilSeed);
+  const plowing = usePlowProgress();
   const geometry = useMemo(buildRidges, []);
   useEffect(() => () => geometry.dispose(), [geometry]);
 
@@ -57,12 +66,18 @@ export function SoilLayer() {
     const color = new Color();
     let count = 0;
     tiles.forEach((tile, i) => {
-      const base = COLORS[tile.state];
+      // Grass being plowed shows its furrows rising with the work done.
+      const progress = tile.state === 'grass' ? plowing.get(i) : undefined;
+      const base = progress !== undefined ? COLORS.tilled : COLORS[tile.state];
       if (!base || tile.structure) return;
       const [x, z] = indexToWorld(i);
-      m.makeTranslation(x, SOIL_TOP, z);
+      m.makeTranslation(x, progress !== undefined ? 0 : SOIL_TOP, z);
+      if (progress !== undefined) m.multiply(SCALE.makeScale(1, progress, 1));
       mesh.setMatrixAt(count, m);
       color.copy(base).multiplyScalar(0.95 + hash01(i * 7) * 0.1);
+      // The soil shows a little in the worked ground (reddish terra roxa, pale sand...).
+      const soil = tile.cover ? null : soilAt(seed, i);
+      if (soil) color.lerp(SOIL_TINT[soil], TINT);
       // Fertilized soil: darker, richer furrows.
       if (tile.fertilized) color.lerp(FERTILIZED, 0.7);
       mesh.setColorAt(count, color);
@@ -72,7 +87,7 @@ export function SoilLayer() {
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [tiles]);
+  }, [tiles, seed, plowing]);
 
   return (
     <instancedMesh ref={ref} args={[geometry, undefined, TILE_COUNT]} receiveShadow castShadow raycast={noRaycast}>

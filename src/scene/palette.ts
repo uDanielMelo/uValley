@@ -148,4 +148,7 @@ export const RATING_COLORS = {
 export const PASTURE_COLORS = { low: '#d9c77a', high: '#2b8a3e' } as const;
 /** Plots not analyzed yet, and plots out of the survey's reach. */
 export const SOIL_UNKNOWN = '#9aa0a6';
+/** Field outlines in the soil view (the selected one stands out). */
+export const FIELD_LINE = '#f4efe1';
+export const FIELD_SELECTED = '#e9b93a';
 export const SOIL_OUT = '#3a3f44';
