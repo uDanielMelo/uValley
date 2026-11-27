@@ -5,6 +5,7 @@ import { BuildBanner, BuildPanel } from './BuildPanel';
 import { DriveBanner } from './DriveBanner';
 import { DevPanel } from './DevPanel';
 import { DockPanel } from './DockPanel';
+import { FieldCard } from './FieldCard';
 import { GaragePanel } from './GaragePanel';
 import { MachinesPanel } from './MachinesPanel';
 import { MarketPanel } from './MarketPanel';
@@ -89,6 +90,7 @@ export function Hud() {
           <HoverInfo />
           <StructureCard />
           <AnimalCard />
+          <FieldCard />
         </div>
         <div className="flex flex-col items-center gap-2">
           <BuildBanner />

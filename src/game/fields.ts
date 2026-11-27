@@ -74,7 +74,10 @@ export const fieldSoil = (
 };
 
 /** Known open-air crops by their average soil multiplier over the analyzed tiles, best first. */
-export const fieldRanking = (state: GameState, field: Field): { cropId: CropId; average: number }[] => {
+export const fieldRanking = (
+  state: Pick<GameState, 'surveyedPlots' | 'soilSeed' | 'research' | 'tiles'>,
+  field: Field,
+): { cropId: CropId; average: number }[] => {
   const known = surveyedTiles(state, field);
   if (known.length === 0) return [];
   const crops = state.research.unlocked.filter((c) => CROPS[c].kind !== 'greenhouse');
