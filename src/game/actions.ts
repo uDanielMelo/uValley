@@ -5,6 +5,8 @@ import { isValidTileIndex, withTile } from './grid';
 import { addCount } from './inventory';
 import { hash01 } from './random';
 import { cropRating, soilUnits, soilYield } from './soil';
+import { recordHarvest } from './fields';
+import { MINUTES_PER_DAY } from '../data/world';
 import { startOfNextDay } from './time';
 import { fail, ok, type ActionResult, type GameState, type Tile, type ToolId } from './types';
 
@@ -96,6 +98,7 @@ export const harvest = (state: GameState, index: number): ActionResult => {
     ...state,
     tiles: withTile(state.tiles, index, after),
     inventory: { ...state.inventory, produce: addCount(state.inventory.produce, crop.cropId, units) },
+    fields: recordHarvest(state.fields, index, units, soil, Math.floor(state.gameMinutes / MINUTES_PER_DAY)),
   });
 };
 
