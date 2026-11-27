@@ -54,7 +54,7 @@ const hatchTexture = (): CanvasTexture => {
 
 /**
  * Soil view: every tile painted by the chosen layer (soil type, how a crop does, pasture), plots not
- * analyzed yet hatched with a "?", plots out of the survey's reach dark, and the land around dimmed.
+ * analyzed yet hatched with a "?" and plots out of the survey's reach dark.
  */
 export function SoilOverlay() {
   const active = useGameStore((s) => s.infoView === 'soil');
@@ -73,19 +73,17 @@ function Overlay() {
 
   const tileGeometry = useMemo(() => new PlaneGeometry(1, 1).rotateX(-Math.PI / 2), []);
   const plotGeometry = useMemo(() => new PlaneGeometry(PLOT_SIZE, PLOT_SIZE).rotateX(-Math.PI / 2), []);
-  const dimGeometry = useMemo(() => new PlaneGeometry(GRID_SIZE * 6, GRID_SIZE * 6).rotateX(-Math.PI / 2), []);
   const tileMaterial = useMemo(() => new MeshBasicMaterial({ transparent: true, opacity: 0.72, depthWrite: false, toneMapped: false }), []);
   const hatch = useMemo(hatchTexture, []);
   const hatchMaterial = useMemo(
     () => new MeshBasicMaterial({ map: hatch, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }),
     [hatch],
   );
-  const dimMaterial = useMemo(() => new MeshBasicMaterial({ color: '#0d1114', transparent: true, opacity: 0.45, depthWrite: false }), []);
   useEffect(
     () => () => {
-      for (const d of [tileGeometry, plotGeometry, dimGeometry, tileMaterial, hatch, hatchMaterial, dimMaterial]) d.dispose();
+      for (const d of [tileGeometry, plotGeometry, tileMaterial, hatch, hatchMaterial]) d.dispose();
     },
-    [tileGeometry, plotGeometry, dimGeometry, tileMaterial, hatch, hatchMaterial, dimMaterial],
+    [tileGeometry, plotGeometry, tileMaterial, hatch, hatchMaterial],
   );
 
   useLayoutEffect(() => {
@@ -134,7 +132,6 @@ function Overlay() {
 
   return (
     <group>
-      <mesh geometry={dimGeometry} material={dimMaterial} position={[0, Y - 0.004, 0]} raycast={noRaycast} renderOrder={2} />
       <instancedMesh ref={tilesRef} args={[tileGeometry, tileMaterial, TILE_COUNT]} raycast={noRaycast} renderOrder={3} />
       <instancedMesh ref={hatchRef} args={[plotGeometry, hatchMaterial, PLOT_COUNT]} raycast={noRaycast} renderOrder={4} />
     </group>

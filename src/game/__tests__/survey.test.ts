@@ -8,6 +8,7 @@ import { isWalkable } from '../path';
 import { DEFAULT_SETTINGS, deserialize, serialize } from '../save';
 import { hourlyWageFor, refreshCandidates } from '../staff';
 import { canSurvey, completeSurvey, orderSurvey, surveySpot } from '../survey';
+import { hireAgronomist, setSoilSeed, surveyAll } from '../dev';
 import { createInitialState } from '../state';
 import { lastTaskOn } from '../tasks';
 import type { ActionResult, GameState, Task, Worker } from '../types';
@@ -163,3 +164,23 @@ describe('soil survey', () => {
   });
 });
 
+
+describe('soil dev tools', () => {
+  it('surveyAll marks the farm and the plots for sale next to it', () => {
+    const s = surveyAll(createInitialState(5));
+    expect(s.surveyedPlots.length).toBeGreaterThan(s.unlockedPlots.length);
+    expect(s.unlockedPlots.every((p) => s.surveyedPlots.includes(p))).toBe(true);
+    expect(s.surveyedPlots.every((p) => canSurvey(s, p))).toBe(true);
+  });
+
+  it('hireAgronomist adds a staff agronomist', () => {
+    const s0 = createInitialState();
+    const s = hireAgronomist(s0);
+    expect(s.workers).toHaveLength(s0.workers.length + 1);
+    expect(s.workers.at(-1)?.skills).toContain('agronomy');
+  });
+
+  it('setSoilSeed swaps the map', () => {
+    expect(setSoilSeed(createInitialState(), 77).soilSeed).toBe(77);
+  });
+});

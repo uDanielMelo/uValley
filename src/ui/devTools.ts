@@ -32,6 +32,9 @@ import {
   layFenceLine,
   addMachine,
   hireOperator,
+  hireAgronomist,
+  setSoilSeed,
+  surveyAll,
   wearMachines,
   repairMachines,
   expireRentals,
@@ -91,6 +94,9 @@ const HELP = `uValley — comandos de dev (use no console):
   dev.field('hoe'|'hand') campo de teste 8×4 perto da casa: arar a grama ou colher trigo maduro
   dev.machines()       abre a Revenda de máquinas
   dev.drive()          dirige a primeira máquina livre com W A S D (Esc sai)
+  dev.soil()           todos os lotes (e os vizinhos à venda) analisados
+  dev.agronomist()     contrata um agrônomo grátis
+  dev.soilSeed(n)      troca o mapa de solo (null: solo uniforme)
   dev.state()            mostra o estado atual do jogo
   Painel visual: tecla F2`;
 
@@ -172,6 +178,9 @@ const devApi = {
     apply((g) => addMachine(g, type, rented), `${type === 'tractor' ? 'Trator' : 'Colheitadeira'}${rented ? ' alugado(a)' : ''} na vaga`),
   wear: (points = 30) => apply((g) => wearMachines(g, points), `Máquinas −${points} de estado`),
   operator: () => apply(hireOperator, 'Operador de máquinas contratado'),
+  soil: () => apply(surveyAll, 'Solo analisado em todos os lotes'),
+  agronomist: () => apply(hireAgronomist, 'Agrônomo contratado'),
+  soilSeed: (seed: number | null = 1) => apply((g) => setSoilSeed(g, seed), `Mapa de solo: semente ${seed ?? 'nenhuma'}`),
   repair: () => apply(repairMachines, 'Máquinas consertadas'),
   expire: () => apply(expireRentals, 'Aluguéis encerrados'),
   field: (work: 'hoe' | 'hand' = 'hoe') => {

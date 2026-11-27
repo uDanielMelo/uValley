@@ -192,6 +192,16 @@ export function DevPanel() {
             <DevButton onClick={dev.machines}>🏪 Abrir revenda</DevButton>
           </Section>
 
+          <Section title="Solo">
+            <DevButton onClick={dev.soil} title="Todos os lotes e os vizinhos à venda analisados">
+              🔬 Analisar tudo
+            </DevButton>
+            <DevButton onClick={dev.agronomist}>🧑‍🔬 Agrônomo</DevButton>
+            <DevButton onClick={() => dev.soilSeed(Math.floor(Math.random() * 100000) + 1)} title="Sorteia outro mapa de solo">
+              🎲 Outro mapa
+            </DevButton>
+          </Section>
+
           <Section title="Clima">
             <DevButton onClick={() => dev.weather('sunny')}>☀️ Sol</DevButton>
             <DevButton onClick={() => dev.weather('cloudy')}>☁️ Nublado</DevButton>
