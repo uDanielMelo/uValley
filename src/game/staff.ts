@@ -6,6 +6,7 @@ import {
   DEFAULT_PRIORITIES,
   HARVEST_BONUS,
   MACHINERY_WAGE,
+  AGRONOMY_WAGE,
   MAX_AGE,
   MAX_WORKERS,
   MIN_AGE,
@@ -57,7 +58,10 @@ export const ageBand = (age: number): AgeBand => {
 };
 
 export const hourlyWageFor = (stars: Stars, specialty: Specialty | null, skills: readonly SkillId[] = []): number =>
-  STAR_LEVELS[stars].hourlyWage + (specialty ? SPECIALTY_WAGE : 0) + (skills.includes('machinery') ? MACHINERY_WAGE : 0);
+  STAR_LEVELS[stars].hourlyWage +
+  (specialty ? SPECIALTY_WAGE : 0) +
+  (skills.includes('machinery') ? MACHINERY_WAGE : 0) +
+  (skills.includes('agronomy') ? AGRONOMY_WAGE : 0);
 
 /** What a task is about, for skill and specialty matching. */
 export interface TaskContext {
@@ -199,11 +203,28 @@ export const rollCandidates = (day: number, firstId: number, usedNames: Iterable
   return result;
 };
 
-/** Renews the hiring board (at midnight). */
+/**
+ * Renews the hiring board (at midnight). While no staff member is an agronomist, the board always
+ * has one (the first candidate's main skill becomes agronomy), so the soil can be surveyed.
+ */
 export const refreshCandidates = (state: GameState): GameState => {
   const day = Math.floor(state.gameMinutes / MINUTES_PER_DAY);
-  const candidates = rollCandidates(day, state.nextId, state.workers.map((w) => w.name));
+  const rolled = rollCandidates(day, state.nextId, state.workers.map((w) => w.name));
+  const needed =
+    !state.workers.some((w) => w.kind === 'staff' && w.skills.includes('agronomy')) &&
+    !rolled.some((c) => c.skills.includes('agronomy'));
+  const candidates = needed ? rolled.map((c, i) => (i === 0 ? asAgronomist(c) : c)) : rolled;
   return { ...state, candidates, nextId: state.nextId + candidates.length };
+};
+
+const asAgronomist = (c: Candidate): Candidate => {
+  const skills: SkillId[] = ['agronomy', ...c.skills.slice(1).filter((s) => s !== 'agronomy')];
+  // Specialties follow the skills (crops for farming, animals for animal care).
+  const specialty =
+    c.specialty?.kind === 'crop' && !skills.includes('farming') ? null
+    : c.specialty?.kind === 'animal' && !skills.includes('animals') ? null
+    : c.specialty;
+  return { ...c, skills, specialty, hourlyWage: hourlyWageFor(c.stars, specialty, skills) };
 };
 
 // ---------- workers ----------
@@ -243,14 +264,18 @@ export const tempCount = (state: GameState): number =>
   state.workers.filter((w) => w.kind === 'temp' && w.rentalId === undefined).length;
 export const freeBeds = (state: GameState): number => bedCount(state) - staffCount(state);
 
-/** Releases a worker's task back to the queue. */
-export const unassign = (tasks: readonly Task[], workerId: number): Task[] =>
-  tasks.map((t) => (t.workerId === workerId ? { ...t, workerId: null } : t));
+/** Releases a worker's task back to the queue; plowing keeps the work done so far on the task. */
+export const unassign = (tasks: readonly Task[], worker: Pick<Worker, 'id' | 'progress'>): Task[] =>
+  tasks.map((t) => {
+    if (t.workerId !== worker.id) return t;
+    if (t.kind === 'hoe' && worker.progress > 0) return { ...t, workerId: null, done: worker.progress };
+    return { ...t, workerId: null };
+  });
 
 export const removeWorkers = (state: GameState, leaving: ReadonlySet<number>): GameState => {
   if (leaving.size === 0) return state;
   let tasks = state.tasks;
-  for (const id of leaving) tasks = unassign(tasks, id);
+  for (const w of state.workers) if (leaving.has(w.id)) tasks = unassign(tasks, w);
   // A machine whose driver leaves goes straight back to its slot.
   const machines = state.machines.some((m) => m.driverId !== undefined && leaving.has(m.driverId))
     ? state.machines.map((m) => {
@@ -348,7 +373,7 @@ export const setPriorities = (state: GameState, workerId: number, priorities: re
   const dropped = current !== undefined && !clean.includes(current.kind);
   return ok({
     ...state,
-    tasks: dropped ? unassign(state.tasks, workerId) : state.tasks,
+    tasks: dropped ? unassign(state.tasks, worker) : state.tasks,
     workers: state.workers.map((w) =>
       w.id !== workerId ? w : { ...w, priorities: clean, ...(dropped ? { taskId: null, path: [], progress: 0 } : {}) },
     ),

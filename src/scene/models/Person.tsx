@@ -88,6 +88,12 @@ function Tools({ tools }: { tools: PersonRig['tools'] }) {
       <group ref={tools.haul} visible={false}>
         <Box size={[0.2, 0.13, 0.15]} position={[-0.05, -0.08, 0.12]} color={CRATE} />
       </group>
+      <group ref={tools.survey} visible={false}>
+        {/* Soil auger: a T handle on a long rod, and a sample bag. */}
+        <Box size={[0.02, 0.55, 0.02]} position={[0, -0.12, 0.05]} color={METAL} />
+        <Box size={[0.18, 0.02, 0.02]} position={[0, 0.15, 0.05]} color={WOOD} />
+        <Box size={[0.07, 0.08, 0.05]} position={[-0.08, -0.1, 0.02]} color={SACK} />
+      </group>
       <group ref={tools.build} visible={false}>
         <Box size={[0.022, 0.2, 0.022]} position={[0, -0.03, 0.06]} color={WOOD} rotation={[1.3, 0, 0]} />
         <Box size={[0.05, 0.05, 0.1]} position={[0, -0.06, 0.15]} color={METAL} rotation={[1.3, 0, 0]} />

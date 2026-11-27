@@ -258,3 +258,25 @@ na vaga, faz as tarefas da fila 5× mais rápido e anda 2× mais rápido, e devo
 comprar, vender pelo estado, alugar 1/3/7 dias com ou sem operador, devolver. Desgaste e diesel por hora de uso; abaixo de 30%
 fica mais lenta e em 0 quebra; mecânico da cidade pelo dobro, de volta às 6h. Save v24. Decidido por mim: a máquina substitui
 o bônus de boi e cavalo, não entra em estufa nem pomar, aparece direto na vaga e o diesel é cobrado em moedas, sem estoque.
+
+## Foco em plantio (etapa 11, pedido do usuário)
+
+Objetivo: o plantio ter realismo e premiar quem joga com cuidado (analisa a terra e planeja onde plantar). O começo do
+jogo é pela criação de animais; o plantio vem depois.
+
+### Etapa 11a: solo, análise e talhões ✅
+Desenho e plano em `docs/superpowers/specs/2026-11-27-soil-design.md` e `docs/superpowers/plans/2026-11-27-soil.md`.
+
+Feito: solo sorteado em manchas por fazenda (terra roxa, argiloso, arenoso, várzea, pedregoso), fixo e derivado de uma
+semente. Cada cultura rende ×2 a ×0,5 conforme o solo, ou murcha na metade no péssimo; plantar no escuro rende, em média,
+o de antes. O pasto também varia (×0,5 a ×1,5). Arar leva 150 min × o fator do solo, com o progresso guardado na tarefa.
+Agrônomo (🔬 Agronomia) analisa lote a lote, inclusive o vizinho à venda; o quadro garante um candidato. Visão do solo
+(tecla O) com camadas de tipo, plantio por cultura e pasto; talhões com nome e card com o ranking das culturas e a última
+colheita. Save v25.
+
+### Próximas etapas do plantio (ideias combinadas, ordem a decidir)
+- Sementes iniciais voltadas aos animais (o começo do jogo).
+- Umidade do solo contínua, irrigação fixa e pivô central.
+- Implementos do trator (plantadeira, pulverizador, distribuidor), manobra conforme o formato do talhão, compactação.
+- Plano de safra automático por talhão.
+- Qualidade e ponto de colheita, pragas, geada.

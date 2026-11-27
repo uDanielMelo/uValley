@@ -18,6 +18,7 @@ import type { ShelterLevel, StructureId } from '../data/structures';
 import { hasRoadAccess, refundFor } from './structures';
 import { stepWorkers } from './workers';
 import { endRentals, repairAtWorkshops, stepMachines, type MachineEvent } from './machines';
+import { witherCrops } from './soil';
 
 export interface TickResult {
   state: GameState;
@@ -50,6 +51,10 @@ export interface TickResult {
   dockEvents: DockEvent[];
   /** Rented machines taken back at the end of the rental. */
   machineEvents: MachineEvent[];
+  /** Crops that withered on bad soil, by crop. */
+  withered: Partial<Record<CropId, number>>;
+  /** Plots whose soil survey just finished. */
+  surveyed: number[];
 }
 
 export interface FinishedWork {
@@ -108,12 +113,16 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
       researched: null,
       dockEvents: [],
       machineEvents: [],
+      withered: {},
+      surveyed: [],
     };
   }
   const gameMinutes = state.gameMinutes + dtMinutes;
   const from = Math.floor(state.gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const to = Math.floor(gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
-  const tiles = to > from ? growTiles(state.tiles, from, to) : state.tiles;
+  // Crops on bad soil wither once they are half grown.
+  const grown = to > from ? witherCrops(state.tiles, growTiles(state.tiles, from, to), state.soilSeed) : { tiles: state.tiles, withered: {} };
+  const tiles = grown.tiles;
   const worked = stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes);
   const rentals = endRentals(worked);
   const upkeep = stepMachines(rentals.state, dtMinutes);
@@ -188,6 +197,8 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
     predatorAttacks: health.attacks,
     weatherReports,
     spoiled,
+    withered: grown.withered,
+    surveyed: next.surveyedPlots.filter((p) => !state.surveyedPlots.includes(p)),
   };
 };
 

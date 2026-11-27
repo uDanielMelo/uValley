@@ -4,6 +4,9 @@ import { isMature } from './crops';
 import { isValidTileIndex, withTile } from './grid';
 import { addCount } from './inventory';
 import { hash01 } from './random';
+import { cropRating, soilUnits, soilYield } from './soil';
+import { recordHarvest } from './fields';
+import { MINUTES_PER_DAY } from '../data/world';
 import { startOfNextDay } from './time';
 import { fail, ok, type ActionResult, type GameState, type Tile, type ToolId } from './types';
 
@@ -81,6 +84,9 @@ export const harvest = (state: GameState, index: number): ActionResult => {
   if (!crop) return fail('no-crop');
   if (!isMature(crop)) return fail('not-mature');
   const extra = check.tile.fertilized && hash01(index * 977 + Math.floor(state.gameMinutes) * 13 + 3) < FERTILIZER.harvestBonus;
+  // The soil sets the base yield: up to ×2 on great soil, maybe nothing on poor soil.
+  const soil = soilYield(cropRating(state.soilSeed, check.tile, index, crop.cropId));
+  const units = soilUnits(soil, hash01(index * 1543 + Math.floor(state.gameMinutes) * 31 + 11)) + (extra ? 1 : 0);
   // An orchard tree stays and fruits again after its regrow time.
   const regrow = CROPS[crop.cropId].regrowHours;
   const cover = check.tile.cover ? { cover: true as const } : {};
@@ -91,7 +97,8 @@ export const harvest = (state: GameState, index: number): ActionResult => {
   return ok({
     ...state,
     tiles: withTile(state.tiles, index, after),
-    inventory: { ...state.inventory, produce: addCount(state.inventory.produce, crop.cropId, extra ? 2 : 1) },
+    inventory: { ...state.inventory, produce: addCount(state.inventory.produce, crop.cropId, units) },
+    fields: recordHarvest(state.fields, index, units, soil, Math.floor(state.gameMinutes / MINUTES_PER_DAY)),
   });
 };
 

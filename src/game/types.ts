@@ -259,7 +259,9 @@ export type TaskJob =
   /** Leading an animal marked for sale to a loading pen ('tend'); the task tile is where it was. */
   | { type: 'herd'; animalId: number; penId: number }
   /** Loading a vehicle at the dock ('haul'); the task tile is the bay's tile, `slot` the loader's spot. */
-  | { type: 'shipment'; shipmentId: number; slot: number };
+  | { type: 'shipment'; shipmentId: number; slot: number }
+  /** Analyzing the soil of a plot ('survey'); the task tile is where the agronomist works. */
+  | { type: 'survey'; plot: number };
 
 /** A queued order on a tile, executed by a worker. */
 export interface Task {
@@ -270,8 +272,10 @@ export interface Task {
   cropId: CropId | null;
   /** Worker currently assigned, if any. */
   workerId: number | null;
-  /** Present on (and only on) 'build', 'tend' and 'haul' tasks. */
+  /** Present on (and only on) 'build', 'tend', 'haul' and 'survey' tasks. */
   job?: TaskJob;
+  /** Plowing ('hoe') only: work minutes (at speed 1) already done, kept when the worker lets go. */
+  done?: number;
 }
 
 /** Staff live in the bunkhouse and earn an hourly wage; day laborers ('temp') leave at the end of the shift. */
@@ -420,8 +424,26 @@ export interface GameState {
   held: HeldPurchase[];
   /** Automatic feed orders: on or off, and how many days of feed to keep. */
   feedOrder: { auto: boolean; days: number };
+  /** Seed the farm's soil is derived from (game/soil.ts); null = uniform soil (tests). */
+  soilSeed: number | null;
+  /** Plots (plotIndex) whose soil an agronomist has analyzed. */
+  surveyedPlots: number[];
+  /** Named fields drawn by the player (organization only: they block nothing). */
+  fields: Field[];
   /** Next id for tasks, workers, candidates, animals, carcasses, structures and shipments. */
   nextId: number;
+}
+
+/** A named rectangle of farm land, with the harvests of the last day it was harvested. */
+export interface Field {
+  id: number;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** `soil` sums the soil multipliers of the tiles harvested that day (average = soil / tiles). */
+  lastHarvest?: { day: number; units: number; tiles: number; soil: number };
 }
 
 /** A tractor or harvester, parked in a shed or parking lot (`parkId`) at a bay (`slot`). */
@@ -443,7 +465,7 @@ export interface Machine {
 
 export type ToolId = 'hoe' | 'seed' | 'water' | 'hand' | 'fertilize';
 /** Kinds of queued work: the farm tools, animal care, construction and loading at the dock. */
-export type TaskKind = ToolId | 'tend' | 'build' | 'haul';
+export type TaskKind = ToolId | 'tend' | 'build' | 'haul' | 'survey';
 
 export type ActionError =
   | 'out-of-bounds'
@@ -498,6 +520,12 @@ export type ActionError =
   | 'already-researched'
   | 'no-water-needed'
   | 'not-sick'
+  | 'already-surveyed'
+  | 'cannot-survey'
+  | 'field-overlap'
+  | 'field-not-owned'
+  | 'field-name-empty'
+  | 'no-field'
   | 'no-shipment'
   | 'not-enough-goods'
   | 'no-listing'

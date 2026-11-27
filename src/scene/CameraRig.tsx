@@ -48,8 +48,8 @@ type DragMode = 'pan' | 'rotate' | null;
 
 /** With the hand (no order tool, not building) the left button drags the camera too. */
 const handMode = (): boolean => {
-  const { tool, buildMode } = useGameStore.getState();
-  return tool === null && buildMode === null;
+  const { tool, buildMode, soilTool } = useGameStore.getState();
+  return tool === null && buildMode === null && soilTool === null;
 };
 
 /**

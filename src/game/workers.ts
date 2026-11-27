@@ -28,12 +28,16 @@ import { findPath, isWalkable } from './path';
 import { hash01 } from './random';
 import { gainMastery, harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
 import { applyTask, lastTaskOn, projectTasks } from './tasks';
+import { plowFactor } from './soil';
+import { surveySpot } from './survey';
+import { SOIL_SURVEY } from '../data/soil';
 import {
   type ActionError,
   type GameState,
   type GridPoint,
   type Machine,
   type Task,
+  type Tile,
   type TaskKind,
   type ToolId,
   type Worker,
@@ -183,7 +187,10 @@ export const clearTasks = (state: GameState): GameState => repairHaulTasks(cance
 
 /** Queued task kinds that no worker has in their list (they would wait forever). */
 export const unstaffedKinds = (state: GameState): TaskKind[] => {
-  const covered = new Set(state.workers.flatMap((w) => w.priorities));
+  // Surveys need an agronomist who has them in the list.
+  const covered = new Set(
+    state.workers.flatMap((w) => (w.skills.includes('agronomy') ? w.priorities : w.priorities.filter((k) => k !== 'survey'))),
+  );
   return [...new Set(state.tasks.map((t) => t.kind))].filter((k) => !covered.has(k));
 };
 
@@ -233,21 +240,35 @@ export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoi
     return dock ? loaderSpot(dock, shipment?.bay ?? 0, job.slot) : tileCenter(task.tile);
   }
   if (job?.type === 'fence') return besideTile(state, task.tile, from);
+  if (job?.type === 'survey') {
+    // The stored tile may have been built over since the order: look for a free spot again.
+    const spot = surveySpot(state, job.plot);
+    return tileCenter(spot ?? task.tile);
+  }
   if (job?.type !== 'structure' && job?.type !== 'shelter') return tileCenter(task.tile);
   const site = state.structures.find((s) => s.id === job.structureId);
   return (site && workSpot(state, site, task.tile, from)) ?? tileCenter(task.tile);
 };
 
 /** Work minutes (at speed 1) of a task that is done in one go (structure work and loading accumulate). */
-export const taskMinutes = (task: Task): number => {
+export const taskMinutes = (task: Task, soilSeed: number | null, tiles: readonly Tile[]): number => {
   if (task.kind === 'haul') return 1;
+  if (task.kind === 'survey') return SOIL_SURVEY.minutes;
   if (task.kind === 'tend') return careMinutes(task.job) ?? COLLECT_MINUTES;
   if (task.kind === 'build') {
     if (task.job?.type === 'fence') return fenceTaskMinutes(task.job);
     return roadTaskMinutes(task.job?.type === 'road' && task.job.remove);
   }
+  if (task.kind === 'hoe') {
+    const tile = tiles[task.tile];
+    return TASK_MINUTES.hoe * (tile ? plowFactor(soilSeed, tile, task.tile) : 1);
+  }
   return TASK_MINUTES[task.kind];
 };
+
+/** How far along a plowing task is from the work kept on it (0–1), for the scene. */
+export const hoeProgress = (task: Task, soilSeed: number | null, tiles: readonly Tile[]): number =>
+  Math.min(1, (task.done ?? 0) / taskMinutes(task, soilSeed, tiles));
 
 /** How far along a worker's current job is (0–1): the whole site for structure work. Null when idle. */
 export const taskProgress = (state: GameState, worker: Worker): number | null => {
@@ -262,7 +283,7 @@ export const taskProgress = (state: GameState, worker: Worker): number | null =>
     const work = state.shipments.find((s) => s.id === job.shipmentId)?.work;
     return work && work.total > 0 ? Math.min(1, work.done / work.total) : null;
   }
-  return Math.min(1, worker.progress / taskMinutes(task));
+  return Math.min(1, worker.progress / taskMinutes(task, state.soilSeed, state.tiles));
 };
 
 /**
@@ -273,7 +294,8 @@ const availableTasks = (tasks: readonly Task[]): Task[] => {
   const seen = new Set<number>();
   const result: Task[] = [];
   for (const task of tasks) {
-    if (task.kind === 'haul') {
+    // Loaders and soil surveys never change their tile, so they do not wait for its queue.
+    if (task.kind === 'haul' || task.kind === 'survey') {
       if (task.workerId === null) result.push(task);
       continue;
     }
@@ -296,6 +318,8 @@ const bestTask = (worker: Worker, tasks: readonly Task[], fits?: (task: Task) =>
     const rank = worker.priorities.indexOf(task.kind);
     if (rank < 0 || rank > bestRank) continue;
     if (fits && !fits(task)) continue;
+    // Only agronomists survey the soil.
+    if (task.kind === 'survey' && !worker.skills.includes('agronomy')) continue;
     const c = tileCenter(task.tile);
     const d = Math.hypot(c.x - worker.x, c.y - worker.y);
     if (rank < bestRank || d < bestDistance) {
@@ -320,7 +344,9 @@ export const taskContext = (state: GameState, task: Pick<Task, 'kind' | 'tile' |
     }
     return { kind: task.kind, cropId: null, animalId: job?.type === 'shelter' ? mainSpecies(state, job.structureId) : null };
   }
-  if (task.kind === 'hoe' || task.kind === 'build' || task.kind === 'haul') return { kind: task.kind, cropId: null };
+  if (task.kind === 'hoe' || task.kind === 'build' || task.kind === 'haul' || task.kind === 'survey') {
+    return { kind: task.kind, cropId: null };
+  }
   return { kind: task.kind, cropId: state.tiles[task.tile]?.crop?.cropId ?? null };
 };
 
@@ -455,13 +481,13 @@ export const stepWorkers = (input: GameState, minutes: number): GameState => {
       const taskId = w.taskId;
       const task = tasks.find((t) => t.id === taskId);
       if (!workTime || mustPark(world, machine) || !task || !machineCanDo(world, machine.type, task)) {
-        tasks = unassign(tasks, w.id);
+        tasks = unassign(tasks, w);
         w = { ...w, taskId: null, path: [], progress: 0 };
       }
     }
 
     if (!workTime && w.taskId !== null) {
-      tasks = unassign(tasks, w.id);
+      tasks = unassign(tasks, w);
       w = { ...w, taskId: null, path: [], progress: 0 };
     }
     const mounted = machine && w.riding ? machine : undefined;
@@ -471,7 +497,8 @@ export const stepWorkers = (input: GameState, minutes: number): GameState => {
       if (task) {
         const workerId = w.id;
         tasks = tasks.map((t) => (t.id === task.id ? { ...t, workerId } : t));
-        w = { ...w, taskId: task.id, progress: 0 };
+        // Plowing picks up where the last worker left it.
+        w = { ...w, taskId: task.id, progress: task.done ?? 0 };
         const fetch = !mounted && isOperator(w) ? availableMachine(world, w, task) : undefined;
         const boarding = fetch ? machineBoarding(world, fetch) : null;
         if (fetch && boarding) {
@@ -534,7 +561,7 @@ export const stepWorkers = (input: GameState, minutes: number): GameState => {
         }
       } else {
         const progress = w.progress + work;
-        if (progress >= taskMinutes(task)) {
+        if (progress >= taskMinutes(task, world.soilSeed, world.tiles)) {
           const result = applyTask({ ...world, tasks, workers }, task);
           if (result.ok) world = effectivenessBonus(result.state, w, task, context);
           // A road that can no longer be opened gives its money back.

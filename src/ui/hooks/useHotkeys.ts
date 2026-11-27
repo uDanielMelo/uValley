@@ -47,6 +47,9 @@ export function useHotkeys(): void {
         case 'v':
           store.openDock();
           break;
+        case 'o':
+          if (!inTown) store.toggleSoilView();
+          break;
         case 'b':
           if (!inTown) store.openPanel('build');
           break;
@@ -64,6 +67,10 @@ export function useHotkeys(): void {
         }
         case 'escape':
           if (store.joyride !== null) store.stopJoyride();
+          else if (store.fieldDrag) store.cancelField();
+          else if (store.infoView === 'soil' && store.soilTool !== null) store.setSoilTool(null);
+          else if (store.infoView === 'soil' && store.selectedField !== null) store.selectField(null);
+          else if (store.infoView === 'soil') store.closeSoilView();
           else if (store.fenceDrag) store.cancelFence();
           else if (store.area) store.cancelArea();
           else if (store.pendingPlot !== null) store.requestPlot(null);

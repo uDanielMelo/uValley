@@ -126,3 +126,29 @@ export const MACHINE_COLORS = {
   signMark: '#e9e1c9',
   gravel: '#a8a091',
 } as const;
+
+/** Soil view: one color per soil type, per rating and the pasture scale (also used by the HUD legend). */
+export const SOIL_COLORS = {
+  terraRoxa: '#a8442f',
+  clay: '#8a6a45',
+  sandy: '#e2c98a',
+  floodplain: '#3f8f88',
+  stony: '#8d8d88',
+} as const;
+
+export const RATING_COLORS = {
+  great: '#2f9e44',
+  good: '#94c94a',
+  neutral: '#e8d36a',
+  poor: '#e8913a',
+  bad: '#c92a2a',
+} as const;
+
+/** Pasture factor scale: poorest to richest. */
+export const PASTURE_COLORS = { low: '#d9c77a', high: '#2b8a3e' } as const;
+/** Plots not analyzed yet, and plots out of the survey's reach. */
+export const SOIL_UNKNOWN = '#9aa0a6';
+/** Field outlines in the soil view (the selected one stands out). */
+export const FIELD_LINE = '#f4efe1';
+export const FIELD_SELECTED = '#e9b93a';
+export const SOIL_OUT = '#3a3f44';

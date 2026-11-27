@@ -112,6 +112,11 @@ const workPose = (kind: TaskKind, t: number): Pose => {
       const arms = -0.7 - lift * 0.6;
       return { legL: -0.25, legR: 0.25, armL: arms, armR: arms, bend: 0.75 - lift * 0.6, bob: -0.05 * (1 - lift) };
     }
+    case 'survey': {
+      // Twisting the auger into the ground, both hands on the handle.
+      const twist = Math.sin(t * 3) * 0.15;
+      return { legL: -0.2, legR: 0.2, armL: -1.2 + twist, armR: -1.2 - twist, bend: 0.35, bob: 0 };
+    }
   }
 };
 
@@ -141,6 +146,7 @@ function WorkerFigure({ id }: { id: number }) {
         tend: createRef<Group>(),
         build: createRef<Group>(),
         haul: createRef<Group>(),
+        survey: createRef<Group>(),
       },
     }),
     [],

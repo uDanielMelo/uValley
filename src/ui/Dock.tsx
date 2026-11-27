@@ -174,6 +174,8 @@ function FarmDock() {
   const setOpen = useGameStore((s) => s.setActivitiesOpen);
   const setBuildMode = useGameStore((s) => s.setBuildMode);
   const openPanel = useGameStore((s) => s.openPanel);
+  const soilView = useGameStore((s) => s.infoView === 'soil');
+  const toggleSoilView = useGameStore((s) => s.toggleSoilView);
   const current = TOOLS.find((t) => t.id === tool);
   return (
     <div className="flex flex-col items-center gap-2">
@@ -184,10 +186,11 @@ function FarmDock() {
           icon="✋"
           label="Mão"
           hotkey="H"
-          active={tool === null && !building && !open}
+          active={tool === null && !building && !open && !soilView}
           onClick={() => {
             setTool(null);
             setBuildMode(null);
+            if (soilView) toggleSoilView();
           }}
         />
         <span className="h-8 w-px bg-wood/20" aria-hidden />
@@ -201,6 +204,7 @@ function FarmDock() {
         />
         <DockButton icon="🔨" label="Construir" hotkey="B" active={building} onClick={() => openPanel('build')} />
         <DockShortcut />
+        <DockButton icon="🔬" label="Solo" hotkey="O" active={soilView} onClick={toggleSoilView} title="Visão do solo: analisar a terra e marcar talhões (O)" />
         <span className="h-8 w-px bg-wood/20" aria-hidden />
         <DockButton icon="🏙️" label="Cidade" hotkey="C" active={false} onClick={goToCity} />
       </Card>

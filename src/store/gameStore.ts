@@ -44,7 +44,10 @@ import { TOWN_SHOPS, VEHICLES } from '../data/market';
 import { seasonOf, weatherLook } from '../game/climate';
 import { advanceGame, type FinishedWork } from '../game/simulation';
 import type { Spoiled } from '../game/storage';
-import { createInitialState } from '../game/state';
+import { createInitialState, newSoilSeed } from '../game/state';
+import { canSurvey, hasAgronomist, orderSurvey, surveyedTypes } from '../game/survey';
+import { addField, fieldAt, removeField as removeFieldAction, renameField as renameFieldAction } from '../game/fields';
+import { SOILS, SOIL_SURVEY } from '../data/soil';
 import { cancelLoading, dismissShipment, startLoading, type DockEvent } from '../game/shipments';
 import { bayPoint, docksOf } from '../game/dock';
 import { anchorFor, structureAt } from '../game/structures';
@@ -100,6 +103,12 @@ export interface PredatorSighting {
   at: number;
 }
 
+export type SoilLayer = 'type' | 'crop' | 'pasture';
+export type SoilTool = 'survey' | 'field' | null;
+
+/** What opening the soil view (or another mode that replaces it) clears. */
+const SOIL_VIEW_OFF = { infoView: null, soilTool: null, fieldDrag: null, selectedField: null } as const;
+
 export interface GameStore {
   game: GameState;
   settings: SaveSettings;
@@ -126,6 +135,30 @@ export interface GameStore {
   fenceDrag: FenceDrag | null;
   /** Worker whose card is open in the team hub. */
   selectedWorker: number | null;
+  /** Soil view (a map of the soil over the farm), its layer, crop and tool. Not saved. */
+  infoView: 'soil' | null;
+  soilLayer: SoilLayer;
+  soilCrop: CropId;
+  soilTool: SoilTool;
+  fieldDrag: AreaDrag | null;
+  selectedField: number | null;
+  /** Opens the soil view, or closes it when it is open. */
+  toggleSoilView: () => void;
+  closeSoilView: () => void;
+  setSoilLayer: (layer: SoilLayer) => void;
+  setSoilCrop: (crop: CropId) => void;
+  /** Picks a soil view tool (the active one again: none). */
+  setSoilTool: (tool: SoilTool) => void;
+  /** Survey tool on a tile: 'toggle' orders or cancels the plot's survey (click), 'order' only orders (drag). */
+  surveyAt: (tile: number, mode: 'toggle' | 'order') => void;
+  /** New field tool: press, drag, release. */
+  beginField: (tile: number) => void;
+  extendField: (tile: number) => void;
+  finishField: () => void;
+  cancelField: () => void;
+  selectField: (id: number | null) => void;
+  renameField: (id: number, name: string) => void;
+  removeField: (id: number) => void;
 
   advance: (realSeconds: number) => void;
   interactAt: (tile: number) => void;
@@ -304,6 +337,12 @@ export const ERROR_MESSAGES: Record<ActionError, string> = {
   'not-researched': 'Pesquise esta cultura antes de comprar as sementes.',
   researching: 'Já há uma pesquisa em andamento.',
   'already-researched': 'Esta cultura já é conhecida.',
+  'already-surveyed': 'Esse lote já foi analisado.',
+  'cannot-survey': 'Só dá para analisar lotes da fazenda ou vizinhos à venda.',
+  'field-overlap': 'Esse talhão encosta em outro.',
+  'field-not-owned': 'O talhão precisa ficar na terra da fazenda.',
+  'field-name-empty': 'Dê um nome ao talhão.',
+  'no-field': 'Esse talhão não existe mais.',
   'no-water-needed': 'Não precisa regar: árvores do pomar e plantas na estufa se viram sozinhas.',
   'not-sick': 'Este animal não está doente.',
   'no-shipment': 'Este veículo não está mais esperando na doca.',
@@ -549,7 +588,7 @@ export const useGameStore = create<GameStore>()(
     };
 
     return {
-      game: loaded?.game ?? createInitialState(),
+      game: loaded?.game ?? createInitialState(newSoilSeed()),
       settings: loaded?.settings ?? DEFAULT_SETTINGS,
       tool: null,
       selectedStructure: null,
@@ -574,6 +613,73 @@ export const useGameStore = create<GameStore>()(
       area: null,
       fenceDrag: null,
       selectedWorker: null,
+      infoView: null,
+      soilLayer: 'type',
+      soilCrop: 'wheat',
+      soilTool: null,
+      fieldDrag: null,
+      selectedField: null,
+      toggleSoilView: () => {
+        if (get().infoView === 'soil') {
+          set(SOIL_VIEW_OFF);
+          return;
+        }
+        set({
+          infoView: 'soil',
+          tool: null,
+          buildMode: null,
+          panel: null,
+          area: null,
+          fenceDrag: null,
+          activitiesOpen: false,
+          selectedStructure: null,
+          selectedAnimal: null,
+        });
+      },
+      closeSoilView: () => set(SOIL_VIEW_OFF),
+      setSoilLayer: (soilLayer) => set({ soilLayer }),
+      setSoilCrop: (soilCrop) => set({ soilCrop, soilLayer: 'crop' }),
+      setSoilTool: (soilTool) => set((s) => ({ soilTool: soilTool === s.soilTool ? null : soilTool, fieldDrag: null })),
+      surveyAt: (tile, mode) => {
+        const { game } = get();
+        const plot = plotOfTile(tile);
+        const queued = game.tasks.some((t) => t.job?.type === 'survey' && t.job.plot === plot);
+        if (mode === 'order' && (queued || game.surveyedPlots.includes(plot) || !canSurvey(game, plot))) return;
+        const result = orderSurvey(game, plot);
+        if (!result.ok) {
+          if (mode === 'toggle') get().showMessage(ERROR_MESSAGES[result.error], 'error');
+          return;
+        }
+        set({ game: result.state });
+        if (queued) get().showMessage(`Análise cancelada: +${SOIL_SURVEY.cost} moedas.`, 'info');
+        else if (!hasAgronomist(result.state)) get().showMessage('Análise na fila. Contrate um agrônomo (🔬) para fazer a análise.', 'error');
+        else get().showMessage(`🔬 Análise na fila (${SOIL_SURVEY.cost} moedas): o agrônomo vai colher as amostras.`, 'info');
+      },
+      beginField: (tile) => set({ fieldDrag: { anchor: tile, current: tile } }),
+      extendField: (tile) => {
+        const { fieldDrag } = get();
+        if (fieldDrag && fieldDrag.current !== tile) set({ fieldDrag: { ...fieldDrag, current: tile } });
+      },
+      finishField: () => {
+        const { fieldDrag, game } = get();
+        if (!fieldDrag) return;
+        set({ fieldDrag: null });
+        const result = addField(game, fieldDrag.anchor, fieldDrag.current);
+        if (!result.ok) {
+          get().showMessage(ERROR_MESSAGES[result.error], 'error');
+          return;
+        }
+        set({ game: result.state, selectedField: game.nextId, soilTool: null });
+        get().showMessage('Talhão criado: dê um nome a ele no card.', 'info');
+      },
+      cancelField: () => set({ fieldDrag: null }),
+      selectField: (selectedField) => set({ selectedField }),
+      renameField: (id, name) => {
+        commit(renameFieldAction(get().game, id, name));
+      },
+      removeField: (id) => {
+        if (commit(removeFieldAction(get().game, id), 'Talhão apagado.')) set({ selectedField: null });
+      },
 
       advance: (realSeconds) => {
         const { settings, game, devTimeScale } = get();
@@ -600,6 +706,15 @@ export const useGameStore = create<GameStore>()(
           get().showMessage(`🔬 Pesquisa concluída: ${crop.icon} ${crop.label} já pode ser plantado(a).`, 'info');
         }
         if (tick.spoiled) get().showMessage(`Estragou no estoque: ${spoiledText(tick.spoiled)}.`, 'error');
+        for (const plot of tick.surveyed) {
+          const types = surveyedTypes(tick.state, plot).map((id) => SOILS[id].label);
+          const list = types.length > 1 ? `${types.slice(0, -1).join(', ')} e ${types.at(-1) ?? ''}` : (types[0] ?? '');
+          get().showMessage(`🔬 Análise do lote pronta: ${list}.`, 'info');
+        }
+        for (const [cropId, count] of Object.entries(tick.withered) as [CropId, number][]) {
+          const crop = CROPS[cropId];
+          get().showMessage(`🥀 ${count} pé${count === 1 ? '' : 's'} de ${crop.label} murch${count === 1 ? 'ou' : 'aram'}: solo péssimo.`, 'error');
+        }
         if (tick.newOffers.length > 0) {
           const offer = tick.newOffers[0];
           const listing = offer && state.listings.find((l) => l.id === offer.listingId);
@@ -643,6 +758,11 @@ export const useGameStore = create<GameStore>()(
         const { game } = get();
         const target = game.tiles[tile];
         if (!target) return;
+        // In the soil view a click picks a field; the view's tools answer to pointer presses instead.
+        if (get().infoView === 'soil') {
+          if (get().soilTool === null) set({ selectedField: fieldAt(game.fields, tile)?.id ?? null });
+          return;
+        }
         const { buildMode, buildRotation } = get();
         if (buildMode === 'road') {
           const result = roadClick(game, tile);
@@ -762,6 +882,7 @@ export const useGameStore = create<GameStore>()(
 
       setTool: (tool) =>
         set((s) => ({
+          ...(tool ? SOIL_VIEW_OFF : {}),
           tool: tool === s.tool ? null : tool,
           buildMode: null,
           area: null,
@@ -801,7 +922,8 @@ export const useGameStore = create<GameStore>()(
         set({ game: result.state });
         get().showMessage(demolishText(result.change), 'info');
       },
-      setBuildMode: (buildMode) => set({ buildMode, selectedStructure: null, selectedAnimal: null, activitiesOpen: false }),
+      setBuildMode: (buildMode) =>
+        set({ buildMode, selectedStructure: null, selectedAnimal: null, activitiesOpen: false, ...(buildMode ? SOIL_VIEW_OFF : {}) }),
       rotateBuild: () => set((s) => ({ buildRotation: ((s.buildRotation + 1) % 4) as Rotation })),
       setSelectedCrop: (selectedCrop) => set({ selectedCrop, tool: 'seed', buildMode: null, selectedStructure: null }),
       setHoveredTile: (hoveredTile) => {
@@ -815,7 +937,7 @@ export const useGameStore = create<GameStore>()(
         set((s) => ({ settings: { ...s.settings, speed: s.settings.speed === 0 ? 1 : 0 } })),
       setEdgePan: (edgePan) => set((s) => ({ settings: { ...s.settings, edgePan } })),
       setGraphics: (graphics) => set((s) => ({ settings: { ...s.settings, graphics } })),
-      openPanel: (panel) => set((s) => ({ panel: s.panel === panel ? null : panel })),
+      openPanel: (panel) => set((s) => ({ panel: s.panel === panel ? null : panel, ...(panel === 'build' ? SOIL_VIEW_OFF : {}) })),
       showPanel: (panel) => set({ panel }),
       closePanel: () => set({ panel: null }),
       requestPlot: (pendingPlot) => set({ pendingPlot }),
@@ -934,7 +1056,7 @@ export const useGameStore = create<GameStore>()(
           get().showMessage(ERROR_MESSAGES[check.error], 'error');
           return;
         }
-        set({ joyride: machineId, selectedStructure: null, selectedAnimal: null, panel: null, tool: null, buildMode: null, activitiesOpen: false });
+        set({ ...SOIL_VIEW_OFF, joyride: machineId, selectedStructure: null, selectedAnimal: null, panel: null, tool: null, buildMode: null, activitiesOpen: false });
       },
       stopJoyride: (message) => {
         if (get().joyride === null) return;
@@ -944,6 +1066,7 @@ export const useGameStore = create<GameStore>()(
       view: 'farm',
       goToCity: () => {
         set({
+          ...SOIL_VIEW_OFF,
           joyride: null,
           view: 'city',
           tool: null,
@@ -1035,7 +1158,7 @@ export const useGameStore = create<GameStore>()(
         const s = storage();
         if (s) clearStorage(s);
         set({
-          game: createInitialState(),
+          game: createInitialState(newSoilSeed()),
           tool: null,
           selectedStructure: null,
           selectedAnimal: null,
@@ -1045,6 +1168,7 @@ export const useGameStore = create<GameStore>()(
           buildMode: null,
           area: null,
           selectedWorker: null,
+          ...SOIL_VIEW_OFF,
         });
         get().save();
         get().showMessage('Novo jogo iniciado.', 'info');

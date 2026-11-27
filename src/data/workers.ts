@@ -4,7 +4,7 @@ import type { Specialty, Stars, TaskKind, ToolId } from '../game/types';
 
 // ---------- attributes ----------
 
-export const SKILL_IDS = ['farming', 'animals', 'construction', 'machinery'] as const;
+export const SKILL_IDS = ['farming', 'animals', 'construction', 'machinery', 'agronomy'] as const;
 /** General skills: a worker doing a task of their skill works faster and better. */
 export type SkillId = (typeof SKILL_IDS)[number];
 
@@ -13,6 +13,7 @@ export const SKILLS: Record<SkillId, { label: string; icon: string }> = {
   animals: { label: 'Tratar animais', icon: '🐄' },
   construction: { label: 'Construção', icon: '🔨' },
   machinery: { label: 'Maquinário', icon: '🚜' },
+  agronomy: { label: 'Agronomia', icon: '🔬' },
 };
 
 /** The general skill each task uses. */
@@ -26,6 +27,8 @@ export const TASK_SKILL: Record<TaskKind, SkillId> = {
   build: 'construction',
   // Loading vehicles at the dock is heavy lifting, like building.
   haul: 'construction',
+  // Only agronomists survey the soil.
+  survey: 'agronomy',
 };
 
 export interface AgeBand {
@@ -72,6 +75,8 @@ export const STAR_LEVELS: Record<Stars, StarLevel> = {
 export const SPECIALTY_WAGE = 1;
 /** Extra coins per hour for a worker who can drive machinery. */
 export const MACHINERY_WAGE = 1;
+/** Extra coins per hour for an agronomist (soil surveys). */
+export const AGRONOMY_WAGE = 1;
 
 /** Bonus when the task uses one of the worker's general skills. */
 export const SKILL_BONUS = { speed: 1.15, effectiveness: 1.1 } as const;
@@ -92,7 +97,7 @@ export const CANDIDATE_COUNT = 4;
 export const SECOND_SKILL_CHANCE: Record<Stars, number> = { 1: 0.1, 2: 0.25, 3: 0.5 };
 export const SPECIALTY_CHANCE = 0.4;
 /** Relative weight of each general skill when generating a worker. */
-export const SKILL_WEIGHTS: Record<SkillId, number> = { farming: 0.42, animals: 0.26, construction: 0.17, machinery: 0.15 };
+export const SKILL_WEIGHTS: Record<SkillId, number> = { farming: 0.39, animals: 0.24, construction: 0.155, machinery: 0.135, agronomy: 0.08 };
 
 /** First names for generated workers (pt-BR). */
 export const WORKER_NAMES: readonly string[] = [
@@ -141,7 +146,7 @@ export const MAX_WORKERS = 12;
 export const MAX_TASKS = 300;
 
 /** Order in which a new worker picks tasks (editable per worker). */
-export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['haul', 'water', 'hand', 'tend', 'seed', 'fertilize', 'hoe', 'build'];
+export const DEFAULT_PRIORITIES: readonly TaskKind[] = ['haul', 'water', 'hand', 'tend', 'seed', 'fertilize', 'hoe', 'build', 'survey'];
 
 /** Workers only work between these game hours; outside them they go home. Wages are paid per hour in between. */
 export const WORK_START_HOUR = 6;
@@ -152,7 +157,8 @@ export const WALK_SPEED = 1.5;
 
 /** Game minutes of work for each tool task at speed 1 (construction: see data/structures and data/roads). */
 export const TASK_MINUTES: Record<ToolId, number> = {
-  hoe: 12,
+  // Breaking new ground by hand takes hours (× the soil's plow factor, game/soil.ts).
+  hoe: 150,
   seed: 6,
   water: 4,
   hand: 8,

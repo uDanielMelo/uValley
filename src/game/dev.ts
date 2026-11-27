@@ -15,6 +15,8 @@ import { addStock, manureCap, shelterDef, sheltersFor } from './shelters';
 import { findFreeSpot, placeStructure } from './structures';
 import { growthMinutesNeeded } from './crops';
 import { PLOT_COUNT, inBounds, tileIndex } from './grid';
+import { canSurvey } from './survey';
+import type { SkillId } from '../data/workers';
 import { fenceLine, layFence } from './fences';
 import { addCount } from './inventory';
 import { advanceGame } from './simulation';
@@ -381,3 +383,27 @@ export const machineField = (state: GameState, work: 'hoe' | 'hand'): GameState 
   }
   return applyArea(s, work, field, 'wheat', 'queue').state;
 };
+
+/** Every plot of the farm and every plot for sale next to it counts as analyzed. */
+export const surveyAll = (state: GameState): GameState => {
+  const plots: number[] = [];
+  for (let p = 0; p < PLOT_COUNT; p++) if (canSurvey(state, p)) plots.push(p);
+  return { ...state, surveyedPlots: plots };
+};
+
+/** Adds a free 2-star staff worker with the agronomy skill. */
+export const hireAgronomist = (state: GameState): GameState => {
+  if (state.workers.length >= MAX_WORKERS) return state;
+  const profile = rollProfile(state.nextId * 23 + 5, new Set(state.workers.map((w) => w.name)));
+  const skills: SkillId[] = profile.skills.includes('agronomy') ? profile.skills : [...profile.skills, 'agronomy'];
+  const worker = makeWorker(
+    state.nextId,
+    'staff',
+    { ...profile, stars: 2, skills, hourlyWage: hourlyWageFor(2, profile.specialty, skills) },
+    homeSpot(state, state.workers.length),
+  );
+  return { ...state, workers: [...state.workers, worker], nextId: state.nextId + 1 };
+};
+
+/** Another soil map (null: uniform soil). */
+export const setSoilSeed = (state: GameState, seed: number | null): GameState => ({ ...state, soilSeed: seed });

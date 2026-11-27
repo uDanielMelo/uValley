@@ -8,7 +8,10 @@ import type { Tile } from '../game/types';
 import { useGameStore } from '../store/gameStore';
 import { TILE_HEIGHT, hash01, indexToWorld } from './coords';
 import { fbm } from './noise';
-import { PALETTE } from './palette';
+import { PALETTE, SOIL_COLORS } from './palette';
+import { usePlowProgress } from './plowing';
+import { soilAt } from '../game/soil';
+import type { SoilId } from '../data/soil';
 import { addSeasonal } from './season';
 
 const C = {
@@ -34,14 +37,21 @@ const grassColor = (index: number, target: Color): Color => {
   return target.multiplyScalar(0.985 + hash01(index * 31) * 0.03);
 };
 
-const tileColor = (tile: Tile, index: number, target: Color): Color => {
+/** How much of the soil type's color shows in worked ground. */
+const TINT = 0.25;
+const SOIL_TINT = Object.fromEntries(Object.entries(SOIL_COLORS).map(([k, v]) => [k, new Color(v)])) as Record<SoilId, Color>;
+const PLOWED = new Color(PALETTE.tilled);
+
+const tileColor = (tile: Tile, index: number, target: Color, seed: number | null): Color => {
   // Buildings stand on bare ground; decorations keep the grass around them.
   if (tile.structure) {
     return STRUCTURES[tile.structure].category === 'decor' ? grassColor(index, target) : target.copy(C.structure);
   }
   // Fertilized soil is darker and richer.
-  if (tile.fertilized) return soilColor(tile, index, target).lerp(C.fertilized, 0.35);
-  return soilColor(tile, index, target);
+  if (tile.fertilized) soilColor(tile, index, target).lerp(C.fertilized, 0.35);
+  else soilColor(tile, index, target);
+  const soil = tile.state === 'tilled' || tile.state === 'planted' || tile.state === 'watered' ? soilAt(seed, index) : null;
+  return soil && !tile.cover ? target.lerp(SOIL_TINT[soil], TINT) : target;
 };
 
 const soilColor = (tile: Tile, index: number, target: Color): Color => {
@@ -70,6 +80,8 @@ const tileOffset = (tile: Tile): number => {
 export function TileLayer() {
   const meshRef = useRef<InstancedMesh>(null);
   const tiles = useGameStore((s) => s.game.tiles);
+  const seed = useGameStore((s) => s.game.soilSeed);
+  const plowing = usePlowProgress();
   const geometry = useMemo(() => new BoxGeometry(1, TILE_HEIGHT, 1), []);
   // The ground follows the season's tint.
   const unregister = useRef<(() => void) | null>(null);
@@ -87,12 +99,16 @@ export function TileLayer() {
       const [wx, wz] = indexToWorld(i);
       m.makeTranslation(wx, -TILE_HEIGHT / 2 + tileOffset(tile), wz);
       mesh.setMatrixAt(i, m);
-      mesh.setColorAt(i, tileColor(tile, i, color));
+      tileColor(tile, i, color, seed);
+      // Grass being plowed turns to soil as the work goes on.
+      const progress = tile.state === 'grass' ? plowing.get(i) : undefined;
+      if (progress !== undefined) color.lerp(PLOWED, progress * 0.85);
+      mesh.setColorAt(i, color);
     });
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.computeBoundingSphere();
-  }, [tiles]);
+  }, [tiles, seed, plowing]);
 
   // Road mode paints: press places the first tile (with error feedback), dragging adds more silently,
   // filling every tile between the last one and the cursor so the road never has gaps.
@@ -100,6 +116,8 @@ export function TileLayer() {
   const lastPainted = useRef<number | null>(null);
   const overGate = useRef(false);
   const roadMode = () => useGameStore.getState().buildMode === 'road';
+  /** Survey tool held down: dragging over plots orders their surveys. */
+  const surveying = useRef(false);
 
   // Tool mode drags an area: press starts it, moving extends it, releasing anywhere queues it.
   useEffect(() => {
@@ -107,6 +125,8 @@ export function TileLayer() {
       if (e.button !== 0) return;
       useGameStore.getState().finishArea();
       useGameStore.getState().finishFence();
+      useGameStore.getState().finishField();
+      surveying.current = false;
     };
     window.addEventListener('pointerup', onRelease);
     return () => window.removeEventListener('pointerup', onRelease);
@@ -120,6 +140,8 @@ export function TileLayer() {
     store.setHoveredTile(e.instanceId);
     if (store.area) store.extendArea(e.instanceId);
     if (store.fenceDrag) store.extendFence(e.instanceId);
+    if (store.fieldDrag) store.extendField(e.instanceId);
+    if (surveying.current && changed && (e.buttons & 1) === 1) store.surveyAt(e.instanceId, 'order');
     // With the hand, a gate is clickable (opens or closes).
     const onGate = handMode() && store.game.tiles[e.instanceId]?.fence?.gate === true;
     if (onGate !== overGate.current) {
@@ -136,6 +158,16 @@ export function TileLayer() {
   const onDown = (e: ThreeEvent<PointerEvent>) => {
     if (e.button !== 0 || e.instanceId === undefined) return;
     const store = useGameStore.getState();
+    // Soil view tools work on any tile, land for sale included (it can be surveyed).
+    if (store.infoView === 'soil' && store.soilTool !== null) {
+      e.stopPropagation();
+      if (store.soilTool === 'field') store.beginField(e.instanceId);
+      else {
+        surveying.current = true;
+        store.surveyAt(e.instanceId, 'toggle');
+      }
+      return;
+    }
     if (store.buildMode === 'fence') {
       e.stopPropagation();
       store.beginFence(e.instanceId);
