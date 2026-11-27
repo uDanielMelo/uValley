@@ -259,7 +259,8 @@ export const checkPlacement = (
   if (tiles.some((t) => t.tile?.road)) return 'road';
   if (tiles.some((t) => t.tile?.fence)) return 'fence';
   if (tiles.some((t) => t.tile?.state !== 'grass')) return 'not-grass';
-  if (state.tasks.some((task) => tiles.some((t) => t.index === task.tile))) return 'tile-busy';
+  // Soil surveys never change their tile, so they do not hold it.
+  if (state.tasks.some((task) => task.kind !== 'survey' && tiles.some((t) => t.index === task.tile))) return 'tile-busy';
   const ring = ringPlan(future, type, x, y, rotation);
   if (!ring.free) return 'no-room-for-road';
   if (!options.free && state.money < placementCost(type, ring.newRoads.length)) return 'not-enough-money';
@@ -276,7 +277,7 @@ export const findFreeSpot = (
   type: StructureId,
   near: GridPoint,
 ): { x: number; y: number; rotation: Rotation } | null => {
-  const busy = new Set(state.tasks.map((t) => t.tile));
+  const busy = new Set(state.tasks.filter((t) => t.kind !== 'survey').map((t) => t.tile));
   const free = (x: number, y: number): boolean => {
     if (!inBounds(x, y)) return false;
     const index = tileIndex(x, y);
@@ -402,7 +403,7 @@ export const linkToNetwork = (state: GameState, s: StructureInstance): GameState
   if (!needsRoadAccess(s.type) || hasRoadAccess(state.tiles, s)) return state;
   const network = roadNetwork(state.tiles);
   if (network.size === 0) return state;
-  const busy = new Set(state.tasks.map((t) => t.tile));
+  const busy = new Set(state.tasks.filter((t) => t.kind !== 'survey').map((t) => t.tile));
   const crossable = (index: number): boolean => {
     const tile = state.tiles[index];
     return !!tile && tile.state === 'grass' && !tile.structure && !tile.cover && !tile.fence && !busy.has(index);

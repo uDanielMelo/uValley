@@ -12,7 +12,8 @@ import { hireAgronomist, setSoilSeed, surveyAll } from '../dev';
 import { createInitialState } from '../state';
 import { lastTaskOn } from '../tasks';
 import type { ActionResult, GameState, Task, Worker } from '../types';
-import { applyArea, stepWorkers, unstaffedKinds } from '../workers';
+import { applyArea, stepWorkers, taskSpot, unstaffedKinds } from '../workers';
+import { checkPlacement } from '../structures';
 
 const unwrap = (r: ActionResult): GameState => {
   if (!r.ok) throw new Error(r.error);
@@ -182,5 +183,26 @@ describe('soil dev tools', () => {
 
   it('setSoilSeed swaps the map', () => {
     expect(setSoilSeed(createInitialState(), 77).soilSeed).toBe(77);
+  });
+});
+
+describe('review fixes', () => {
+  it('a queued survey does not block building on its tile', () => {
+    const s = unwrap(orderSurvey({ ...createInitialState(), money: 10_000 }, PLOT));
+    const tile = surveyTask(s).tile;
+    const { x, y } = tileCoords(tile);
+    expect(checkPlacement(s, 'chickenCoop', x, y, 0)).not.toBe('tile-busy');
+  });
+
+  it('the agronomist goes to a spot that is still free', () => {
+    let s = crew({ ...createInitialState(), money: 10_000 }, [['agronomy']]);
+    s = unwrap(orderSurvey(s, PLOT));
+    const task = surveyTask(s);
+    const { x, y } = tileCoords(task.tile);
+    // Something is built over the stored tile after the order.
+    s = { ...s, tiles: s.tiles.map((t, i) => (i === task.tile ? { ...t, structure: 'chickenCoop' as const } : t)) };
+    const spot = taskSpot(s, task, { x: 22.5, y: 42.5 });
+    expect(Math.floor(spot.x) === x && Math.floor(spot.y) === y).toBe(false);
+    expect(isWalkable(s.tiles, Math.floor(spot.x), Math.floor(spot.y))).toBe(true);
   });
 });

@@ -121,7 +121,7 @@ export const advanceGame = (state: GameState, dtMinutes: number): TickResult => 
   const from = Math.floor(state.gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   const to = Math.floor(gameMinutes / GROWTH_STEP_MINUTES) * GROWTH_STEP_MINUTES;
   // Crops on bad soil wither once they are half grown.
-  const grown = to > from ? witherCrops(growTiles(state.tiles, from, to), state.soilSeed) : { tiles: state.tiles, withered: {} };
+  const grown = to > from ? witherCrops(state.tiles, growTiles(state.tiles, from, to), state.soilSeed) : { tiles: state.tiles, withered: {} };
   const tiles = grown.tiles;
   const worked = stepWorkers({ ...state, gameMinutes, tiles }, dtMinutes);
   const rentals = endRentals(worked);

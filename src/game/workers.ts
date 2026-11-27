@@ -29,6 +29,7 @@ import { hash01 } from './random';
 import { gainMastery, harvestBonusChance, unassign, workEffectiveness, workSpeed, type TaskContext } from './staff';
 import { applyTask, lastTaskOn, projectTasks } from './tasks';
 import { plowFactor } from './soil';
+import { surveySpot } from './survey';
 import { SOIL_SURVEY } from '../data/soil';
 import {
   type ActionError,
@@ -239,6 +240,11 @@ export const taskSpot = (state: GameState, task: Task, from: GridPoint): GridPoi
     return dock ? loaderSpot(dock, shipment?.bay ?? 0, job.slot) : tileCenter(task.tile);
   }
   if (job?.type === 'fence') return besideTile(state, task.tile, from);
+  if (job?.type === 'survey') {
+    // The stored tile may have been built over since the order: look for a free spot again.
+    const spot = surveySpot(state, job.plot);
+    return tileCenter(spot ?? task.tile);
+  }
   if (job?.type !== 'structure' && job?.type !== 'shelter') return tileCenter(task.tile);
   const site = state.structures.find((s) => s.id === job.structureId);
   return (site && workSpot(state, site, task.tile, from)) ?? tileCenter(task.tile);

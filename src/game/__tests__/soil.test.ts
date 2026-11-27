@@ -168,11 +168,11 @@ describe('harvest by soil', () => {
     const i = findTile(s, 'corn', 'bad');
     const half = growthMinutesNeeded({ cropId: 'corn', growthMinutes: 0 }) * WITHER_AT;
     const tiles = withTile(s.tiles, i, { state: 'watered', crop: { cropId: 'corn', growthMinutes: half }, wateredUntil: 9999, fertilized: true });
-    const result = witherCrops(tiles, SEED);
+    const result = witherCrops(s.tiles, tiles, SEED);
     expect(result.tiles[i]).toEqual({ state: 'tilled' });
     expect(result.withered.corn).toBe(1);
     const young = withTile(s.tiles, i, { state: 'planted', crop: { cropId: 'corn', growthMinutes: half - 1 } });
-    expect(witherCrops(young, SEED).tiles).toBe(young);
+    expect(witherCrops(s.tiles, young, SEED).tiles).toBe(young);
   });
 
   it('greenhouse never withers', () => {
@@ -180,19 +180,22 @@ describe('harvest by soil', () => {
     const i = findTile(s, 'corn', 'bad');
     const half = growthMinutesNeeded({ cropId: 'corn', growthMinutes: 0 }) * WITHER_AT;
     const tiles = withTile(s.tiles, i, { state: 'planted', cover: true, crop: { cropId: 'corn', growthMinutes: half } });
-    expect(witherCrops(tiles, SEED).tiles).toBe(tiles);
+    expect(witherCrops(s.tiles, tiles, SEED).tiles).toBe(tiles);
   });
 
   it('witherCrops keeps the array when nothing withers', () => {
     const tiles = createInitialState().tiles;
-    expect(witherCrops(tiles, null).tiles).toBe(tiles);
+    expect(witherCrops(tiles, tiles, null).tiles).toBe(tiles);
   });
 
   it('the simulation withers crops and reports them', () => {
     const s = createInitialState(SEED);
     const i = findTile(s, 'corn', 'bad');
     const half = growthMinutesNeeded({ cropId: 'corn', growthMinutes: 0 }) * WITHER_AT;
-    const start: GameState = { ...s, tiles: withTile(s.tiles, i, { state: 'planted', crop: { cropId: 'corn', growthMinutes: half } }) };
+    const start: GameState = {
+      ...s,
+      tiles: withTile(s.tiles, i, { state: 'watered', crop: { cropId: 'corn', growthMinutes: half - 1 }, wateredUntil: s.gameMinutes + 600 }),
+    };
     const tick = advanceGame(start, GROWTH_STEP_MINUTES);
     expect(tick.state.tiles[i]?.state).toBe('tilled');
     expect(tick.withered.corn).toBe(1);
@@ -220,5 +223,35 @@ describe('pasture by soil', () => {
     }, 0);
     expect(pastureCapacity(s)).toBe(Math.floor(plain + 1e-9));
     expect(pastureCapacity(createInitialState(11))).not.toBe(pastureCapacity(s));
+  });
+});
+
+describe('withering only on the way up', () => {
+  const SEED = 11;
+  const badTile = (s: GameState, cropId: CropId): number => {
+    for (let i = 0; i < s.tiles.length; i++) {
+      const t = s.tiles[i];
+      if (t?.state === 'grass' && !t.road && !t.structure && cropRating(SEED, t, i, cropId) === 'bad') return i;
+    }
+    throw new Error('no bad tile');
+  };
+
+  it('a mature crop on bad soil does not wither', () => {
+    const s = createInitialState(SEED);
+    const i = badTile(s, 'wheat');
+    const ripe = growthMinutesNeeded({ cropId: 'wheat', growthMinutes: 0 });
+    const tiles = withTile(s.tiles, i, { state: 'planted', crop: { cropId: 'wheat', growthMinutes: ripe } });
+    expect(witherCrops(tiles, tiles, SEED).tiles).toBe(tiles);
+  });
+
+  it('a crop crossing half growth on bad soil withers', () => {
+    const s = createInitialState(SEED);
+    const i = badTile(s, 'wheat');
+    const half = growthMinutesNeeded({ cropId: 'wheat', growthMinutes: 0 }) * WITHER_AT;
+    const before = withTile(s.tiles, i, { state: 'watered', crop: { cropId: 'wheat', growthMinutes: half - 5 }, wateredUntil: 9999 });
+    const after = withTile(s.tiles, i, { state: 'watered', crop: { cropId: 'wheat', growthMinutes: half + 5 }, wateredUntil: 9999 });
+    const result = witherCrops(before, after, SEED);
+    expect(result.tiles[i]).toEqual({ state: 'tilled' });
+    expect(result.withered.wheat).toBe(1);
   });
 });

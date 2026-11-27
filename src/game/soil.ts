@@ -126,10 +126,13 @@ export const soilUnits = (multiplier: number, roll: number): number => {
 };
 
 /**
- * Crops on bad soil wither when they reach WITHER_AT of their growth: the tile goes back to plain tilled
- * soil (the fertilizer is lost too). Returns the same array when nothing withers.
+ * Crops on bad soil wither when they grow past WITHER_AT of their growth between `before` and `tiles`:
+ * the tile goes back to plain tilled soil (the fertilizer is lost too). Crops already past it (a save from
+ * before the soil, plants left by a demolished greenhouse) are spared. Returns the same array when nothing
+ * withers.
  */
 export const witherCrops = (
+  before: readonly Tile[],
   tiles: Tile[],
   seed: number | null,
 ): { tiles: Tile[]; withered: Partial<Record<CropId, number>> } => {
@@ -140,7 +143,10 @@ export const witherCrops = (
     const tile = tiles[i];
     const crop = tile?.crop;
     if (!tile || !crop) continue;
-    if (crop.growthMinutes < growthMinutesNeeded(crop) * WITHER_AT) continue;
+    const threshold = growthMinutesNeeded(crop) * WITHER_AT;
+    if (crop.growthMinutes < threshold) continue;
+    const earlier = before[i]?.crop;
+    if (earlier && earlier.cropId === crop.cropId && earlier.growthMinutes >= threshold) continue;
     if (cropRating(seed, tile, i, crop.cropId) !== 'bad') continue;
     next ??= tiles.slice();
     next[i] = { state: 'tilled' };
